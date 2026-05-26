@@ -94,6 +94,33 @@ export const NpcReferenceCollectionSchema = z.object({
   warnings: z.array(ValidationIssueSchema)
 });
 
+export const TutorialStepStatusSchema = z.enum(["pass", "fail", "blocked", "unknown"]);
+
+export const TutorialStepSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: TutorialStepStatusSchema,
+  evidence: z.string(),
+  path: z.string().optional(),
+  expected: z.string().optional(),
+  actual: z.string().optional()
+});
+
+export const TutorialStatusSchema = z.object({
+  schemaVersion: z.string(),
+  sourceProjectPath: z.string(),
+  sourceTutorialUrl: z.string(),
+  steps: z.array(TutorialStepSchema),
+  counts: z.object({
+    steps: z.number().int().nonnegative(),
+    passed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    blocked: z.number().int().nonnegative(),
+    unknown: z.number().int().nonnegative()
+  }),
+  warnings: z.array(ValidationIssueSchema)
+});
+
 export const TutorialFixtureHintsSchema = z.object({
   hasRobotCcs: z.boolean(),
   hasHelloWorldLabel: z.boolean(),
@@ -118,6 +145,7 @@ export const ManifestSchema = z.object({
     scripts: z.string(),
     npcs: z.string(),
     spriteGroups: z.string(),
+    tutorialStatus: z.string(),
     validationReport: z.string()
   }),
   counts: z.object({
@@ -152,6 +180,8 @@ export type ScriptCollection = z.infer<typeof ScriptCollectionSchema>;
 export type ScriptCommand = z.infer<typeof ScriptCommandSchema>;
 export type NpcReferenceCollection = z.infer<typeof NpcReferenceCollectionSchema>;
 export type SpriteGroupCollection = z.infer<typeof SpriteGroupCollectionSchema>;
+export type TutorialStatus = z.infer<typeof TutorialStatusSchema>;
+export type TutorialStep = z.infer<typeof TutorialStepSchema>;
 export type ValidationIssue = z.infer<typeof ValidationIssueSchema>;
 export type ValidationReport = z.infer<typeof ValidationReportSchema>;
 

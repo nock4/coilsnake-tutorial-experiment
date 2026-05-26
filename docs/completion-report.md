@@ -53,7 +53,7 @@ http://127.0.0.1:5173/
 - No extracted CoilSnake PNGs are copied into generated output.
 - `external/coilsnake-project` remains local-only input.
 - Generated output remains under `apps/game/public/generated`.
-- Public generated JSON was checked for ROM filename, `.sfc`, and `/Users/` path references.
+- Public generated JSON was checked for ROM filename, ROM extension paths, and absolute user-home path references.
 - SpriteGroups data is metadata-only: relative path, inferred id, extension, and PNG dimensions.
 - The Phaser scene uses primitive graphics and system fonts only.
 

@@ -2,15 +2,15 @@
 
 ## Verified local fixture
 
-REPO_ROOT="/Users/nickgeorge-studio/Projects/coilsnake-tutorial-experiment"
-COILSNAKE_PROJECT="/Users/nickgeorge-studio/Projects/coilsnake-tutorial-experiment/external/coilsnake-project"
-COILSNAKE_PATH="/Users/nickgeorge-studio/Projects/coilsnake-tutorial-experiment/CoilSnake-master"
+REPO_ROOT="."
+COILSNAKE_PROJECT="external/coilsnake-project"
+COILSNAKE_PATH="CoilSnake-master"
 
 The CoilSnake project was created with:
 
 coilsnake-cli decompile \
-  "/Users/nickgeorge-studio/Projects/coilsnake-tutorial-experiment/EarthBound (USA).sfc" \
-  "/Users/nickgeorge-studio/Projects/coilsnake-tutorial-experiment/external/coilsnake-project"
+  "[local-rom-path-omitted]" \
+  "external/coilsnake-project"
 
 Verified fixture:
 - Project.snake exists
@@ -27,7 +27,7 @@ Do not commit anything.
 
 All relative paths are relative to:
 
-/Users/nickgeorge-studio/Projects/coilsnake-tutorial-experiment
+the repository root
 
 ## Hard safety constraints
 

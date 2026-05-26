@@ -1,8 +1,8 @@
-import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildDialoguePages, ManifestSchema, resolveScriptReference } from "@eb/schemas";
+import { buildDialoguePages, ManifestSchema, resolveScriptReference, TutorialStatusSchema } from "@eb/schemas";
 import { convertProject, parseCcsFile, readNpcReferences } from "../src/index";
 import { validateGeneratedOutput } from "../src/validate";
 
@@ -18,6 +18,7 @@ describe("schemas", () => {
       expect(result.manifest.sourceProject.exists).toBe(false);
       expect(result.manifest.warnings.some((warning) => warning.code === "missing_project")).toBe(true);
       expect(result.manifest.files.npcs).toBe("npcs.json");
+      expect(result.manifest.files.tutorialStatus).toBe("tutorial-status.json");
     } finally {
       await rm(temp, { recursive: true, force: true });
     }
@@ -108,11 +109,13 @@ describe("generated validation", () => {
         scripts: "scripts.json",
         npcs: "npcs.json",
         spriteGroups: "sprite-groups.json",
+        tutorialStatus: "tutorial-status.json",
         validationReport: "validation-report.json"
       });
       expect(generated.manifest.counts.npcReferences).toBe(1);
       expect(result.ok).toBe(true);
       expect(result.generatedFiles).toContain("npcs.json");
+      expect(result.generatedFiles).toContain("tutorial-status.json");
       expect(result.npcReferences).toBe(1);
     } finally {
       await rm(temp, { recursive: true, force: true });
@@ -125,6 +128,30 @@ describe("generated validation", () => {
       await expect(validateGeneratedOutput(temp)).rejects.toThrow("missing_manifest");
       await writeFile(path.join(temp, "manifest.json"), "{\"bad\":true}\n", "utf8");
       await expect(validateGeneratedOutput(temp)).rejects.toThrow("schemaVersion");
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects generated public JSON with absolute user paths or ROM references", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-validation-"));
+    try {
+      const project = path.join(temp, "project");
+      const out = path.join(temp, "generated");
+      await mkdir(path.join(project, "ccscript"), { recursive: true });
+      await writeFile(path.join(project, "Project.snake"), "CoilSnakeVersion: 4\n", "utf8");
+      await writeFile(path.join(project, "ccscript", "robot.ccs"), 'hello_world:\n"Hi" end\n', "utf8");
+      await convertProject({ project, out });
+      const manifestPath = path.join(out, "manifest.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as { sourceProject: { path: string } };
+
+      manifest.sourceProject.path = "/Users/example/project";
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      await expect(validateGeneratedOutput(out)).rejects.toThrow("absolute_user_path");
+
+      manifest.sourceProject.path = "EarthBound (USA).sfc";
+      await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+      await expect(validateGeneratedOutput(out)).rejects.toThrow("rom_extension_path");
     } finally {
       await rm(temp, { recursive: true, force: true });
     }
@@ -181,6 +208,87 @@ describe("fixture hints", () => {
         hasRobotHelloWorldContent: true,
         hasSpriteGroup005: true
       });
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("tutorial status", () => {
+  it("audits tutorial requirements without mutating fixture files", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-tutorial-status-"));
+    try {
+      const project = path.join(temp, "project");
+      await mkdir(path.join(project, "ccscript"), { recursive: true });
+      await mkdir(path.join(project, "SpriteGroups"), { recursive: true });
+      await writeFile(path.join(project, "Project.snake"), "CoilSnakeVersion: 4\n", "utf8");
+      await writeFile(path.join(project, "ccscript", "robot.ccs"), 'hello_world:\n    "@Hello World!" end\n', "utf8");
+      await writeFile(path.join(project, "SpriteGroups", "005.png"), pngStub(), "binary");
+      await writeFile(path.join(project, "tutorial-fixture-npc-reference.yml"), "script: robot.hello_world\n", "utf8");
+      await writeFile(path.join(project, "npc_config_table.yml"), [
+        "744:",
+        "  Direction: down",
+        "  Event Flag: 0x0",
+        "  Movement: 605",
+        "  Show Sprite: always",
+        "  Sprite: 5",
+        "  Text Pointer 1: robot.hello_world",
+        "  Text Pointer 2: $0",
+        "  Type: person",
+        ""
+      ].join("\n"), "utf8");
+      await writeFile(path.join(project, "map_sprites.yml"), "group:\n  - {NPC ID: 744, X: 136, Y: 128}\n", "utf8");
+
+      const result = await convertProject({ project, out: path.join(temp, "generated") });
+      const status = TutorialStatusSchema.parse(result.tutorialStatus);
+      const byId = Object.fromEntries(status.steps.map((step) => [step.id, step.status]));
+
+      expect(byId.hello_world_text).toBe("pass");
+      expect(byId.npc_744_dialogue).toBe("pass");
+      expect(byId.map_sprites_npc_744).toBe("pass");
+      expect(byId.rom_compile_run).toBe("blocked");
+      expect(status.counts.blocked).toBe(1);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("marks compile and run complete when local-only proof exists", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-tutorial-proof-"));
+    try {
+      const project = path.join(temp, "project");
+      await mkdir(path.join(project, "ccscript"), { recursive: true });
+      await mkdir(path.join(project, "SpriteGroups"), { recursive: true });
+      await writeFile(path.join(project, "Project.snake"), "CoilSnakeVersion: 4\n", "utf8");
+      await writeFile(path.join(project, "ccscript", "robot.ccs"), 'hello_world:\n    "@Hello World!" end\n', "utf8");
+      await writeFile(path.join(project, "SpriteGroups", "005.png"), pngStub(), "binary");
+      await writeFile(path.join(project, "tutorial-fixture-npc-reference.yml"), "script: robot.hello_world\n", "utf8");
+      await writeFile(path.join(project, "tutorial-run-proof.json"), JSON.stringify({
+        compileSucceeded: true,
+        bootVerified: true,
+        emulator: "Snes9x",
+        replayUrl: "https://app.replay.io/recording/example"
+      }), "utf8");
+      await writeFile(path.join(project, "npc_config_table.yml"), [
+        "744:",
+        "  Event Flag: 0x0",
+        "  Movement: 605",
+        "  Show Sprite: always",
+        "  Sprite: 5",
+        "  Text Pointer 1: robot.hello_world",
+        "  Type: person",
+        ""
+      ].join("\n"), "utf8");
+      await writeFile(path.join(project, "map_sprites.yml"), "group:\n  - {NPC ID: 744, X: 136, Y: 128}\n", "utf8");
+
+      const result = await convertProject({ project, out: path.join(temp, "generated") });
+      const compileStep = result.tutorialStatus.steps.find((step) => step.id === "rom_compile_run");
+
+      expect(compileStep).toMatchObject({
+        status: "pass",
+        actual: "https://app.replay.io/recording/example"
+      });
+      expect(result.tutorialStatus.counts.blocked).toBe(0);
     } finally {
       await rm(temp, { recursive: true, force: true });
     }

@@ -60,7 +60,7 @@ The dev scene was smoke-tested in a browser at `http://127.0.0.1:5173/`, includi
 - No extracted CoilSnake PNGs were copied into generated output.
 - `external/coilsnake-project` remains local-only input and ignored by git.
 - Generated output remains under `apps/game/public/generated`.
-- Public generated JSON was checked for ROM filename, `.sfc`, and `/Users/` path references.
+- Public generated JSON was checked for ROM filename, ROM extension paths, and absolute user-home path references.
 - Sprite display remains metadata-only; extracted SpriteGroups PNGs are not rendered.
 - The Phaser scene uses primitive graphics and system fonts only.
 

@@ -6,6 +6,7 @@ import {
   NpcReferenceCollectionSchema,
   ScriptCollectionSchema,
   SpriteGroupCollectionSchema,
+  TutorialStatusSchema,
   ValidationReportSchema
 } from "@eb/schemas";
 
@@ -26,6 +27,7 @@ export type GeneratedValidationResult = {
   generatedFiles?: string[];
   counts?: unknown;
   validation?: unknown;
+  tutorial?: unknown;
   scriptFiles?: number;
   npcReferences?: number;
   spriteImages?: number;
@@ -43,22 +45,67 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
     }));
   }
 
-  const manifest = ManifestSchema.parse(await readJson(manifestPath));
-  const scripts = ScriptCollectionSchema.parse(await readJson(path.join(out, manifest.files.scripts)));
-  const npcs = NpcReferenceCollectionSchema.parse(await readJson(path.join(out, manifest.files.npcs)));
-  const spriteGroups = SpriteGroupCollectionSchema.parse(await readJson(path.join(out, manifest.files.spriteGroups)));
-  const validationReport = ValidationReportSchema.parse(await readJson(path.join(out, manifest.files.validationReport)));
+  const manifestRaw = await readJson(manifestPath);
+  const manifest = ManifestSchema.parse(manifestRaw);
+  const scriptsRaw = await readJson(path.join(out, manifest.files.scripts));
+  const scripts = ScriptCollectionSchema.parse(scriptsRaw);
+  const npcsRaw = await readJson(path.join(out, manifest.files.npcs));
+  const npcs = NpcReferenceCollectionSchema.parse(npcsRaw);
+  const spriteGroupsRaw = await readJson(path.join(out, manifest.files.spriteGroups));
+  const spriteGroups = SpriteGroupCollectionSchema.parse(spriteGroupsRaw);
+  const tutorialStatusRaw = await readJson(path.join(out, manifest.files.tutorialStatus));
+  const tutorialStatus = TutorialStatusSchema.parse(tutorialStatusRaw);
+  const validationReportRaw = await readJson(path.join(out, manifest.files.validationReport));
+  const validationReport = ValidationReportSchema.parse(validationReportRaw);
+
+  assertNoPublicPathLeaks({
+    "manifest.json": manifestRaw,
+    [manifest.files.scripts]: scriptsRaw,
+    [manifest.files.npcs]: npcsRaw,
+    [manifest.files.spriteGroups]: spriteGroupsRaw,
+    [manifest.files.tutorialStatus]: tutorialStatusRaw,
+    [manifest.files.validationReport]: validationReportRaw
+  });
 
   return {
     ok: true,
     manifest: "valid",
-    generatedFiles: ["manifest.json", manifest.files.scripts, manifest.files.npcs, manifest.files.spriteGroups, manifest.files.validationReport],
+    generatedFiles: [
+      "manifest.json",
+      manifest.files.scripts,
+      manifest.files.npcs,
+      manifest.files.spriteGroups,
+      manifest.files.tutorialStatus,
+      manifest.files.validationReport
+    ],
     counts: manifest.counts,
     validation: validationReport.counts,
+    tutorial: tutorialStatus.counts,
     scriptFiles: scripts.counts.files,
     npcReferences: npcs.counts.references,
     spriteImages: spriteGroups.counts.images
   };
+}
+
+function assertNoPublicPathLeaks(files: Record<string, unknown>): void {
+  const unsafePatterns = [
+    { code: "absolute_user_path", pattern: /\/Users\// },
+    { code: "rom_extension_path", pattern: /\.(sfc|smc)\b/i },
+    { code: "concrete_rom_filename", pattern: /EarthBound\s*\(USA\)/i }
+  ];
+
+  for (const [file, value] of Object.entries(files)) {
+    const text = JSON.stringify(value);
+    const matched = unsafePatterns.find((item) => item.pattern.test(text));
+    if (matched) {
+      throw new Error(JSON.stringify({
+        severity: "error",
+        code: matched.code,
+        message: `Generated public JSON contains unsafe path or ROM reference in ${file}.`,
+        path: file
+      }));
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -89,6 +136,9 @@ function parseValidationError(error: unknown): { severity: "error"; code: string
     try {
       const parsed = JSON.parse(error.message);
       if (parsed?.code === "missing_manifest") {
+        return parsed;
+      }
+      if (parsed?.severity === "error" && typeof parsed.code === "string") {
         return parsed;
       }
     } catch {

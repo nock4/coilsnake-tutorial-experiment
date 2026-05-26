@@ -6,12 +6,14 @@ import {
   resolveScriptReference,
   ScriptCollectionSchema,
   SpriteGroupCollectionSchema,
+  TutorialStatusSchema,
   ValidationReportSchema,
   type DialoguePage,
   type Manifest,
   type NpcReferenceCollection,
   type ScriptCollection,
   type SpriteGroupCollection,
+  type TutorialStatus,
   type ValidationReport
 } from "@eb/schemas";
 import "./style.css";
@@ -21,6 +23,7 @@ type LoadedData = {
   scripts?: ScriptCollection;
   npcs?: NpcReferenceCollection;
   spriteGroups?: SpriteGroupCollection;
+  tutorialStatus?: TutorialStatus;
   validationReport?: ValidationReport;
 };
 
@@ -88,17 +91,19 @@ class DebugScene extends Phaser.Scene {
     }
 
     const manifest = manifestResult.data;
-    const [scripts, npcs, spriteGroups, validationReport] = await Promise.all([
+    const [scripts, npcs, spriteGroups, tutorialStatus, validationReport] = await Promise.all([
       this.loadJson(`/generated/${manifest.files.scripts}`, ScriptCollectionSchema),
       this.loadJson(`/generated/${manifest.files.npcs}`, NpcReferenceCollectionSchema),
       this.loadJson(`/generated/${manifest.files.spriteGroups}`, SpriteGroupCollectionSchema),
+      this.loadJson(`/generated/${manifest.files.tutorialStatus}`, TutorialStatusSchema),
       this.loadJson(`/generated/${manifest.files.validationReport}`, ValidationReportSchema)
     ]);
 
-    this.dataSet = { manifest, scripts, npcs, spriteGroups, validationReport };
+    this.dataSet = { manifest, scripts, npcs, spriteGroups, tutorialStatus, validationReport };
     this.targetReference = chooseReference(scripts, npcs);
     this.dialoguePages = buildDialogueForReference(scripts, this.targetReference);
     this.renderWorld();
+    this.publishDebugState();
   }
 
   private async loadJson<T>(url: string, schema: { parse: (value: unknown) => T }): Promise<T | undefined> {
@@ -191,6 +196,7 @@ class DebugScene extends Phaser.Scene {
       `Scripts: ${manifest.counts.scriptFiles} files, ${manifest.counts.scriptCommands} commands`,
       `Labels: ${manifest.counts.labels} | Text: ${manifest.counts.textCommands} | Unknown: ${manifest.counts.unknownCommands}`,
       `NPC refs: ${manifest.counts.npcReferences} | robot.hello_world: ${resolveStatus(this.dataSet?.scripts, npcs)}`,
+      `Tutorial: ${tutorialSummary(this.dataSet?.tutorialStatus)}`,
       `Validation issues: ${this.dataSet?.validationReport?.issues.length ?? manifest.counts.warnings + manifest.counts.errors}`
     ];
   }
@@ -241,6 +247,7 @@ class DebugScene extends Phaser.Scene {
     this.pageIndex = 0;
     this.drawDialogueBox(this.dialoguePages[0]?.text ?? "No imported script text was found.");
     this.promptText?.setText("Space/Enter: advance | Esc/Backspace: close");
+    this.publishDebugState();
   }
 
   private closeDialogue(): void {
@@ -248,6 +255,7 @@ class DebugScene extends Phaser.Scene {
     this.pageIndex = 0;
     this.drawDialogueBox("");
     this.updatePrompt();
+    this.publishDebugState();
   }
 
   private drawDialogueBox(text: string): void {
@@ -279,6 +287,16 @@ class DebugScene extends Phaser.Scene {
       fontSize: "11px",
       color: "#cbd5e1"
     });
+  }
+
+  private publishDebugState(): void {
+    (globalThis as Record<string, unknown>).__firstSceneDebug = {
+      dialogueOpen: this.dialogueOpen,
+      dialogueText: this.dialoguePages[this.pageIndex]?.text ?? "",
+      targetReference: this.targetReference,
+      tutorial: this.dataSet?.tutorialStatus?.counts,
+      resolveStatus: resolveStatus(this.dataSet?.scripts, this.dataSet?.npcs)
+    };
   }
 }
 
@@ -320,6 +338,14 @@ function resolveStatus(scripts: ScriptCollection | undefined, npcs: NpcReference
     return "npc ref only";
   }
   return "missing";
+}
+
+function tutorialSummary(tutorialStatus: TutorialStatus | undefined): string {
+  if (!tutorialStatus) {
+    return "status unavailable";
+  }
+  const counts = tutorialStatus.counts;
+  return `${counts.passed}/${counts.steps} pass, ${counts.failed} gaps, ${counts.blocked} blocked`;
 }
 
 function wrapText(text: string, lineLength: number): string {

@@ -7,12 +7,14 @@ import {
   SCHEMA_VERSION,
   ScriptCollectionSchema,
   SpriteGroupCollectionSchema,
+  TutorialStatusSchema,
   ValidationReportSchema,
   type Manifest,
   type NpcReferenceCollection,
   type ScriptCollection,
   type ScriptCommand,
   type SpriteGroupCollection,
+  type TutorialStatus,
   type ValidationIssue,
   type ValidationReport
 } from "@eb/schemas";
@@ -23,8 +25,11 @@ const GENERATED_FILES = {
   scripts: "scripts.json",
   npcs: "npcs.json",
   spriteGroups: "sprite-groups.json",
+  tutorialStatus: "tutorial-status.json",
   validationReport: "validation-report.json"
 } as const;
+
+const TUTORIAL_URL = "https://github.com/pk-hack/CoilSnake/wiki/Tutorial%3A-Your-First-Hack";
 
 type CliArgs = {
   project: string;
@@ -36,6 +41,7 @@ type ConvertResult = {
   scripts: ScriptCollection;
   npcs: NpcReferenceCollection;
   spriteGroups: SpriteGroupCollection;
+  tutorialStatus: TutorialStatus;
   validationReport: ValidationReport;
 };
 
@@ -178,6 +184,8 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     warnings.push(issue("info", "missing_robot_hello_world_reference", "No text/YML NPC reference to robot.hello_world was found.", "robot.hello_world"));
   }
 
+  const tutorialStatus = await readTutorialStatus(projectAbs, project, projectExists, scripts, npcs, spriteGroups);
+
   const manifest: Manifest = ManifestSchema.parse({
     schemaVersion: SCHEMA_VERSION,
     generatedAt,
@@ -191,10 +199,10 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
       unknownCommands: scripts.counts.unknownCommands,
       npcReferences: npcs.counts.references,
       spriteImages: spriteGroups.counts.images,
-      warnings: warnings.length + scripts.warnings.length + npcs.warnings.length + spriteGroups.warnings.length,
+      warnings: warnings.length + scripts.warnings.length + npcs.warnings.length + spriteGroups.warnings.length + tutorialStatus.warnings.length,
       errors: errors.length
     },
-    warnings: [...warnings, ...scripts.warnings, ...npcs.warnings, ...spriteGroups.warnings],
+    warnings: [...warnings, ...scripts.warnings, ...npcs.warnings, ...spriteGroups.warnings, ...tutorialStatus.warnings],
     errors
   });
 
@@ -202,7 +210,14 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     schemaVersion: SCHEMA_VERSION,
     generatedAt,
     sourceProject,
-    generatedFiles: ["manifest.json", GENERATED_FILES.scripts, GENERATED_FILES.npcs, GENERATED_FILES.spriteGroups, GENERATED_FILES.validationReport],
+    generatedFiles: [
+      "manifest.json",
+      GENERATED_FILES.scripts,
+      GENERATED_FILES.npcs,
+      GENERATED_FILES.spriteGroups,
+      GENERATED_FILES.tutorialStatus,
+      GENERATED_FILES.validationReport
+    ],
     issues: [...manifest.warnings, ...manifest.errors],
     counts: {
       warnings: manifest.warnings.filter((item) => item.severity !== "info").length,
@@ -214,10 +229,180 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
   await writeJson(path.join(outAbs, GENERATED_FILES.scripts), scripts);
   await writeJson(path.join(outAbs, GENERATED_FILES.npcs), npcs);
   await writeJson(path.join(outAbs, GENERATED_FILES.spriteGroups), spriteGroups);
+  await writeJson(path.join(outAbs, GENERATED_FILES.tutorialStatus), tutorialStatus);
   await writeJson(path.join(outAbs, GENERATED_FILES.validationReport), validationReport);
 
-  return { manifest, scripts, npcs, spriteGroups, validationReport };
+  return { manifest, scripts, npcs, spriteGroups, tutorialStatus, validationReport };
 }
+
+async function readTutorialStatus(
+  projectAbs: string,
+  projectDisplayPath: string,
+  projectExists: boolean,
+  scripts: ScriptCollection,
+  npcs: NpcReferenceCollection,
+  spriteGroups: SpriteGroupCollection
+): Promise<TutorialStatus> {
+  const steps: TutorialStatus["steps"] = [];
+  const warnings: ValidationIssue[] = [];
+  const addStep = (step: TutorialStatus["steps"][number]) => {
+    steps.push(step);
+    if (step.status === "fail" || step.status === "blocked") {
+      warnings.push(issue(
+        step.status === "blocked" ? "warning" : "info",
+        `tutorial_${step.id}`,
+        step.evidence,
+        step.path
+      ));
+    }
+  };
+
+  const robotFile = scripts.files.find((file) => file.path === "ccscript/robot.ccs");
+  const robotCommands = robotFile?.commands ?? [];
+  const labelIndex = robotCommands.findIndex((command) => command.cmd === "label" && command.name === "hello_world");
+  const labelCommands = labelIndex >= 0 ? robotCommands.slice(labelIndex + 1) : [];
+  const sprite005 = spriteGroups.images.find((image) => image.path === "SpriteGroups/005.png");
+  const npc744 = projectExists ? await readNpcConfigEntry(projectAbs, "744") : undefined;
+  const mapNpc744 = projectExists ? await findMapSpriteNpc(projectAbs, "744") : undefined;
+  const runProof = projectExists ? await readTutorialRunProof(projectAbs) : undefined;
+
+  addStep({
+    id: "project_snake",
+    label: "CoilSnake project metadata exists",
+    status: projectExists && existsSync(path.join(projectAbs, "Project.snake")) ? "pass" : "fail",
+    evidence: projectExists ? "Project.snake was checked in the local fixture." : "Local CoilSnake project is missing.",
+    path: "Project.snake"
+  });
+  addStep({
+    id: "robot_ccs",
+    label: "robot.ccs exists",
+    status: robotFile ? "pass" : "fail",
+    evidence: robotFile ? "ccscript/robot.ccs was parsed." : "ccscript/robot.ccs was not found.",
+    path: "ccscript/robot.ccs"
+  });
+  addStep({
+    id: "hello_world_label",
+    label: "hello_world label exists",
+    status: labelIndex >= 0 ? "pass" : "fail",
+    evidence: labelIndex >= 0 ? "hello_world label was parsed from robot.ccs." : "hello_world label was not parsed.",
+    path: "ccscript/robot.ccs"
+  });
+  addStep({
+    id: "hello_world_text",
+    label: "Hello World dialogue text exists",
+    status: labelCommands.some((command) => command.cmd === "text" && command.value === "@Hello World!") ? "pass" : "fail",
+    evidence: "Expected imported text command value @Hello World! after robot.hello_world.",
+    expected: "@Hello World!",
+    actual: labelCommands.find((command) => command.cmd === "text")?.value ?? "missing",
+    path: "ccscript/robot.ccs"
+  });
+  addStep({
+    id: "hello_world_end",
+    label: "Dialogue terminates with end or eob",
+    status: labelCommands.some((command) => command.cmd === "end" || command.cmd === "eob") ? "pass" : "fail",
+    evidence: "Expected robot.hello_world to terminate with end/eob.",
+    expected: "end or eob",
+    actual: labelCommands.find((command) => command.cmd === "end" || command.cmd === "eob")?.cmd ?? "missing",
+    path: "ccscript/robot.ccs"
+  });
+  addStep({
+    id: "sprite_group_005",
+    label: "Robot Ness sprite metadata exists",
+    status: sprite005 ? "pass" : "fail",
+    evidence: sprite005 ? "SpriteGroups/005.png was indexed as metadata only." : "SpriteGroups/005.png was not indexed.",
+    path: "SpriteGroups/005.png"
+  });
+  addStep({
+    id: "scanner_reference",
+    label: "Text/YML scanner finds robot.hello_world",
+    status: npcs.references.some((reference) => reference.reference === "robot.hello_world") ? "pass" : "fail",
+    evidence: "Scanner should find a local text/YML reference to robot.hello_world.",
+    expected: "robot.hello_world",
+    actual: String(npcs.references.map((reference) => reference.reference).join(", ") || "none"),
+    path: "npcs.json"
+  });
+  addStep({
+    id: "npc_744_exists",
+    label: "NPC 744 config entry exists",
+    status: npc744 ? "pass" : "fail",
+    evidence: npc744 ? "npc_config_table.yml contains entry 744." : "npc_config_table.yml entry 744 was not found.",
+    path: "npc_config_table.yml"
+  });
+  addNpcFieldStep(steps, warnings, npc744, "npc_744_sprite", "NPC 744 sprite id", "Sprite", "5");
+  addNpcFieldStep(steps, warnings, npc744, "npc_744_movement", "NPC 744 movement id", "Movement", "605");
+  addNpcFieldStep(steps, warnings, npc744, "npc_744_event_flag", "NPC 744 event flag", "Event Flag", "0x0");
+  addNpcFieldStep(steps, warnings, npc744, "npc_744_appears", "NPC 744 appears always", "Show Sprite", "always");
+  addNpcFieldStep(steps, warnings, npc744, "npc_744_dialogue", "NPC 744 dialogue pointer", "Text Pointer 1", "robot.hello_world");
+  addNpcFieldStep(steps, warnings, npc744, "npc_744_type", "NPC 744 interaction type", "Type", "person");
+  addStep({
+    id: "map_sprites_npc_744",
+    label: "Map sprites include NPC 744",
+    status: mapNpc744 ? "pass" : "unknown",
+    evidence: mapNpc744
+      ? `map_sprites.yml references NPC 744 at line ${mapNpc744.line}. Bedroom placement is not inferred.`
+      : "No map_sprites.yml reference to NPC 744 was found.",
+    path: "map_sprites.yml",
+    actual: mapNpc744?.raw ?? "missing"
+  });
+  addStep({
+    id: "rom_compile_run",
+    label: "Compile and run patched ROM",
+    status: runProof?.compileSucceeded && runProof.bootVerified ? "pass" : "blocked",
+    evidence: runProof?.compileSucceeded && runProof.bootVerified
+      ? "Ignored local ROM output was compiled and boot-verified in an emulator."
+      : "ROM compilation and emulator testing require explicit permission and local-only proof.",
+    path: "tutorial-run-proof.json",
+    actual: runProof?.replayUrl ?? "missing"
+  });
+
+  return TutorialStatusSchema.parse({
+    schemaVersion: SCHEMA_VERSION,
+    sourceProjectPath: makeDisplayPath(projectDisplayPath),
+    sourceTutorialUrl: TUTORIAL_URL,
+    steps,
+    counts: {
+      steps: steps.length,
+      passed: steps.filter((step) => step.status === "pass").length,
+      failed: steps.filter((step) => step.status === "fail").length,
+      blocked: steps.filter((step) => step.status === "blocked").length,
+      unknown: steps.filter((step) => step.status === "unknown").length
+    },
+    warnings
+  });
+}
+
+function addNpcFieldStep(
+  steps: TutorialStatus["steps"],
+  warnings: ValidationIssue[],
+  npc744: Record<string, string> | undefined,
+  id: string,
+  label: string,
+  field: string,
+  expected: string
+): void {
+  const actual = npc744?.[field] ?? "missing";
+  const status = normalizeYamlValue(actual) === normalizeYamlValue(expected) ? "pass" : "fail";
+  const step = {
+    id,
+    label,
+    status,
+    evidence: `Expected NPC 744 ${field} to match the tutorial value.`,
+    path: "npc_config_table.yml",
+    expected,
+    actual
+  } as TutorialStatus["steps"][number];
+  steps.push(step);
+  if (step.status === "fail") {
+    warnings.push(issue("info", `tutorial_${step.id}`, step.evidence, step.path));
+  }
+}
+
+type TutorialRunProof = {
+  compileSucceeded: boolean;
+  bootVerified: boolean;
+  emulator: string;
+  replayUrl?: string;
+};
 
 async function readScripts(
   projectAbs: string,
@@ -418,6 +603,69 @@ async function readPngSize(file: string): Promise<{ width: number; height: numbe
   };
 }
 
+async function readNpcConfigEntry(projectAbs: string, npcId: string): Promise<Record<string, string> | undefined> {
+  const file = path.join(projectAbs, "npc_config_table.yml");
+  if (!existsSync(file)) {
+    return undefined;
+  }
+  const lines = (await readFile(file, "utf8")).split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `${npcId}:`);
+  if (start < 0) {
+    return undefined;
+  }
+
+  const entry: Record<string, string> = {};
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S/.test(line) && line.trim().endsWith(":")) {
+      break;
+    }
+    const match = line.match(/^\s{2}([^:]+):\s*(.*)$/);
+    if (match) {
+      entry[match[1].trim()] = match[2].trim();
+    }
+  }
+  return entry;
+}
+
+async function findMapSpriteNpc(projectAbs: string, npcId: string): Promise<{ line: number; raw: string } | undefined> {
+  const file = path.join(projectAbs, "map_sprites.yml");
+  if (!existsSync(file)) {
+    return undefined;
+  }
+  const lines = (await readFile(file, "utf8")).split(/\r?\n/);
+  const pattern = new RegExp(`\\bNPC ID:\\s*${escapeRegExp(npcId)}\\b`);
+  const index = lines.findIndex((line) => pattern.test(line));
+  if (index < 0) {
+    return undefined;
+  }
+  return { line: index + 1, raw: lines[index].trim() };
+}
+
+async function readTutorialRunProof(projectAbs: string): Promise<TutorialRunProof | undefined> {
+  const file = path.join(projectAbs, "tutorial-run-proof.json");
+  if (!existsSync(file)) {
+    return undefined;
+  }
+  const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<TutorialRunProof>;
+  if (typeof parsed.compileSucceeded !== "boolean" || typeof parsed.bootVerified !== "boolean") {
+    return undefined;
+  }
+  return {
+    compileSucceeded: parsed.compileSucceeded,
+    bootVerified: parsed.bootVerified,
+    emulator: typeof parsed.emulator === "string" ? parsed.emulator : "unknown",
+    ...(typeof parsed.replayUrl === "string" ? { replayUrl: parsed.replayUrl } : {})
+  };
+}
+
+function normalizeYamlValue(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function writeJson(file: string, value: unknown): Promise<void> {
   await writeFile(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
@@ -504,8 +752,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     .then((result) => {
       console.log(JSON.stringify({
         ok: result.manifest.errors.length === 0,
-        files: ["manifest.json", GENERATED_FILES.scripts, GENERATED_FILES.npcs, GENERATED_FILES.spriteGroups, GENERATED_FILES.validationReport],
+        files: [
+          "manifest.json",
+          GENERATED_FILES.scripts,
+          GENERATED_FILES.npcs,
+          GENERATED_FILES.spriteGroups,
+          GENERATED_FILES.tutorialStatus,
+          GENERATED_FILES.validationReport
+        ],
         counts: result.manifest.counts,
+        tutorial: result.tutorialStatus.counts,
         warnings: result.manifest.warnings,
         errors: result.manifest.errors
       }, null, 2));

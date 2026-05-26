@@ -1,0 +1,172 @@
+# CoilSnake Tutorial: Your First Hack Status
+
+## Scope
+
+Objective source:
+
+```text
+https://github.com/pk-hack/CoilSnake/wiki/Tutorial%3A-Your-First-Hack
+```
+
+This project now completes the tutorial locally. ROM compilation and emulator
+verification were performed only after explicit permission, and all ROM inputs
+and outputs remain ignored local files.
+
+## Implemented
+
+- Local CoilSnake project import from `external/coilsnake-project`.
+- CCScript parsing for `ccscript/robot.ccs`.
+- `robot.hello_world` script resolution.
+- Dialogue playback in the Phaser first scene.
+- Metadata-only `SpriteGroups/005.png` detection.
+- Text/YML scanner proof for `robot.hello_world`.
+- Tutorial NPC `744` values applied to ignored local fixture text/YML.
+- Generated tutorial audit status in `tutorial-status.json`.
+- Ignored local ROM output compiled successfully.
+- Compiled ROM boot-verified in Snes9x.
+- Replay.io recording captured the playable Phaser verification path:
+  `https://app.replay.io/recording/cad40929-4a5a-41ed-89f0-3c38caf27546`
+
+## Generated Contract
+
+Generated files live under:
+
+```text
+apps/game/public/generated
+```
+
+Current generated files:
+
+- `manifest.json`
+- `scripts.json`
+- `npcs.json`
+- `sprite-groups.json`
+- `tutorial-status.json`
+- `validation-report.json`
+
+`manifest.json` references every generated data file through `files`.
+`tutorial-status.json` records tutorial checks as structured steps with:
+
+- `id`
+- `label`
+- `status`
+- `evidence`
+- optional `path`
+- optional `expected`
+- optional `actual`
+
+Step statuses are:
+
+- `pass`
+- `fail`
+- `blocked`
+- `unknown`
+
+## Current Tutorial Evidence
+
+Current generated status after `pnpm convert`:
+
+- Steps: 16
+- Passed: 16
+- Failed: 0
+- Blocked: 0
+- Unknown: 0
+
+Passing evidence:
+
+- `Project.snake` exists.
+- `ccscript/robot.ccs` exists.
+- `hello_world:` is parsed.
+- `@Hello World!` is parsed.
+- `end` is parsed.
+- `SpriteGroups/005.png` is indexed as metadata only.
+- `robot.hello_world` is found by the text/YML scanner.
+- `npc_config_table.yml` has entry `744`.
+- NPC `744` `Sprite` is `5`.
+- NPC `744` `Movement` is `605`.
+- NPC `744` `Event Flag` is `0x0`.
+- NPC `744` `Show Sprite` is `always`.
+- NPC `744` `Text Pointer 1` is `robot.hello_world`.
+- NPC `744` `Type` is `person`.
+- `map_sprites.yml` references NPC `744`.
+- Ignored local ROM output compiled successfully after expanding an ignored
+  working base ROM copy.
+- Compiled ROM booted in Snes9x.
+- Replay.io captured a deterministic browser verification of the generated data
+  and imported dialogue playback.
+
+## Fixture-Only Proof
+
+`external/coilsnake-project/tutorial-fixture-npc-reference.yml` is synthetic
+local-only scanner proof. It is not extracted ROM data, and it remains ignored
+by git with the rest of `external/coilsnake-project`.
+
+`external/coilsnake-project/tutorial-run-proof.json` is local-only proof that the
+compile/boot step was completed. It contains no ROM path and no ROM bytes, and
+it remains ignored by git with the rest of `external/coilsnake-project`.
+
+## Safety Boundaries
+
+Implemented:
+
+- No extracted CoilSnake asset is committed.
+- Only ignored local fixture text/YML was edited for NPC `744`.
+- ROM compilation used ignored local inputs and ignored local outputs only.
+- Generated public JSON uses relative local fixture paths only.
+- Sprite data remains metadata-only.
+- Phaser uses primitive graphics and system fonts.
+
+Explicitly forbidden for now:
+
+- Copying or rendering extracted PNGs as game assets.
+- Full map rendering.
+- Battle systems.
+- Audio.
+- Full-game recreation.
+
+## Verification
+
+Latest verified commands:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm convert
+pnpm validate
+pnpm test
+pnpm exec tsc --noEmit
+pnpm dev
+pnpm test:replay
+```
+
+Results:
+
+- `pnpm install --frozen-lockfile`: pass.
+- `pnpm convert`: pass, emits `tutorial-status.json` with 16 passed, 0 failed, 0 blocked.
+- `pnpm validate`: pass, validates `tutorial-status.json`.
+- `pnpm test`: pass, 13 tests.
+- `pnpm exec tsc --noEmit`: pass.
+- `pnpm dev`: pass, served `http://127.0.0.1:5173/` with generated tutorial status.
+- `pnpm test:replay`: pass, uploaded Replay recording.
+
+Generated JSON safety scan:
+
+- No `.sfc` references found.
+- No absolute user-home path references found.
+- No concrete ROM filename references found.
+
+Tracked source safety scan:
+
+- No concrete ROM filename references found.
+- No absolute user-home paths found.
+
+## Next Work
+
+Next safest milestone:
+
+1. Commit and push only tracked source/docs/test changes.
+2. Keep ROMs, generated JSON, local CoilSnake fixture files, and Replay/browser
+   caches ignored.
+3. Continue with real map/NPC metadata discovery only after this checkpoint is
+   reviewed.
+
+The CoilSnake "Your First Hack" tutorial is complete for this local project.

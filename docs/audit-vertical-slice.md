@@ -8,23 +8,25 @@ AUDIT_PASS
 
 ### 1. Generated Output Contract
 
-- PASS: `pnpm convert` writes the four generated JSON files:
+- PASS: `pnpm convert` writes the current generated JSON files:
   - `manifest.json`
   - `scripts.json`
+  - `npcs.json`
   - `sprite-groups.json`
+  - `tutorial-status.json`
   - `validation-report.json`
-- PASS: `manifest.json` references `scripts.json`, `sprite-groups.json`, and `validation-report.json` through `files` instead of embedding their payloads.
+- PASS: `manifest.json` references `scripts.json`, `npcs.json`, `sprite-groups.json`, `tutorial-status.json`, and `validation-report.json` through `files` instead of embedding their payloads.
 - PASS: generated output is ignored by `.gitignore`.
 - PASS: `apps/game/public/generated/.gitkeep` is explicitly unignored as the only tracked sentinel file. It is not emitted by the converter.
-- PASS: converter now removes stale generated output before writing the four JSON files, while preserving `.gitkeep`.
+- PASS: converter now removes stale generated output before writing generated JSON files, while preserving `.gitkeep`.
 
 ### 2. ROM/Local Asset Safety
 
-- PASS: generated public JSON contains no ROM filename, `.sfc` path, or `/Users/` absolute path in the default fixture run.
-- PASS: implementation source contains no absolute ROM path outside the user-provided `docs/goal.md` fixture provenance.
+- PASS: generated public JSON contains no ROM filename, ROM extension path, or absolute user-home path in the default fixture run.
+- PASS: implementation source contains no absolute ROM path.
 - PASS: no extracted PNGs are copied into `apps/game/public/generated`; sprite output only indexes relative `SpriteGroups/*.png` paths and metadata.
 - PASS: `external/coilsnake-project/` remains ignored local-only input.
-- NOTE: this directory is not currently a Git repo, so commit inclusion could not be verified with `git status` or `git ls-files`.
+- PASS: git tracking checks confirm ROMs, generated JSON, extracted assets, and local fixture files are ignored.
 
 ### 3. Parser Robustness
 

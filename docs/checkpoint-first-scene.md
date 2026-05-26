@@ -51,6 +51,9 @@ Current generated files:
 - `sprite-groups.json`
   - Metadata-only PNG index for `SpriteGroups`.
   - Does not copy or render extracted PNGs.
+- `tutorial-status.json`
+  - Evidence-driven status for the CoilSnake "Your First Hack" tutorial.
+  - Records pass/fail/blocked/unknown checks.
 - `validation-report.json`
   - Structured validation/issues report for generated data.
 
@@ -88,6 +91,13 @@ Fixture-only proof:
 - This file is synthetic local-only scanner proof.
 - It is not extracted ROM data.
 - It exists only so `npcs.json` can prove the scanner detects `robot.hello_world` through a text/YML path without mutating real extracted fixture files.
+- `external/coilsnake-project/npc_config_table.yml`
+- Local ignored fixture entry `744` has been updated to the tutorial text/YML values:
+  `Sprite: 5`, `Movement: 605`, `Event Flag: 0x0`, `Show Sprite: always`,
+  `Text Pointer 1: robot.hello_world`, and `Type: person`.
+- `external/coilsnake-project/tutorial-run-proof.json`
+- Local ignored proof that the tutorial compile/boot step was completed.
+- This proof contains no ROM path and no ROM bytes.
 
 ## Safety Boundaries
 
@@ -97,21 +107,20 @@ Implemented:
 - `external/coilsnake-project` remains local-only input.
 - SpriteGroup data is metadata-only.
 - Phaser renders only primitive graphics and system fonts.
+- ROM compilation used ignored local inputs and ignored local outputs only.
 - Public generated JSON safety scan passed for:
   - ROM filename
   - `.sfc`
-  - `/Users/`
+  - absolute user-home paths
 
-Explicitly forbidden for now:
+Explicitly forbidden for tracked source:
 
-- Reading, copying, moving, modifying, compiling, generating, or committing the ROM.
+- Committing ROMs or compiled ROM outputs.
 - Committing extracted CoilSnake assets.
 - Rendering extracted PNGs as game assets.
 - Map rendering from real extracted data.
 - Battle systems.
 - Audio.
-- Emulator integration.
-- ROM compilation.
 - Full game recreation.
 
 Not implemented:
@@ -144,13 +153,15 @@ Results:
   - `labels`: 1
   - `textCommands`: 1
   - `unknownCommands`: 0
-  - `npcReferences`: 1
+  - `npcReferences`: 2
   - `spriteImages`: 464
   - `warnings`: 0
   - `errors`: 0
 - `pnpm validate`: pass
-- `pnpm test`: pass, 11 tests
+- `pnpm test`: pass, 13 tests
 - `pnpm exec tsc --noEmit`: pass
+- `pnpm dev`: pass, served `http://127.0.0.1:5173/` with generated tutorial status
+- `pnpm test:replay`: pass, uploaded Replay recording
 - Generated JSON safety scan: pass
 
 ## Known Limitations

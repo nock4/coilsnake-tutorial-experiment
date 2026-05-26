@@ -13,6 +13,8 @@ dist/
 coverage/
 .vite/
 *.tsbuildinfo
+test-results/
+playwright-report/
 
 # Local environment and Codex artifacts
 .DS_Store
