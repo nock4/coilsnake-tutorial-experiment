@@ -343,6 +343,7 @@ describe("proof invariant helpers", () => {
   it("selects placement-specific proof packet checks", () => {
     expect(checkCommandForMode("bedroom")).toEqual(["proof:check:bedroom"]);
     expect(checkCommandForMode("roadblock-706")).toEqual(["proof:check:roadblock-706"]);
+    expect(checkCommandForMode("roadblock-706-clean-doors")).toEqual(["proof:check:roadblock-706-clean-doors"]);
     expect(checkCommandForMode("27/29:192,216")).toEqual(["proof:check", "--", "--expect-placement", "27/29:192,216"]);
   });
 
@@ -356,8 +357,10 @@ describe("proof invariant helpers", () => {
   it("recommends the next proof command for classified targets", () => {
     const bedroom = proofRecommendation("bedroom");
     const roadblock = proofRecommendation("roadblock-706");
+    const cleanRoadblock = proofRecommendation("roadblock-706", { allowMapDoorText: true });
     expect(bedroom.recommendedCommand).toBe("pnpm proof:packet:bedroom");
     expect(roadblock.recommendedCommand).toBe("pnpm proof:packet:roadblock-706");
+    expect(cleanRoadblock.recommendedCommand).toBe("pnpm proof:packet:roadblock-706-clean-doors");
     expect(proofRecommendation("custom").nextAction).toContain("custom");
   });
 });

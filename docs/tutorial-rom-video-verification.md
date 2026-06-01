@@ -707,6 +707,10 @@ separate roadblock/original-placement investigation.
   `pnpm proof:packet:roadblock-707:diagnostic` when the roadblock fixture is
   still expected to fail but the failed invariant output should be preserved for
   review.
+- run `pnpm proof:check:roadblock-706-clean-doors` and
+  `pnpm proof:packet:roadblock-706-clean-doors` for the current roadblock retry
+  that restores stock/normal map-door text and destinations while still
+  rejecting any map-door object route to `robot.hello_world`.
 - the roadblock/shack target remains unresolved:
   - original slot `706` is `27/29`, `X: 192`, `Y: 216`.
   - original slot `707` is `27/31`, `X: 168`, `Y: 200`.
@@ -757,6 +761,26 @@ separate roadblock/original-placement investigation.
     different hash from the Snes9x SRAM after a test run.
   - the pre-retry SRAM was restored after this diagnostic.
   - no roadblock-706 success clip was recorded from this retry.
+- 2026-06-01 clean-door roadblock-706 retry:
+  - restored `map_doors.yml` from the pre-bedroom-proof backup to remove the
+    broad forced destination edit that made Ness leave the bedroom and spawn far
+    from the normal house route.
+  - kept the proof narrowed to exactly one NPC `744` placement at `27/29`,
+    `X: 192`, `Y: 216`, and exactly one `Text Pointer 1: robot.hello_world`,
+    owned by NPC `744`.
+  - kept map-door object proof strict by requiring zero
+    `robot.hello_world` refs in `map_doors.yml`, but allowed stock nonzero
+    map-door text pointers so normal navigation can work.
+  - added `pnpm proof:check:roadblock-706-clean-doors` and
+    `pnpm proof:packet:roadblock-706-clean-doors` for this exact retry shape.
+  - recompiled the ignored proof output from the ignored expanded local base
+    ROM into `.codex/rom-output/first-hack.sfc`.
+  - `pnpm convert`, `pnpm validate`,
+    `pnpm proof:check:roadblock-706-clean-doors`, `pnpm proof:status`,
+    `pnpm proof:safety`, `pnpm test`, and `pnpm exec tsc --noEmit` passed.
+  - no emulator success clip has been recorded yet; the next claim still
+    requires a short Snes9x clip where normal navigation reaches the roadblock
+    target and Talk opens `@Hello World!`.
 - 2026-06-01 successful exact-NPC bedroom proof:
   - `map_sprites.yml` has exactly one NPC `744` placement: outer `4`, inner
     `31`, `X: 64`, `Y: 64`.

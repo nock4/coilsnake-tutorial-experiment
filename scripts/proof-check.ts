@@ -78,6 +78,7 @@ const placementPresets: Record<string, NpcPlacement> = {
 const forbiddenProofArtifactPattern = /EarthBound \(USA\)|first-hack|\.sfc|\/Users\//;
 const snes9xSramPath = path.join(process.env.HOME ?? "", "Library", "Application Support", "Snes9x", "SRAMs", "first-hack.srm");
 const aresRamPath = path.join(projectRoot, ".codex", "rom-output", "first-hack.ram");
+const allowMapDoorText = process.argv.includes("--allow-map-door-text");
 
 function add(name: string, ok: boolean, detail: string): void {
   checks.push({ name, ok, detail });
@@ -208,7 +209,10 @@ export function classifyProofTarget(placements: NpcPlacement[]): string {
   return "custom";
 }
 
-export function proofRecommendation(proofTarget: string): Pick<ProofStatus, "recommendedCommand" | "nextAction"> {
+export function proofRecommendation(
+  proofTarget: string,
+  options: { allowMapDoorText?: boolean } = { allowMapDoorText }
+): Pick<ProofStatus, "recommendedCommand" | "nextAction"> {
   if (proofTarget === "bedroom") {
     return {
       recommendedCommand: "pnpm proof:packet:bedroom",
@@ -216,12 +220,24 @@ export function proofRecommendation(proofTarget: string): Pick<ProofStatus, "rec
     };
   }
   if (proofTarget === "roadblock-706") {
+    if (options.allowMapDoorText) {
+      return {
+        recommendedCommand: "pnpm proof:packet:roadblock-706-clean-doors",
+        nextAction: "Record a short Snes9x clip only if normal navigation reaches the 706 roadblock placement and Talk opens imported robot.hello_world."
+      };
+    }
     return {
       recommendedCommand: "pnpm proof:packet:roadblock-706",
       nextAction: "Record a short Snes9x clip only if Talk opens imported robot.hello_world from the 706 roadblock placement."
     };
   }
   if (proofTarget === "roadblock-707") {
+    if (options.allowMapDoorText) {
+      return {
+        recommendedCommand: "pnpm proof:packet:roadblock-707-clean-doors",
+        nextAction: "Record a short Snes9x clip only if normal navigation reaches the 707 roadblock placement and Talk opens imported robot.hello_world."
+      };
+    }
     return {
       recommendedCommand: "pnpm proof:packet:roadblock-707",
       nextAction: "Record a short Snes9x clip only if Talk opens imported robot.hello_world from the 707 roadblock placement."
@@ -317,7 +333,13 @@ async function runProofArtifactSafety(): Promise<void> {
 async function runProofStatus(): Promise<void> {
   const mapSprites = await readText("map_sprites.yml") ?? "";
   const proofTarget = classifyProofTarget(findNpc744Placements(mapSprites));
-  const recommendation = proofRecommendation(proofTarget);
+  const mapDoors = await readText("map_doors.yml") ?? "";
+  const mapDoorPointers = parseMapDoorPointers(mapDoors);
+  const robotDoorRoutes = [...mapDoors.matchAll(/Text Pointer:\s*robot\.hello_world\b/g)];
+  const hasStockDoorText = mapDoorPointers.some((pointer) => !isNeutralizedMapDoorPointer(pointer.value));
+  const recommendation = proofRecommendation(proofTarget, {
+    allowMapDoorText: hasStockDoorText && robotDoorRoutes.length === 0
+  });
   const snes9xSram = await runtimeFileState(snes9xSramPath, "Snes9x/SRAMs/first-hack.srm");
   const aresRam = await runtimeFileState(aresRamPath, ".codex/rom-output/first-hack.ram");
   const status: ProofStatus = {
@@ -389,11 +411,19 @@ async function main(): Promise<void> {
       robotObjectRoutes.length === 0,
       robotObjectRoutes.map((match) => `line ${lineNumber(mapDoors, match.index ?? 0)}`).join(", ") || "none"
     );
-    add(
-      "map-door text pointers are neutralized",
-      nonZeroObjectRoutes.length === 0,
-      nonZeroObjectRoutes.slice(0, 8).map((match) => `line ${lineNumber(mapDoors, match.index ?? 0)}: ${match[1].trim()}`).join("; ") || "all $0"
-    );
+    if (allowMapDoorText) {
+      add(
+        "map-door text pointers are stock/allowed",
+        true,
+        `${nonZeroObjectRoutes.length} nonzero map-door text pointers allowed; robot.hello_world object routes still rejected`
+      );
+    } else {
+      add(
+        "map-door text pointers are neutralized",
+        nonZeroObjectRoutes.length === 0,
+        nonZeroObjectRoutes.slice(0, 8).map((match) => `line ${lineNumber(mapDoors, match.index ?? 0)}: ${match[1].trim()}`).join("; ") || "all $0"
+      );
+    }
   }
 
   await checkGeneratedJsonSafety();

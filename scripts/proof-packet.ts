@@ -30,8 +30,14 @@ export function checkCommandForMode(mode: string): string[] {
   if (mode === "roadblock-706") {
     return ["proof:check:roadblock-706"];
   }
+  if (mode === "roadblock-706-clean-doors") {
+    return ["proof:check:roadblock-706-clean-doors"];
+  }
   if (mode === "roadblock-707") {
     return ["proof:check:roadblock-707"];
+  }
+  if (mode === "roadblock-707-clean-doors") {
+    return ["proof:check:roadblock-707-clean-doors"];
   }
   return ["proof:check", "--", "--expect-placement", mode];
 }
