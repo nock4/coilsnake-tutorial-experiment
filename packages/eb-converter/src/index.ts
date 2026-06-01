@@ -659,7 +659,11 @@ async function readTutorialRunProof(projectAbs: string): Promise<TutorialRunProo
 }
 
 function normalizeYamlValue(value: string): string {
-  return value.trim().toLowerCase();
+  const normalized = value.trim().toLowerCase();
+  if (/^(?:0x[0-9a-f]+|\d+)$/.test(normalized)) {
+    return `number:${Number.parseInt(normalized, normalized.startsWith("0x") ? 16 : 10)}`;
+  }
+  return normalized;
 }
 
 function escapeRegExp(value: string): string {

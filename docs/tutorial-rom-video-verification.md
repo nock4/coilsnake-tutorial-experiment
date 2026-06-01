@@ -620,9 +620,9 @@ Fresh verification after the successful bedroom proof fixture:
   - `labels: 1`
   - `npcReferences: 2`
   - `spriteImages: 464`
-  - tutorial status `13 passed`, `3 failed`
+  - tutorial status `14 passed`, `2 failed`
   - expected info warnings for diagnostic NPC `744` fields:
-    sprite, movement, and event flag differ from the tutorial baseline
+    sprite and movement differ from the tutorial baseline
 - `pnpm validate`
   - `ok: true`
   - generated validation warnings: `0`

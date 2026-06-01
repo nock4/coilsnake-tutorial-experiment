@@ -70,8 +70,8 @@ Step statuses are:
 Current generated status after `pnpm convert`:
 
 - Steps: 16
-- Passed: 13
-- Failed: 3
+- Passed: 14
+- Failed: 2
 - Blocked: 0
 - Unknown: 0
 
@@ -85,6 +85,7 @@ Passing evidence:
 - `SpriteGroups/005.png` is indexed as metadata only.
 - `robot.hello_world` is found by the text/YML scanner.
 - `npc_config_table.yml` has entry `744`.
+- NPC `744` `Event Flag` is semantically `0x0` (`0` in the current YAML).
 - NPC `744` `Show Sprite` is `always`.
 - NPC `744` `Text Pointer 1` is `robot.hello_world`.
 - NPC `744` `Type` is `person`.
@@ -99,9 +100,6 @@ Expected current fixture deviations:
 
 - NPC `744` `Sprite` is `171`, not tutorial baseline `5`.
 - NPC `744` `Movement` is `8`, not tutorial baseline `605`.
-- NPC `744` `Event Flag` is `0`, while the converter tutorial check expects
-  the baseline string form `0x0`.
-
 These are intentional local-only proof fixture differences for the successful
 bedroom Snes9x proof. They should not be used to claim original roadblock or
 original tutorial-coordinate proof.
@@ -156,7 +154,7 @@ pnpm test:review
 Results:
 
 - `pnpm install --frozen-lockfile`: pass.
-- `pnpm convert`: pass, emits `tutorial-status.json` with 13 passed, 3 failed, 0 blocked.
+- `pnpm convert`: pass, emits `tutorial-status.json` with 14 passed, 2 failed, 0 blocked.
 - `pnpm validate`: pass, validates `tutorial-status.json`.
 - `pnpm test`: pass, 14 tests.
 - `pnpm exec tsc --noEmit`: pass.

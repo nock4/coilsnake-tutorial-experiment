@@ -228,7 +228,7 @@ describe("tutorial status", () => {
       await writeFile(path.join(project, "npc_config_table.yml"), [
         "744:",
         "  Direction: down",
-        "  Event Flag: 0x0",
+        "  Event Flag: 0",
         "  Movement: 605",
         "  Show Sprite: always",
         "  Sprite: 5",
@@ -244,6 +244,7 @@ describe("tutorial status", () => {
       const byId = Object.fromEntries(status.steps.map((step) => [step.id, step.status]));
 
       expect(byId.hello_world_text).toBe("pass");
+      expect(byId.npc_744_event_flag).toBe("pass");
       expect(byId.npc_744_dialogue).toBe("pass");
       expect(byId.map_sprites_npc_744).toBe("pass");
       expect(byId.rom_compile_run).toBe("blocked");

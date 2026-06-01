@@ -60,7 +60,7 @@ same useful review properties:
 
 - the Phaser canvas loads
 - generated tutorial status matches the current proof fixture:
-  `13 passed, 3 failed, 0 blocked`
+  `14 passed, 2 failed, 0 blocked`
 - `robot.hello_world` is selected
 - player movement reaches the marker
 - interaction opens imported `@Hello World!` dialogue
