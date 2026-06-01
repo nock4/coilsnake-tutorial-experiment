@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildDialoguePages, ManifestSchema, resolveScriptReference, TutorialStatusSchema } from "@eb/schemas";
 import { convertProject, parseCcsFile, readNpcReferences } from "../src/index";
 import { validateGeneratedOutput } from "../src/validate";
+import { isNeutralizedMapDoorPointer } from "../../../scripts/proof-check";
 
 describe("schemas", () => {
   it("validates generated manifests", async () => {
@@ -293,6 +294,16 @@ describe("tutorial status", () => {
     } finally {
       await rm(temp, { recursive: true, force: true });
     }
+  });
+});
+
+describe("proof invariant helpers", () => {
+  it("treats quoted and unquoted $0 map-door text pointers as neutralized", () => {
+    expect(isNeutralizedMapDoorPointer("$0")).toBe(true);
+    expect(isNeutralizedMapDoorPointer('"$0"')).toBe(true);
+    expect(isNeutralizedMapDoorPointer("'$0'")).toBe(true);
+    expect(isNeutralizedMapDoorPointer("robot.hello_world")).toBe(false);
+    expect(isNeutralizedMapDoorPointer("$c9ae59")).toBe(false);
   });
 });
 

@@ -7,6 +7,7 @@
     "convert": "pnpm --filter @eb/converter convert",
     "validate": "pnpm --filter @eb/converter validate",
     "test": "vitest run",
+    "proof:check": "tsx scripts/proof-check.ts",
     "pretest:review": "pnpm convert && pnpm validate",
     "test:review": "playwright test --project review-chromium",
     "show:review": "playwright show-report playwright-report"

@@ -634,6 +634,13 @@ Fresh verification after the successful bedroom proof fixture:
   - no ROM filename
   - no `.sfc`
   - no `/Users/`
+- `pnpm proof:check`
+  - exactly one NPC-table `Text Pointer 1: robot.hello_world`
+  - `robot.hello_world` is owned by NPC `744`
+  - exactly one NPC `744` placement
+  - no map-door object routes `robot.hello_world`
+  - all map-door text pointers are neutralized to `$0`
+  - generated public JSON has no ROM filename, `.sfc`, or `/Users/`
 - ignored local CoilSnake compile to `.codex/rom-output/first-hack.sfc`
 
 ## Safety Notes
@@ -665,6 +672,8 @@ separate roadblock/original-placement investigation.
 - exactly one NPC text pointer to `robot.hello_world`, at NPC `744`.
 - `map_sprites.yml` is narrowed to exactly one NPC `744` placement:
   `4/31`, `X: 64`, `Y: 64`.
+- run `pnpm proof:check` before any new emulator proof clip and again after any
+  fixture edit.
 - the roadblock/shack target remains unresolved:
   - original slot `706` is `27/29`, `X: 192`, `Y: 216`.
   - original slot `707` is `27/31`, `X: 168`, `Y: 200`.
