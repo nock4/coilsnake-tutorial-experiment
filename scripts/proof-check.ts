@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -7,6 +8,28 @@ type Check = {
   name: string;
   ok: boolean;
   detail: string;
+};
+
+type Snapshot = {
+  schemaVersion: 1;
+  generatedAt: string;
+  fixtureRoot: "external/coilsnake-project";
+  generatedRoot: "apps/game/public/generated";
+  files: Array<{
+    path: string;
+    exists: boolean;
+    bytes?: number;
+    sha256?: string;
+  }>;
+  invariants: {
+    npcTextPointerLines: number[];
+    npc744Fields: Record<string, string>;
+    npc744Placements: Array<{ line: number; x?: string; y?: string }>;
+    mapDoorTextPointerCount: number;
+    mapDoorNonZeroTextPointers: Array<{ line: number; value: string }>;
+    mapDoorRobotHelloWorldLines: number[];
+    generatedJsonFiles: string[];
+  };
 };
 
 const projectRoot = process.cwd();
@@ -28,6 +51,10 @@ async function readText(relativePath: string): Promise<string | undefined> {
 
 function lineNumber(source: string, index: number): number {
   return source.slice(0, index).split(/\r?\n/).length;
+}
+
+function sha256(source: string): string {
+  return createHash("sha256").update(source).digest("hex");
 }
 
 function parseNpc744Fields(source: string): Record<string, string> {
@@ -75,6 +102,13 @@ function findNpc744Placements(source: string): Array<{ line: number; x?: string;
 
 export function isNeutralizedMapDoorPointer(value: string): boolean {
   return value.trim().replace(/^"(.+)"$/, "$1").replace(/^'(.+)'$/, "$1") === "$0";
+}
+
+function parseMapDoorPointers(source: string): Array<{ line: number; value: string }> {
+  return [...source.matchAll(/Text Pointer:\s*(.+?)\s*$/gm)].map((match) => ({
+    line: lineNumber(source, match.index ?? 0),
+    value: match[1].trim()
+  }));
 }
 
 async function checkGeneratedJsonSafety(): Promise<void> {
@@ -160,8 +194,78 @@ async function main(): Promise<void> {
   }
 }
 
+async function buildSnapshot(): Promise<Snapshot> {
+  const fixtureFiles = [
+    "Project.snake",
+    "ccscript/robot.ccs",
+    "tutorial-fixture-npc-reference.yml",
+    "tutorial-run-proof.json",
+    "npc_config_table.yml",
+    "map_sprites.yml",
+    "map_doors.yml"
+  ];
+  const generatedJsonFiles = existsSync(generatedRoot)
+    ? (await readdir(generatedRoot)).filter((file) => file.endsWith(".json")).sort()
+    : [];
+  const files: Snapshot["files"] = [];
+  for (const relativePath of fixtureFiles) {
+    const source = await readText(relativePath);
+    files.push({
+      path: `external/coilsnake-project/${relativePath}`,
+      exists: source !== undefined,
+      ...(source === undefined ? {} : { bytes: Buffer.byteLength(source), sha256: sha256(source) })
+    });
+  }
+  for (const file of generatedJsonFiles) {
+    const source = await readFile(path.join(generatedRoot, file), "utf8");
+    files.push({
+      path: `apps/game/public/generated/${file}`,
+      exists: true,
+      bytes: Buffer.byteLength(source),
+      sha256: sha256(source)
+    });
+  }
+
+  const npcConfig = await readText("npc_config_table.yml") ?? "";
+  const mapSprites = await readText("map_sprites.yml") ?? "";
+  const mapDoors = await readText("map_doors.yml") ?? "";
+  const mapDoorPointers = parseMapDoorPointers(mapDoors);
+  const robotDoorRoutes = [...mapDoors.matchAll(/Text Pointer:\s*robot\.hello_world\b/g)];
+
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    fixtureRoot: "external/coilsnake-project",
+    generatedRoot: "apps/game/public/generated",
+    files,
+    invariants: {
+      npcTextPointerLines: [...npcConfig.matchAll(/Text Pointer 1:\s*robot\.hello_world\b/g)]
+        .map((match) => lineNumber(npcConfig, match.index ?? 0)),
+      npc744Fields: parseNpc744Fields(npcConfig),
+      npc744Placements: findNpc744Placements(mapSprites),
+      mapDoorTextPointerCount: mapDoorPointers.length,
+      mapDoorNonZeroTextPointers: mapDoorPointers.filter((pointer) => !isNeutralizedMapDoorPointer(pointer.value)),
+      mapDoorRobotHelloWorldLines: robotDoorRoutes.map((match) => lineNumber(mapDoors, match.index ?? 0)),
+      generatedJsonFiles
+    }
+  };
+}
+
+async function writeSnapshot(): Promise<void> {
+  const outputArgIndex = process.argv.indexOf("--out");
+  const outputPath = outputArgIndex >= 0 && process.argv[outputArgIndex + 1]
+    ? process.argv[outputArgIndex + 1]
+    : ".codex/proof-snapshots/latest-fixture-snapshot.json";
+  const snapshot = await buildSnapshot();
+  const absoluteOutput = path.resolve(projectRoot, outputPath);
+  await mkdir(path.dirname(absoluteOutput), { recursive: true });
+  await writeFile(absoluteOutput, `${JSON.stringify(snapshot, null, 2)}\n`, "utf8");
+  console.log(JSON.stringify({ ok: true, snapshot: path.relative(projectRoot, absoluteOutput) }, null, 2));
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  main().catch((error: unknown) => {
+  const run = process.argv.includes("--snapshot") ? writeSnapshot : main;
+  run().catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
   });

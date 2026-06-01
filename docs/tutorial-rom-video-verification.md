@@ -641,6 +641,11 @@ Fresh verification after the successful bedroom proof fixture:
   - no map-door object routes `robot.hello_world`
   - all map-door text pointers are neutralized to `$0`
   - generated public JSON has no ROM filename, `.sfc`, or `/Users/`
+- `pnpm proof:snapshot`
+  - writes ignored local fixture metadata to
+    `.codex/proof-snapshots/latest-fixture-snapshot.json`
+  - records relative file paths, SHA-256 hashes, NPC `744` fields/placement,
+    map-door pointer counts, and generated JSON file hashes
 - ignored local CoilSnake compile to `.codex/rom-output/first-hack.sfc`
 
 ## Safety Notes
@@ -674,6 +679,7 @@ separate roadblock/original-placement investigation.
   `4/31`, `X: 64`, `Y: 64`.
 - run `pnpm proof:check` before any new emulator proof clip and again after any
   fixture edit.
+- run `pnpm proof:snapshot` immediately before recording any new proof clip.
 - the roadblock/shack target remains unresolved:
   - original slot `706` is `27/29`, `X: 192`, `Y: 216`.
   - original slot `707` is `27/31`, `X: 168`, `Y: 200`.
