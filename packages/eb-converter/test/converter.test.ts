@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildDialoguePages, ManifestSchema, resolveScriptReference, TutorialStatusSchema } from "@eb/schemas";
 import { convertProject, parseCcsFile, readNpcReferences } from "../src/index";
 import { validateGeneratedOutput } from "../src/validate";
-import { findNpc744Placements, isNeutralizedMapDoorPointer } from "../../../scripts/proof-check";
+import { classifyProofTarget, findNpc744Placements, isNeutralizedMapDoorPointer } from "../../../scripts/proof-check";
 import { checkCommandForMode, sanitizePacketOutput } from "../../../scripts/proof-packet";
 
 describe("schemas", () => {
@@ -325,6 +325,14 @@ describe("proof invariant helpers", () => {
     expect(placements).toEqual([
       { line: 8, outer: "27", inner: "31", x: "168", y: "200" }
     ]);
+  });
+
+  it("classifies proof target placements", () => {
+    expect(classifyProofTarget([{ line: 1, outer: "4", inner: "31", x: "64", y: "64" }])).toBe("bedroom");
+    expect(classifyProofTarget([{ line: 1, outer: "27", inner: "29", x: "192", y: "216" }])).toBe("roadblock-706");
+    expect(classifyProofTarget([{ line: 1, outer: "27", inner: "31", x: "168", y: "200" }])).toBe("roadblock-707");
+    expect(classifyProofTarget([{ line: 1, outer: "1", inner: "2", x: "3", y: "4" }])).toBe("custom");
+    expect(classifyProofTarget([])).toBe("missing");
   });
 
   it("sanitizes absolute repo paths from local proof packets", () => {

@@ -645,7 +645,8 @@ Fresh verification after the successful bedroom proof fixture:
   - writes ignored local fixture metadata to
     `.codex/proof-snapshots/latest-fixture-snapshot.json`
   - records relative file paths, SHA-256 hashes, NPC `744` fields/placement,
-    map-door pointer counts, and generated JSON file hashes
+    proof target classification, map-door pointer counts, and generated JSON
+    file hashes
 - ignored local CoilSnake compile to `.codex/rom-output/first-hack.sfc`
 
 ## Safety Notes
@@ -684,6 +685,8 @@ separate roadblock/original-placement investigation.
   after a local roadblock fixture edit; those commands are expected to fail
   against the current bedroom proof fixture.
 - run `pnpm proof:snapshot` immediately before recording any new proof clip.
+  The snapshot now classifies the active fixture as `bedroom`, `roadblock-706`,
+  `roadblock-707`, `custom`, `missing`, or `multiple`.
 - run `pnpm proof:packet:bedroom` before recording a bedroom proof clip, or
   `pnpm proof:packet:roadblock-706` / `pnpm proof:packet:roadblock-707` before
   a roadblock proof attempt. Packets are ignored local markdown under

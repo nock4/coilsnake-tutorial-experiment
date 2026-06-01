@@ -30,6 +30,7 @@ type Snapshot = {
     sha256?: string;
   }>;
   invariants: {
+    proofTarget: string;
     npcTextPointerLines: number[];
     npc744Fields: Record<string, string>;
     npc744Placements: NpcPlacement[];
@@ -44,6 +45,11 @@ const projectRoot = process.cwd();
 const fixtureRoot = path.join(projectRoot, "external", "coilsnake-project");
 const generatedRoot = path.join(projectRoot, "apps", "game", "public", "generated");
 const checks: Check[] = [];
+const placementPresets: Record<string, NpcPlacement> = {
+  bedroom: { line: 0, outer: "4", inner: "31", x: "64", y: "64" },
+  "roadblock-706": { line: 0, outer: "27", inner: "29", x: "192", y: "216" },
+  "roadblock-707": { line: 0, outer: "27", inner: "31", x: "168", y: "200" }
+};
 
 function add(name: string, ok: boolean, detail: string): void {
   checks.push({ name, ok, detail });
@@ -124,12 +130,7 @@ function expectedPlacementFromArgs(): NpcPlacement | undefined {
   if (!value) {
     return undefined;
   }
-  const presets: Record<string, NpcPlacement> = {
-    bedroom: { line: 0, outer: "4", inner: "31", x: "64", y: "64" },
-    "roadblock-706": { line: 0, outer: "27", inner: "29", x: "192", y: "216" },
-    "roadblock-707": { line: 0, outer: "27", inner: "31", x: "168", y: "200" }
-  };
-  return presets[value] ?? parsePlacement(value);
+  return placementPresets[value] ?? parsePlacement(value);
 }
 
 function parsePlacement(value: string): NpcPlacement | undefined {
@@ -142,6 +143,21 @@ function parsePlacement(value: string): NpcPlacement | undefined {
 
 function placementMatches(actual: NpcPlacement, expected: NpcPlacement): boolean {
   return actual.outer === expected.outer && actual.inner === expected.inner && actual.x === expected.x && actual.y === expected.y;
+}
+
+export function classifyProofTarget(placements: NpcPlacement[]): string {
+  if (placements.length === 0) {
+    return "missing";
+  }
+  if (placements.length > 1) {
+    return "multiple";
+  }
+  for (const [name, expected] of Object.entries(placementPresets)) {
+    if (placementMatches(placements[0], expected)) {
+      return name;
+    }
+  }
+  return "custom";
 }
 
 function formatPlacement(placement: NpcPlacement): string {
@@ -212,6 +228,7 @@ async function main(): Promise<void> {
       placements.length === 1,
       placements.map(formatPlacement).join("; ") || "none"
     );
+    add("proof target classification", true, classifyProofTarget(placements));
     if (expectedPlacement) {
       add(
         "NPC 744 placement matches expected proof target",
@@ -287,6 +304,7 @@ async function buildSnapshot(): Promise<Snapshot> {
   const mapDoors = await readText("map_doors.yml") ?? "";
   const mapDoorPointers = parseMapDoorPointers(mapDoors);
   const robotDoorRoutes = [...mapDoors.matchAll(/Text Pointer:\s*robot\.hello_world\b/g)];
+  const npc744Placements = findNpc744Placements(mapSprites);
 
   return {
     schemaVersion: 1,
@@ -295,10 +313,11 @@ async function buildSnapshot(): Promise<Snapshot> {
     generatedRoot: "apps/game/public/generated",
     files,
     invariants: {
+      proofTarget: classifyProofTarget(npc744Placements),
       npcTextPointerLines: [...npcConfig.matchAll(/Text Pointer 1:\s*robot\.hello_world\b/g)]
         .map((match) => lineNumber(npcConfig, match.index ?? 0)),
       npc744Fields: parseNpc744Fields(npcConfig),
-      npc744Placements: findNpc744Placements(mapSprites),
+      npc744Placements,
       mapDoorTextPointerCount: mapDoorPointers.length,
       mapDoorNonZeroTextPointers: mapDoorPointers.filter((pointer) => !isNeutralizedMapDoorPointer(pointer.value)),
       mapDoorRobotHelloWorldLines: robotDoorRoutes.map((match) => lineNumber(mapDoors, match.index ?? 0)),
