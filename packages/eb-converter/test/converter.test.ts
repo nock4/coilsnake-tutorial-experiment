@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildDialoguePages, ManifestSchema, resolveScriptReference, TutorialStatusSchema } from "@eb/schemas";
 import { convertProject, parseCcsFile, readNpcReferences } from "../src/index";
 import { validateGeneratedOutput } from "../src/validate";
-import { classifyProofTarget, findNpc744Placements, isNeutralizedMapDoorPointer } from "../../../scripts/proof-check";
+import { classifyProofTarget, findForbiddenProofArtifactText, findNpc744Placements, isNeutralizedMapDoorPointer } from "../../../scripts/proof-check";
 import { checkCommandForMode, sanitizePacketOutput } from "../../../scripts/proof-packet";
 
 describe("schemas", () => {
@@ -344,6 +344,13 @@ describe("proof invariant helpers", () => {
     expect(checkCommandForMode("bedroom")).toEqual(["proof:check:bedroom"]);
     expect(checkCommandForMode("roadblock-706")).toEqual(["proof:check:roadblock-706"]);
     expect(checkCommandForMode("27/29:192,216")).toEqual(["proof:check", "--", "--expect-placement", "27/29:192,216"]);
+  });
+
+  it("detects forbidden public proof artifact text", () => {
+    expect(findForbiddenProofArtifactText("safe relative path")).toBeUndefined();
+    expect(findForbiddenProofArtifactText("path /Users/example")).toBe("/Users/");
+    expect(findForbiddenProofArtifactText("compiled first-hack output")).toBe("first-hack");
+    expect(findForbiddenProofArtifactText("rom file .sfc")).toBe(".sfc");
   });
 });
 

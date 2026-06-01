@@ -41,6 +41,11 @@ type Snapshot = {
   };
 };
 
+type SafetyHit = {
+  file: string;
+  match: string;
+};
+
 const projectRoot = process.cwd();
 const fixtureRoot = path.join(projectRoot, "external", "coilsnake-project");
 const generatedRoot = path.join(projectRoot, "apps", "game", "public", "generated");
@@ -50,6 +55,7 @@ const placementPresets: Record<string, NpcPlacement> = {
   "roadblock-706": { line: 0, outer: "27", inner: "29", x: "192", y: "216" },
   "roadblock-707": { line: 0, outer: "27", inner: "31", x: "168", y: "200" }
 };
+const forbiddenProofArtifactPattern = /EarthBound \(USA\)|first-hack|\.sfc|\/Users\//;
 
 function add(name: string, ok: boolean, detail: string): void {
   checks.push({ name, ok, detail });
@@ -184,7 +190,7 @@ async function checkGeneratedJsonSafety(): Promise<void> {
   const unsafe: string[] = [];
   for (const file of files) {
     const text = await readFile(path.join(generatedRoot, file), "utf8");
-    const match = /EarthBound \(USA\)|first-hack|\.sfc|\/Users\//.exec(text);
+    const match = forbiddenProofArtifactPattern.exec(text);
     if (match) {
       unsafe.push(`${file}: ${match[0]}`);
     }
@@ -194,6 +200,51 @@ async function checkGeneratedJsonSafety(): Promise<void> {
     unsafe.length === 0,
     unsafe.length === 0 ? `${files.length} JSON files scanned` : unsafe.join("; ")
   );
+}
+
+export function findForbiddenProofArtifactText(source: string): string | undefined {
+  return forbiddenProofArtifactPattern.exec(source)?.[0];
+}
+
+async function scanFiles(relativeDir: string, extensions: Set<string>): Promise<SafetyHit[]> {
+  const absoluteDir = path.join(projectRoot, relativeDir);
+  if (!existsSync(absoluteDir)) {
+    return [];
+  }
+  const files = await readdir(absoluteDir, { withFileTypes: true });
+  const hits: SafetyHit[] = [];
+  for (const file of files) {
+    if (!file.isFile() || !extensions.has(path.extname(file.name))) {
+      continue;
+    }
+    const relativePath = path.join(relativeDir, file.name);
+    const source = await readFile(path.join(projectRoot, relativePath), "utf8");
+    const match = findForbiddenProofArtifactText(source);
+    if (match) {
+      hits.push({ file: relativePath, match });
+    }
+  }
+  return hits;
+}
+
+async function runProofArtifactSafety(): Promise<void> {
+  const hits = [
+    ...await scanFiles("apps/game/public/generated", new Set([".json"])),
+    ...await scanFiles(".codex/proof-snapshots", new Set([".json"])),
+    ...await scanFiles(".codex/proof-packets", new Set([".json", ".md"]))
+  ];
+  console.log(JSON.stringify({
+    ok: hits.length === 0,
+    scanned: [
+      "apps/game/public/generated/*.json",
+      ".codex/proof-snapshots/*.json",
+      ".codex/proof-packets/*.{json,md}"
+    ],
+    hits
+  }, null, 2));
+  if (hits.length > 0) {
+    process.exitCode = 1;
+  }
 }
 
 async function main(): Promise<void> {
@@ -339,7 +390,11 @@ async function writeSnapshot(): Promise<void> {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
-  const run = process.argv.includes("--snapshot") ? writeSnapshot : main;
+  const run = process.argv.includes("--snapshot")
+    ? writeSnapshot
+    : process.argv.includes("--safety")
+      ? runProofArtifactSafety
+      : main;
   run().catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
