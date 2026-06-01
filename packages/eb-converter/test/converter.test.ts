@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildDialoguePages, ManifestSchema, resolveScriptReference, TutorialStatusSchema } from "@eb/schemas";
 import { convertProject, parseCcsFile, readNpcReferences } from "../src/index";
 import { validateGeneratedOutput } from "../src/validate";
-import { isNeutralizedMapDoorPointer } from "../../../scripts/proof-check";
+import { findNpc744Placements, isNeutralizedMapDoorPointer } from "../../../scripts/proof-check";
 
 describe("schemas", () => {
   it("validates generated manifests", async () => {
@@ -304,6 +304,26 @@ describe("proof invariant helpers", () => {
     expect(isNeutralizedMapDoorPointer("'$0'")).toBe(true);
     expect(isNeutralizedMapDoorPointer("robot.hello_world")).toBe(false);
     expect(isNeutralizedMapDoorPointer("$c9ae59")).toBe(false);
+  });
+
+  it("extracts NPC 744 outer and inner map sprite groups", () => {
+    const placements = findNpc744Placements([
+      "27:",
+      "  28:",
+      "  29:",
+      "  - NPC ID: 706",
+      "    X: 192",
+      "    Y: 216",
+      "  31:",
+      "  - NPC ID: 744",
+      "    X: 168",
+      "    Y: 200",
+      ""
+    ].join("\n"));
+
+    expect(placements).toEqual([
+      { line: 8, outer: "27", inner: "31", x: "168", y: "200" }
+    ]);
   });
 });
 

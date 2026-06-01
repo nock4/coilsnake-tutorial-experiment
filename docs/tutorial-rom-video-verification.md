@@ -679,6 +679,10 @@ separate roadblock/original-placement investigation.
   `4/31`, `X: 64`, `Y: 64`.
 - run `pnpm proof:check` before any new emulator proof clip and again after any
   fixture edit.
+- run `pnpm proof:check:bedroom` to verify the current successful proof fixture.
+- run `pnpm proof:check:roadblock-706` or `pnpm proof:check:roadblock-707`
+  after a local roadblock fixture edit; those commands are expected to fail
+  against the current bedroom proof fixture.
 - run `pnpm proof:snapshot` immediately before recording any new proof clip.
 - the roadblock/shack target remains unresolved:
   - original slot `706` is `27/29`, `X: 192`, `Y: 216`.

@@ -10,6 +10,14 @@ type Check = {
   detail: string;
 };
 
+type NpcPlacement = {
+  line: number;
+  outer?: string;
+  inner?: string;
+  x?: string;
+  y?: string;
+};
+
 type Snapshot = {
   schemaVersion: 1;
   generatedAt: string;
@@ -24,7 +32,7 @@ type Snapshot = {
   invariants: {
     npcTextPointerLines: number[];
     npc744Fields: Record<string, string>;
-    npc744Placements: Array<{ line: number; x?: string; y?: string }>;
+    npc744Placements: NpcPlacement[];
     mapDoorTextPointerCount: number;
     mapDoorNonZeroTextPointers: Array<{ line: number; value: string }>;
     mapDoorRobotHelloWorldLines: number[];
@@ -77,14 +85,24 @@ function parseNpc744Fields(source: string): Record<string, string> {
   return fields;
 }
 
-function findNpc744Placements(source: string): Array<{ line: number; x?: string; y?: string }> {
+export function findNpc744Placements(source: string): NpcPlacement[] {
   const lines = source.split(/\r?\n/);
-  const placements: Array<{ line: number; x?: string; y?: string }> = [];
+  const placements: NpcPlacement[] = [];
+  let outer: string | undefined;
+  let inner: string | undefined;
   for (let index = 0; index < lines.length; index += 1) {
+    const outerMatch = /^(\d+):\s*$/.exec(lines[index]);
+    const innerMatch = /^  (\d+):/.exec(lines[index]);
+    if (outerMatch) {
+      outer = outerMatch[1];
+      inner = undefined;
+    } else if (innerMatch) {
+      inner = innerMatch[1];
+    }
     if (!/NPC ID:\s*744\b/.test(lines[index])) {
       continue;
     }
-    const placement: { line: number; x?: string; y?: string } = { line: index + 1 };
+    const placement: NpcPlacement = { line: index + 1, outer, inner };
     for (let offset = 1; offset <= 4 && index + offset < lines.length; offset += 1) {
       const x = /^\s*X:\s*(.+?)\s*$/.exec(lines[index + offset]);
       const y = /^\s*Y:\s*(.+?)\s*$/.exec(lines[index + offset]);
@@ -98,6 +116,36 @@ function findNpc744Placements(source: string): Array<{ line: number; x?: string;
     placements.push(placement);
   }
   return placements;
+}
+
+function expectedPlacementFromArgs(): NpcPlacement | undefined {
+  const index = process.argv.indexOf("--expect-placement");
+  const value = index >= 0 ? process.argv[index + 1] : undefined;
+  if (!value) {
+    return undefined;
+  }
+  const presets: Record<string, NpcPlacement> = {
+    bedroom: { line: 0, outer: "4", inner: "31", x: "64", y: "64" },
+    "roadblock-706": { line: 0, outer: "27", inner: "29", x: "192", y: "216" },
+    "roadblock-707": { line: 0, outer: "27", inner: "31", x: "168", y: "200" }
+  };
+  return presets[value] ?? parsePlacement(value);
+}
+
+function parsePlacement(value: string): NpcPlacement | undefined {
+  const match = /^(\d+)\/(\d+):(\d+),(\d+)$/.exec(value);
+  if (!match) {
+    return undefined;
+  }
+  return { line: 0, outer: match[1], inner: match[2], x: match[3], y: match[4] };
+}
+
+function placementMatches(actual: NpcPlacement, expected: NpcPlacement): boolean {
+  return actual.outer === expected.outer && actual.inner === expected.inner && actual.x === expected.x && actual.y === expected.y;
+}
+
+function formatPlacement(placement: NpcPlacement): string {
+  return `line ${placement.line}, ${placement.outer ?? "?"}/${placement.inner ?? "?"}, X:${placement.x ?? "?"}, Y:${placement.y ?? "?"}`;
 }
 
 export function isNeutralizedMapDoorPointer(value: string): boolean {
@@ -158,11 +206,19 @@ async function main(): Promise<void> {
   add("map_sprites.yml exists", Boolean(mapSprites), "required for NPC placement proof");
   if (mapSprites) {
     const placements = findNpc744Placements(mapSprites);
+    const expectedPlacement = expectedPlacementFromArgs();
     add(
       "exactly one NPC 744 placement exists",
       placements.length === 1,
-      placements.map((placement) => `line ${placement.line}, X:${placement.x ?? "?"}, Y:${placement.y ?? "?"}`).join("; ") || "none"
+      placements.map(formatPlacement).join("; ") || "none"
     );
+    if (expectedPlacement) {
+      add(
+        "NPC 744 placement matches expected proof target",
+        placements.length === 1 && placementMatches(placements[0], expectedPlacement),
+        `expected ${formatPlacement(expectedPlacement).replace("line 0, ", "")}; actual ${placements.map(formatPlacement).join("; ") || "none"}`
+      );
+    }
   }
 
   const mapDoors = await readText("map_doors.yml");
