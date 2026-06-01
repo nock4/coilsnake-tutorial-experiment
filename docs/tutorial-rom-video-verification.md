@@ -650,6 +650,9 @@ Fresh verification after the successful bedroom proof fixture:
 - `pnpm proof:safety`
   - scans generated public JSON, ignored proof snapshots, and ignored proof
     packets for ROM filename, `.sfc`, and `/Users/` leakage
+- `pnpm proof:status`
+  - reports the active fixture target classification, the next proof packet
+    command, and whether emulator proof is complete
 - ignored local CoilSnake compile to `.codex/rom-output/first-hack.sfc`
 
 ## Safety Notes
@@ -679,18 +682,21 @@ separate roadblock/original-placement investigation.
 
 - no `robot.hello_world` object routing in `map_doors.yml`.
 - exactly one NPC text pointer to `robot.hello_world`, at NPC `744`.
-- `map_sprites.yml` is narrowed to exactly one NPC `744` placement:
-  `4/31`, `X: 64`, `Y: 64`.
+- `map_sprites.yml` is currently narrowed to exactly one NPC `744` placement:
+  `27/29`, `X: 192`, `Y: 216` for the roadblock-706 diagnostic fixture.
 - run `pnpm proof:check` before any new emulator proof clip and again after any
   fixture edit.
 - run `pnpm proof:check:bedroom` to verify the current successful proof fixture.
-- run `pnpm proof:check:roadblock-706` or `pnpm proof:check:roadblock-707`
-  after a local roadblock fixture edit; those commands are expected to fail
-  against the current bedroom proof fixture.
+- run `pnpm proof:check:roadblock-706` to verify the current roadblock-706
+  diagnostic fixture. Run `pnpm proof:check:bedroom` only after restoring the
+  bedroom proof fixture.
 - run `pnpm proof:snapshot` immediately before recording any new proof clip.
   The snapshot now classifies the active fixture as `bedroom`, `roadblock-706`,
   `roadblock-707`, `custom`, `missing`, or `multiple`.
 - run `pnpm proof:safety` after generating proof packets or snapshots.
+- run `pnpm proof:status` when resuming work to see whether the current local
+  fixture is a bedroom proof fixture, a roadblock fixture, or an unclassified
+  diagnostic state.
 - run `pnpm proof:packet:bedroom` before recording a bedroom proof clip, or
   `pnpm proof:packet:roadblock-706` / `pnpm proof:packet:roadblock-707` before
   a roadblock proof attempt. Packets are ignored local markdown under
@@ -720,6 +726,32 @@ separate roadblock/original-placement investigation.
     that forces the roadblock object/NPC state to reload cleanly before
     interaction, then record only if `@Hello World!` appears under the narrowed
     invariant checks.
+- 2026-06-01 roadblock-706 retry after bedroom proof:
+  - restored a roadblock-706 diagnostic fixture by moving the only NPC `744`
+    placement to `27/29`, `X: 192`, `Y: 216`.
+  - kept exactly one `Text Pointer 1: robot.hello_world`, owned by NPC `744`.
+  - kept `map_doors.yml` with zero `robot.hello_world` object refs and all
+    object text pointers neutralized to `$0`.
+  - recompiled the ignored proof output with the ignored expanded local base
+    ROM after direct compile from the 3 MB base failed with
+    `attempt to write past end of ROM`.
+  - `pnpm convert`, `pnpm validate`, `pnpm proof:check:roadblock-706`,
+    `pnpm proof:packet:roadblock-706`, `pnpm proof:status`, and
+    `pnpm proof:safety` passed.
+  - Snes9x booted the refreshed output and file select loaded the save, but the
+    route attempt is blocked because D-pad movement is not currently reaching
+    the loaded in-game bedroom state through Computer Use, AppleScript keycodes,
+    or `cliclick`, even though title/file-select buttons worked.
+  - a full Snes9x restart and a retry with the older ignored SRAM backup did
+    not produce a usable route state; the older backup fell back into
+    title/attract playback instead of proving the roadblock interaction.
+  - ares was tested as a control emulator with the current ignored SRAM copied
+    to the adjacent `.codex/rom-output/first-hack.ram`; ares input mappings
+    were verified in Settings > Input, but it did not expose a usable existing
+    save for the route and also fell back into title/attract flow when timing
+    missed.
+  - the pre-retry SRAM was restored after this diagnostic.
+  - no roadblock-706 success clip was recorded from this retry.
 - 2026-06-01 successful exact-NPC bedroom proof:
   - `map_sprites.yml` has exactly one NPC `744` placement: outer `4`, inner
     `31`, `X: 64`, `Y: 64`.

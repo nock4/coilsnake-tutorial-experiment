@@ -13,6 +13,7 @@
     "proof:check:roadblock-707": "tsx scripts/proof-check.ts --expect-placement roadblock-707",
     "proof:snapshot": "tsx scripts/proof-check.ts --snapshot",
     "proof:safety": "tsx scripts/proof-check.ts --safety",
+    "proof:status": "tsx scripts/proof-check.ts --status",
     "proof:packet": "tsx scripts/proof-packet.ts",
     "proof:packet:bedroom": "tsx scripts/proof-packet.ts --mode bedroom",
     "proof:packet:roadblock-706": "tsx scripts/proof-packet.ts --mode roadblock-706",

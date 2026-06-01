@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { buildDialoguePages, ManifestSchema, resolveScriptReference, TutorialStatusSchema } from "@eb/schemas";
 import { convertProject, parseCcsFile, readNpcReferences } from "../src/index";
 import { validateGeneratedOutput } from "../src/validate";
-import { classifyProofTarget, findForbiddenProofArtifactText, findNpc744Placements, isNeutralizedMapDoorPointer } from "../../../scripts/proof-check";
+import { classifyProofTarget, findForbiddenProofArtifactText, findNpc744Placements, isNeutralizedMapDoorPointer, proofRecommendation } from "../../../scripts/proof-check";
 import { checkCommandForMode, sanitizePacketOutput } from "../../../scripts/proof-packet";
 
 describe("schemas", () => {
@@ -351,6 +351,12 @@ describe("proof invariant helpers", () => {
     expect(findForbiddenProofArtifactText("path /Users/example")).toBe("/Users/");
     expect(findForbiddenProofArtifactText("compiled first-hack output")).toBe("first-hack");
     expect(findForbiddenProofArtifactText("rom file .sfc")).toBe(".sfc");
+  });
+
+  it("recommends the next proof command for classified targets", () => {
+    expect(proofRecommendation("bedroom").recommendedCommand).toBe("pnpm proof:packet:bedroom");
+    expect(proofRecommendation("roadblock-706").recommendedCommand).toBe("pnpm proof:packet:roadblock-706");
+    expect(proofRecommendation("custom").nextAction).toContain("custom");
   });
 });
 

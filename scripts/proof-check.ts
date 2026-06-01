@@ -46,6 +46,14 @@ type SafetyHit = {
   match: string;
 };
 
+type ProofStatus = {
+  ok: boolean;
+  proofTarget: string;
+  emulatorProofComplete: false;
+  recommendedCommand: string;
+  nextAction: string;
+};
+
 const projectRoot = process.cwd();
 const fixtureRoot = path.join(projectRoot, "external", "coilsnake-project");
 const generatedRoot = path.join(projectRoot, "apps", "game", "public", "generated");
@@ -166,6 +174,31 @@ export function classifyProofTarget(placements: NpcPlacement[]): string {
   return "custom";
 }
 
+export function proofRecommendation(proofTarget: string): Pick<ProofStatus, "recommendedCommand" | "nextAction"> {
+  if (proofTarget === "bedroom") {
+    return {
+      recommendedCommand: "pnpm proof:packet:bedroom",
+      nextAction: "Current fixture supports the narrowed bedroom proof only; original roadblock proof remains unresolved."
+    };
+  }
+  if (proofTarget === "roadblock-706") {
+    return {
+      recommendedCommand: "pnpm proof:packet:roadblock-706",
+      nextAction: "Record a short Snes9x clip only if Talk opens imported robot.hello_world from the 706 roadblock placement."
+    };
+  }
+  if (proofTarget === "roadblock-707") {
+    return {
+      recommendedCommand: "pnpm proof:packet:roadblock-707",
+      nextAction: "Record a short Snes9x clip only if Talk opens imported robot.hello_world from the 707 roadblock placement."
+    };
+  }
+  return {
+    recommendedCommand: "pnpm proof:packet -- --mode <target>",
+    nextAction: `Current fixture target is ${proofTarget}; classify or narrow it before claiming exact roadblock proof.`
+  };
+}
+
 function formatPlacement(placement: NpcPlacement): string {
   return `line ${placement.line}, ${placement.outer ?? "?"}/${placement.inner ?? "?"}, X:${placement.x ?? "?"}, Y:${placement.y ?? "?"}`;
 }
@@ -245,6 +278,19 @@ async function runProofArtifactSafety(): Promise<void> {
   if (hits.length > 0) {
     process.exitCode = 1;
   }
+}
+
+async function runProofStatus(): Promise<void> {
+  const mapSprites = await readText("map_sprites.yml") ?? "";
+  const proofTarget = classifyProofTarget(findNpc744Placements(mapSprites));
+  const recommendation = proofRecommendation(proofTarget);
+  const status: ProofStatus = {
+    ok: true,
+    proofTarget,
+    emulatorProofComplete: false,
+    ...recommendation
+  };
+  console.log(JSON.stringify(status, null, 2));
 }
 
 async function main(): Promise<void> {
@@ -394,7 +440,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
     ? writeSnapshot
     : process.argv.includes("--safety")
       ? runProofArtifactSafety
-      : main;
+      : process.argv.includes("--status")
+        ? runProofStatus
+        : main;
   run().catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
