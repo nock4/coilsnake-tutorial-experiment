@@ -688,6 +688,10 @@ separate roadblock/original-placement investigation.
   `pnpm proof:packet:roadblock-706` / `pnpm proof:packet:roadblock-707` before
   a roadblock proof attempt. Packets are ignored local markdown under
   `.codex/proof-packets/` and include command outputs plus a fixture snapshot.
+- run `pnpm proof:packet:roadblock-706:diagnostic` or
+  `pnpm proof:packet:roadblock-707:diagnostic` when the roadblock fixture is
+  still expected to fail but the failed invariant output should be preserved for
+  review.
 - the roadblock/shack target remains unresolved:
   - original slot `706` is `27/29`, `X: 192`, `Y: 216`.
   - original slot `707` is `27/31`, `X: 168`, `Y: 200`.

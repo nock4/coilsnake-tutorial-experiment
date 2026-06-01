@@ -19,7 +19,11 @@ function argValue(name: string, fallback: string): string {
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
 }
 
-function checkCommandForMode(mode: string): string[] {
+function hasArg(name: string): boolean {
+  return process.argv.includes(name);
+}
+
+export function checkCommandForMode(mode: string): string[] {
   if (mode === "bedroom") {
     return ["proof:check:bedroom"];
   }
@@ -66,6 +70,7 @@ function sanitize(value: string): string {
 async function main(): Promise<void> {
   const mode = argValue("--mode", "bedroom");
   const outputPath = argValue("--out", ".codex/proof-packets/latest-proof-packet.md");
+  const allowFail = hasArg("--allow-fail");
   const snapshotPath = outputPath.replace(/\.md$/, "-snapshot.json");
   const steps: Step[] = [];
 
@@ -81,6 +86,7 @@ async function main(): Promise<void> {
     `Generated: ${new Date().toISOString()}`,
     `Mode: ${mode}`,
     `Status: ${ok ? "PASS" : "FAIL"}`,
+    `Allow Fail: ${allowFail ? "yes" : "no"}`,
     `Snapshot: ${snapshotPath}`,
     "",
     "This packet is local-only and ignored by git. It records text/YML fixture",
@@ -106,8 +112,8 @@ async function main(): Promise<void> {
   const absoluteOutput = path.resolve(projectRoot, outputPath);
   await mkdir(path.dirname(absoluteOutput), { recursive: true });
   await writeFile(absoluteOutput, `${markdown}\n`, "utf8");
-  console.log(JSON.stringify({ ok, packet: path.relative(projectRoot, absoluteOutput), snapshot: snapshotPath }, null, 2));
-  if (!ok) {
+  console.log(JSON.stringify({ ok, allowFail, packet: path.relative(projectRoot, absoluteOutput), snapshot: snapshotPath }, null, 2));
+  if (!ok && !allowFail) {
     process.exitCode = 1;
   }
 }
