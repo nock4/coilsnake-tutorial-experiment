@@ -27,7 +27,8 @@
     "pretest:review": "pnpm convert && pnpm validate",
     "test:review": "playwright test --project review-chromium",
     "test:replay": "playwright test --project replay-chromium",
-    "show:review": "playwright show-report playwright-report"
+    "show:review": "playwright show-report playwright-report",
+    "verify": "pnpm install --frozen-lockfile && pnpm convert && pnpm validate && pnpm test && pnpm exec tsc --noEmit && pnpm test:review"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
