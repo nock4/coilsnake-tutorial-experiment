@@ -116,6 +116,20 @@ class DebugScene extends Phaser.Scene {
   }
 
   private renderError(title: string, message: string): void {
+    (globalThis as Record<string, unknown>).__firstSceneDebug = {
+      dialogueOpen: false,
+      dialogueText: "",
+      dialoguePageIndex: 0,
+      dialoguePageCount: 0,
+      targetReference: this.targetReference,
+      prompt: "",
+      inInteractionRange: false,
+      movementBounds: { minX: 70, maxX: 730, minY: 180, maxY: 360 },
+      statusLines: [title],
+      metadataLines: [],
+      resolveStatus: "missing",
+      error: { title, message }
+    };
     this.add.text(24, 24, title, {
       fontFamily: "system-ui, sans-serif",
       fontSize: "24px",

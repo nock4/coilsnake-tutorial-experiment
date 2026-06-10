@@ -34,6 +34,10 @@ systems, audio, or full game recreation.
   - import status and dialogue playback
   - dialogue close/reopen and movement lock
   - exploratory bounded movement sweep
+- Mantis-style robust browser e2e routes for:
+  - invalid generated scripts fallback
+  - invalid manifest error state
+  - narrow viewport observability
 - Replay recordings for the browser QA routes.
 - Final root release gate script: `pnpm verify`.
 
@@ -105,6 +109,12 @@ Replay review remains available separately:
 
 ```sh
 pnpm test:replay
+```
+
+Robust browser e2e game testing is available separately:
+
+```sh
+pnpm test:mantis
 ```
 
 ## Safety Checks

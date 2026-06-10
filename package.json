@@ -26,6 +26,7 @@
     "proof:packet:roadblock-707:diagnostic": "tsx scripts/proof-packet.ts --mode roadblock-707 --allow-fail --out .codex/proof-packets/roadblock-707-diagnostic.md",
     "pretest:review": "pnpm convert && pnpm validate",
     "test:review": "playwright test --project review-chromium",
+    "test:mantis": "playwright test --project review-chromium",
     "test:replay": "playwright test --project replay-chromium",
     "show:review": "playwright show-report playwright-report",
     "verify": "pnpm install --frozen-lockfile && pnpm convert && pnpm validate && pnpm test && pnpm exec tsc --noEmit && pnpm test:review"
