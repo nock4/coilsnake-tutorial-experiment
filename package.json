@@ -6,6 +6,8 @@
     "dev": "pnpm --filter @eb/game dev",
     "convert": "pnpm --filter @eb/converter convert",
     "validate": "pnpm --filter @eb/converter validate",
+    "hack:npcs": "tsx scripts/apply-npc-hack.ts",
+    "hack:npcs:revert": "tsx scripts/apply-npc-hack.ts --revert",
     "test": "vitest run",
     "proof:check": "tsx scripts/proof-check.ts",
     "proof:check:bedroom": "tsx scripts/proof-check.ts --expect-placement bedroom",
