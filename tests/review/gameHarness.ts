@@ -73,27 +73,32 @@ export async function gotoFirstScene(page: Page): Promise<void> {
 }
 
 /**
- * Walks the player toward the tutorial NPC using the published debug state,
+ * Walks the player toward the requested NPC using the published debug state,
  * axis by axis, with a stuck detector that tries the perpendicular axis.
- * Stops once the player can actually interact: in range AND facing the NPC
- * in the world scene (canInteract), radius-only in the fallback scene.
+ * Stops once the player can actually interact with that NPC in the world
+ * scene, radius-only for the default tutorial NPC in the fallback scene.
  */
-export async function walkToNpc(page: Page): Promise<void> {
+export async function walkToNpc(page: Page, npcId = 744): Promise<void> {
   const deadline = Date.now() + 30_000;
   let lastPosition = "";
   let stuckRetries = 0;
 
   while (Date.now() < deadline) {
     const state = await readDebug(page);
-    if (!state?.player || !state.npc) {
+    const targetNpc = state?.npcs?.find((npc) => npc.id === npcId) ?? (npcId === 744 ? state?.npc : undefined);
+    if (!state?.player || !targetNpc) {
       await page.waitForTimeout(200);
       continue;
     }
-    if (state.canInteract ?? state.inInteractionRange) {
+    if (state.canInteract && state.interactionTargetId === npcId) {
       return;
     }
-    const dx = state.npc.x - state.player.x;
-    const dy = state.npc.y - state.player.y;
+    if (!state.npcs?.length && npcId === 744 && (state.canInteract ?? state.inInteractionRange)) {
+      return;
+    }
+    const dx = targetNpc.x - state.player.x;
+    const dy = targetNpc.y - state.player.y;
+    const targetDistance = Math.hypot(dx, dy);
     const positionKey = `${Math.round(state.player.x)},${Math.round(state.player.y)}`;
     const stuck = positionKey === lastPosition;
     lastPosition = positionKey;
@@ -101,7 +106,7 @@ export async function walkToNpc(page: Page): Promise<void> {
     let key: string;
     // In radius the player only needs to turn/nudge, so tap briefly; from
     // farther away, hold longer to cover ground.
-    let holdMs = state.inInteractionRange ? 70 : 240;
+    let holdMs = targetDistance <= 32 ? 70 : 240;
     const preferHorizontal = Math.abs(dx) >= Math.abs(dy);
     if (stuck) {
       // Cycle through detours: perpendicular toward the NPC, perpendicular
@@ -125,15 +130,14 @@ export async function walkToNpc(page: Page): Promise<void> {
     await page.keyboard.down(key);
     await page.waitForTimeout(holdMs);
     await page.keyboard.up(key);
-    if (state.inInteractionRange) {
+    if (targetDistance <= 32) {
       await page.waitForTimeout(120); // let facing/canInteract publish settle
     }
   }
   const finalState = await readDebug(page);
-  expect(
-    finalState?.canInteract ?? finalState?.inInteractionRange,
-    "player should reach the tutorial NPC and face it"
-  ).toBe(true);
+  const reachedTarget = finalState?.canInteract === true && finalState.interactionTargetId === npcId;
+  const reachedFallbackTutorial = !finalState?.npcs?.length && npcId === 744 && (finalState?.canInteract ?? finalState?.inInteractionRange);
+  expect(reachedTarget || reachedFallbackTutorial, `player should reach NPC ${npcId} and face it`).toBe(true);
 }
 
 /** Holds a key for `ms`, samples the debug state mid-hold, then releases. */
