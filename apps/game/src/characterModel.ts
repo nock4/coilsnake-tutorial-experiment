@@ -12,6 +12,8 @@ export type PartyMemberStats = {
   luck: number;
 };
 
+export type PartyMemberStatBonuses = Partial<PartyMemberStats>;
+
 export type PartyMember = {
   id: number;
   name: string;
@@ -27,6 +29,7 @@ export type PartyMember = {
 
 export type CharacterCombatantOptions = {
   hpRatePerSec?: number;
+  statBonuses?: PartyMemberStatBonuses;
 };
 
 const DEFAULT_HP_RATE_PER_SEC = 36;
@@ -61,6 +64,7 @@ export function buildCombatantFromPartyMember(
   options: CharacterCombatantOptions = {}
 ): Combatant {
   const maxHp = Math.max(1, stat(member.maxHp));
+  const effectiveStats = effectivePartyMemberStats(member, options.statBonuses);
   return {
     name: member.name,
     level: Math.max(1, stat(member.level)),
@@ -68,8 +72,8 @@ export function buildCombatantFromPartyMember(
     maxPp: stat(member.maxPp),
     pp: stat(member.pp),
     hp: createRollingMeter(maxHp, options.hpRatePerSec ?? DEFAULT_HP_RATE_PER_SEC),
-    offense: stat(member.stats.offense),
-    defense: stat(member.stats.defense),
+    offense: effectiveStats.offense,
+    defense: effectiveStats.defense,
     isEnemy: false
   };
 }
@@ -79,6 +83,25 @@ export function buildCombatantFromCharacter(
   options: CharacterCombatantOptions = {}
 ): Combatant {
   return buildCombatantFromPartyMember(buildPartyMember(data), options);
+}
+
+export function effectivePartyMemberStats(
+  member: Pick<PartyMember, "stats">,
+  bonuses: PartyMemberStatBonuses = {}
+): PartyMemberStats {
+  return {
+    offense: addStat(member.stats.offense, bonuses.offense),
+    defense: addStat(member.stats.defense, bonuses.defense),
+    speed: addStat(member.stats.speed, bonuses.speed),
+    guts: addStat(member.stats.guts, bonuses.guts),
+    vitality: addStat(member.stats.vitality, bonuses.vitality),
+    iq: addStat(member.stats.iq, bonuses.iq),
+    luck: addStat(member.stats.luck, bonuses.luck)
+  };
+}
+
+function addStat(base: number, bonus: number | undefined): number {
+  return stat(base) + stat(bonus ?? 0);
 }
 
 function stat(value: number): number {

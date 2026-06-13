@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ItemData } from "@eb/schemas";
 import { PartyState } from "../src/partyState";
 
 describe("PartyState", () => {
@@ -42,4 +43,112 @@ describe("PartyState", () => {
     expect(state.party()).toEqual([1]);
     expect(state.counts()).toMatchObject({ partyCount: 1 });
   });
+
+  it("uses a consumable item to roll HP upward and remove inventory", () => {
+    const state = new PartyState();
+    const item = itemData(10, { action: 0x1e02, argument: 30, consumable: true });
+    state.give(1, item.id);
+
+    const result = state.useItem({
+      ownerChar: 1,
+      targetChar: 1,
+      item,
+      targetVitals: { hp: 20, maxHp: 40, pp: 3, maxPp: 12, hpRatePerSec: 100 }
+    });
+
+    expect(result).toMatchObject({ ok: true, previousValue: 20, nextValue: 40 });
+    expect(state.inventory(1)).toEqual([]);
+    expect(state.vitals(1)?.hp).toMatchObject({ displayed: 20, target: 40, isRolling: true });
+
+    state.tickMeters(1000);
+    expect(state.vitals(1)?.hp).toMatchObject({ displayed: 40, target: 40, isRolling: false });
+  });
+
+  it("uses a consumable item to recover PP and remove inventory", () => {
+    const state = new PartyState();
+    const item = itemData(11, { action: 0x1e06, argument: 5, consumable: true });
+    state.give(1, item.id);
+
+    const result = state.useItem({
+      ownerChar: 1,
+      targetChar: 1,
+      item,
+      targetVitals: { hp: 20, maxHp: 40, pp: 3, maxPp: 7 }
+    });
+
+    expect(result).toMatchObject({ ok: true, previousValue: 3, nextValue: 7 });
+    expect(state.inventory(1)).toEqual([]);
+    expect(state.vitals(1)?.pp).toBe(7);
+  });
+
+  it("rejects non-consumable and unknown consumable item effects without removing inventory", () => {
+    const state = new PartyState();
+    const nonConsumable = itemData(12, { action: 0x1e02, argument: 10, consumable: false });
+    const unknown = itemData(13, { action: 999, argument: 10, consumable: true });
+    state.give(1, nonConsumable.id);
+    state.give(1, unknown.id);
+
+    expect(state.useItem({
+      ownerChar: 1,
+      targetChar: 1,
+      item: nonConsumable,
+      targetVitals: { hp: 10, maxHp: 40, pp: 0, maxPp: 0 }
+    })).toMatchObject({ ok: false, reason: "notConsumable" });
+    expect(state.useItem({
+      ownerChar: 1,
+      targetChar: 1,
+      item: unknown,
+      targetVitals: { hp: 10, maxHp: 40, pp: 0, maxPp: 0 }
+    })).toMatchObject({ ok: false, reason: "unknownEffect" });
+    expect(state.inventory(1)).toEqual([12, 13]);
+  });
+
+  it("sets, replaces, and toggles equipment slots by item type", () => {
+    const state = new PartyState();
+    const firstWeapon = itemData(20, { type: 0x10 });
+    const secondWeapon = itemData(21, { type: 0x10 });
+    const body = itemData(22, { type: 0x14 });
+
+    expect(state.equip(1, firstWeapon)).toMatchObject({ ok: true, slot: "weapon", equipped: true });
+    expect(state.equipped(1)).toEqual({ weapon: 20 });
+
+    expect(state.equip(1, secondWeapon)).toMatchObject({
+      ok: true,
+      slot: "weapon",
+      equipped: true,
+      previousItemId: 20
+    });
+    expect(state.equip(1, body)).toMatchObject({ ok: true, slot: "body", equipped: true });
+    expect(state.equipped(1)).toEqual({ weapon: 21, body: 22 });
+
+    expect(state.equip(1, secondWeapon)).toMatchObject({ ok: true, slot: "weapon", equipped: false });
+    expect(state.equipped(1)).toEqual({ body: 22 });
+  });
+
+  it("rejects non-equipment types for equip", () => {
+    const state = new PartyState();
+
+    expect(state.equip(1, itemData(30, { type: 0x20 }))).toMatchObject({
+      ok: false,
+      reason: "notEquippable"
+    });
+  });
 });
+
+function itemData(id: number, options: {
+  type?: number;
+  action?: number;
+  argument?: number;
+  consumable?: boolean;
+} = {}): ItemData {
+  return {
+    id,
+    name: `[item ${id}]`,
+    type: options.type ?? 0x30,
+    cost: 0,
+    action: options.action ?? 0,
+    argument: options.argument ?? 0,
+    equippable: (options.type ?? 0x30) >= 0x10 && (options.type ?? 0x30) <= 0x1f,
+    miscFlags: options.consumable ? ["item disappears when used"] : []
+  };
+}

@@ -5,7 +5,9 @@ import {
   buildCheckDetailScreens,
   buildCheckScreen,
   buildCheckViewModel,
+  buildEquipActionScreens,
   buildEquipViewModel,
+  buildGoodsActionScreens,
   buildGoodsViewModel,
   buildMenuScreens,
   buildPsiViewModel,
@@ -17,6 +19,7 @@ import {
   menuDebugState,
   moveMenu,
   openMenu,
+  parseMenuAction,
   type MenuScreen
 } from "../src/menuModel";
 
@@ -243,10 +246,36 @@ describe("item and PSI menu view models", () => {
     const check = buildCheckViewModel(input);
 
     expect(goods.member.id).toBe(1);
+    expect(goods.targets.map((target) => target.id)).toEqual([1]);
     expect(goods.entries.map((entry) => entry.itemId)).toEqual([10, 11, 12]);
     expect(equip.entries.map((entry) => entry.itemId)).toEqual([10, 12]);
     expect(psi.entries.map((entry) => entry.psiId)).toEqual([7]);
     expect(check.entries).toHaveLength(3);
+
+    const goodsActionScreens = buildGoodsActionScreens(goods);
+    expect(goodsActionScreens[0]).toMatchObject({
+      id: "goods-item-1-0-10",
+      items: [{ label: "Use", childScreenId: "goods-use-target-1-0-10" }]
+    });
+    expect(parseMenuAction(goodsActionScreens[1].items[0]?.actionId ?? "")).toEqual({
+      kind: "itemUse",
+      ownerChar: 1,
+      inventorySlot: 0,
+      itemId: 10,
+      targetChar: 1
+    });
+
+    const equipActionScreens = buildEquipActionScreens(equip);
+    expect(equipActionScreens[0]).toMatchObject({
+      id: "equip-item-1-0-10",
+      items: [{ label: "Equip" }]
+    });
+    expect(parseMenuAction(equipActionScreens[0].items[0]?.actionId ?? "")).toEqual({
+      kind: "equip",
+      char: 1,
+      inventorySlot: 0,
+      itemId: 10
+    });
 
     const checkScreen = buildCheckScreen(check);
     expect(checkScreen.items.map((item) => item.childScreenId)).toEqual([
@@ -263,14 +292,21 @@ describe("item and PSI menu view models", () => {
     const status = buildStatusViewModel({ partyMembers: [partyMember(1, "MEMBER_A", 5)] });
     const screens = buildMenuScreens(status, {
       partyMembers: [partyMember(1, "MEMBER_A", 5)],
+      partyState: {
+        wallet: 0,
+        party: () => [1],
+        inventory: () => [10, 11, 12]
+      },
       items: syntheticItems(),
       psi: syntheticPsi()
     });
 
     const byId = new Map(screens.map((screen) => [screen.id, screen]));
     expect(byId.get("goods")?.items[0]?.id).not.toBe("goods-stub");
+    expect(byId.get("goods")?.items[0]?.childScreenId).toBe("goods-item-1-0-10");
     expect(byId.get("psi")?.items[0]?.id).not.toBe("psi-stub");
     expect(byId.get("equip")?.items[0]?.id).not.toBe("equip-stub");
+    expect(byId.get("equip")?.items[0]?.childScreenId).toBe("equip-item-1-0-10");
     expect(byId.get("check")?.items[0]?.id).not.toBe("check-stub");
   });
 });

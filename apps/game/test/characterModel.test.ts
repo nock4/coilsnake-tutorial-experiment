@@ -3,7 +3,8 @@ import type { CharacterData } from "@eb/schemas";
 import {
   buildCombatantFromCharacter,
   buildCombatantFromPartyMember,
-  buildPartyMember
+  buildPartyMember,
+  effectivePartyMemberStats
 } from "../src/characterModel";
 
 const character: CharacterData = {
@@ -64,6 +65,31 @@ describe("character model", () => {
       isEnemy: false
     });
     expect(combatant.hp).toMatchObject({ displayed: 88, target: 88, ratePerSec: 3 });
+  });
+
+  it("computes effective stats with optional equipment bonuses", () => {
+    const member = buildPartyMember(character);
+
+    expect(effectivePartyMemberStats(member)).toMatchObject({
+      offense: 14,
+      defense: 9
+    });
+    expect(effectivePartyMemberStats(member, { offense: 5, defense: 3 })).toMatchObject({
+      offense: 19,
+      defense: 12
+    });
+  });
+
+  it("uses effective stats when building a battle combatant", () => {
+    const member = buildPartyMember(character);
+    const combatant = buildCombatantFromPartyMember(member, {
+      statBonuses: { offense: 5, defense: 3 }
+    });
+
+    expect(combatant).toMatchObject({
+      offense: 19,
+      defense: 12
+    });
   });
 
   it("builds a battle combatant directly from generated character data", () => {

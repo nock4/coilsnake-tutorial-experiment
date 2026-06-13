@@ -88,6 +88,18 @@ describe("battle player model", () => {
     expect(battle.player.hp).toMatchObject({ displayed: 72, target: 72, ratePerSec: 5 });
   });
 
+  it("applies optional effective stat bonuses to the generated player combatant", () => {
+    const battle = createBattleState(opponent, {
+      character: partyCharacter,
+      statBonuses: { offense: 4, defense: 2 }
+    });
+
+    expect(battle.player).toMatchObject({
+      offense: 25,
+      defense: 10
+    });
+  });
+
   it("keeps the neutral player fallback when generated character data is absent", () => {
     const battle = createBattleState(opponent);
 

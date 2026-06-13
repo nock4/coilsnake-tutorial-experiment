@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { isNpcVisibleForEventFlags, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
+import { isNpcVisibleForEventFlags, type ItemData, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
 import { resolveDoorTrigger, type DoorTriggerState } from "./doorTriggers";
 import {
   buildDialogueForReference,
@@ -61,12 +61,14 @@ import {
   menuRenderStack,
   moveMenu,
   openMenu,
+  parseMenuAction,
   MAIN_MENU_ID,
   type MenuDebugState,
   type MenuRenderScreen,
   type MenuScreen,
   type MenuState
 } from "./menuModel";
+import { buildPartyMember, type PartyMember } from "./characterModel";
 
 type ChunkLayer = "background" | "foreground";
 type WorldChunk = WorldChunked["chunks"][number];
@@ -231,6 +233,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (!this.player) {
       return;
     }
+    this.partyState.tickMeters(delta);
     if (this.menuState.open) {
       if (!this.playerState.inputLocked) {
         lockPlayer(this.playerState, this.playerFrames);
@@ -793,6 +796,70 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.refreshMenuScreens();
     const result = confirmMenu(this.menuState, (id) => this.menuScreens.get(id));
     this.menuState = result.state;
+    if (result.actionId) {
+      this.handleMenuAction(result.actionId);
+      return;
+    }
+    this.updatePrompt();
+    this.publish();
+  }
+
+  private handleMenuAction(actionId: string): void {
+    const action = parseMenuAction(actionId);
+    if (!action) {
+      this.showMenuResult("Nothing happened.");
+      return;
+    }
+    if (action.kind === "itemUse") {
+      this.handleItemUseAction(action);
+      return;
+    }
+    this.handleEquipAction(action);
+  }
+
+  private handleItemUseAction(action: Extract<ReturnType<typeof parseMenuAction>, { kind: "itemUse" }>): void {
+    const item = this.itemById(action.itemId);
+    const target = this.partyMemberById(action.targetChar);
+    if (!item || this.partyState.inventory(action.ownerChar)[action.inventorySlot] !== action.itemId) {
+      this.showMenuResult("You can't use that.");
+      return;
+    }
+    const result = this.partyState.useItem({
+      ownerChar: action.ownerChar,
+      targetChar: action.targetChar,
+      item,
+      targetVitals: vitalsForPartyMember(target)
+    });
+    this.showMenuResult(result.ok ? "Used." : "You can't use that.");
+  }
+
+  private handleEquipAction(action: Extract<ReturnType<typeof parseMenuAction>, { kind: "equip" }>): void {
+    const item = this.itemById(action.itemId);
+    if (!item || this.partyState.inventory(action.char)[action.inventorySlot] !== action.itemId) {
+      this.showMenuResult("You can't equip that.");
+      return;
+    }
+    const result = this.partyState.equip(action.char, item);
+    this.showMenuResult(result.ok ? (result.equipped ? "Equipped." : "Unequipped.") : "You can't equip that.");
+  }
+
+  private itemById(itemId: number): ItemData | undefined {
+    return this.data_.items?.items.find((item) => item.id === itemId);
+  }
+
+  private partyMemberById(charId: number): PartyMember | undefined {
+    return this.data_.characters?.characters.map(buildPartyMember).find((member) => member.id === charId);
+  }
+
+  private showMenuResult(message: string): void {
+    this.menuState = closedMenu();
+    this.refreshMenuScreens();
+    this.dialogue.start([{
+      text: message,
+      ended: false,
+      unknownCommands: [],
+      segments: [{ kind: "text", value: message }]
+    }]);
     this.updatePrompt();
     this.publish();
   }
@@ -1060,4 +1127,18 @@ export class ChunkedWorldScene extends Phaser.Scene {
     };
     publishDebug(state);
   }
+}
+
+function vitalsForPartyMember(member: PartyMember | undefined): {
+  hp: number;
+  maxHp: number;
+  pp: number;
+  maxPp: number;
+} {
+  return {
+    hp: member?.hp ?? 40,
+    maxHp: member?.maxHp ?? 40,
+    pp: member?.pp ?? 0,
+    maxPp: member?.maxPp ?? 0
+  };
 }

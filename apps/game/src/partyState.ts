@@ -1,9 +1,86 @@
+import type { ItemData } from "@eb/schemas";
+import {
+  createRollingMeter,
+  setTarget,
+  tick,
+  type RollingMeterState
+} from "./rollingMeter";
+
 export type PartyStateCounts = {
   wallet: number;
   inventoryChars: number;
   inventoryItems: number;
   partyCount: number;
 };
+
+export type EquipmentSlot = "weapon" | "body" | "arms" | "other";
+
+export type EquippedSlots = Partial<Record<EquipmentSlot, number>>;
+
+export type PartyVitalsInput = {
+  hp: number;
+  maxHp: number;
+  pp: number;
+  maxPp: number;
+  hpRatePerSec?: number;
+};
+
+export type PartyVitals = {
+  hp: RollingMeterState;
+  maxHp: number;
+  pp: number;
+  maxPp: number;
+};
+
+export type ItemUseEffect =
+  | { kind: "healHp"; amount: number }
+  | { kind: "healHpPercent"; percent: number }
+  | { kind: "recoverPp"; amount: number }
+  | { kind: "recoverPpPercent"; percent: number };
+
+export type ItemUseResult =
+  | {
+      ok: true;
+      itemId: number;
+      ownerChar: number;
+      targetChar: number;
+      effect: ItemUseEffect;
+      previousValue: number;
+      nextValue: number;
+    }
+  | {
+      ok: false;
+      itemId: number;
+      ownerChar: number;
+      targetChar: number;
+      reason: "missingItem" | "notConsumable" | "unknownEffect";
+    };
+
+export type EquipResult =
+  | {
+      ok: true;
+      char: number;
+      itemId: number;
+      slot: EquipmentSlot;
+      equipped: boolean;
+      previousItemId?: number;
+    }
+  | {
+      ok: false;
+      char: number;
+      itemId: number;
+      reason: "notEquippable";
+    };
+
+const HP_RATE_PER_SEC = 36;
+const ITEM_DISAPPEARS_FLAG = "item disappears when used";
+
+const FIELD_STAT_ACTIONS = {
+  healHpPercent: new Set([0x00, 0x1e00]),
+  healHp: new Set([0x02, 0x1e02]),
+  recoverPpPercent: new Set([0x04, 0x1e04]),
+  recoverPp: new Set([0x06, 0x1e06])
+} as const;
 
 /**
  * Minimal session-only party/inventory state for event effects.
@@ -13,6 +90,8 @@ export class PartyState {
   private walletValue = 0;
   private readonly inventoryByChar = new Map<number, number[]>();
   private readonly partyIds = new Set<number>();
+  private readonly equippedByChar = new Map<number, EquippedSlots>();
+  private readonly vitalsByChar = new Map<number, PartyVitals>();
 
   get wallet(): number {
     return this.walletValue;
@@ -20,6 +99,15 @@ export class PartyState {
 
   inventory(char: number): number[] {
     return [...(this.inventoryByChar.get(normalizeId(char)) ?? [])];
+  }
+
+  equipped(char: number): EquippedSlots {
+    return { ...(this.equippedByChar.get(normalizeId(char)) ?? {}) };
+  }
+
+  vitals(char: number): PartyVitals | undefined {
+    const vitals = this.vitalsByChar.get(normalizeId(char));
+    return vitals ? cloneVitals(vitals) : undefined;
   }
 
   party(): number[] {
@@ -46,7 +134,82 @@ export class PartyState {
     } else {
       this.inventoryByChar.set(normalizedChar, items);
     }
+    if (!items.includes(normalizeId(item))) {
+      this.clearEquippedItem(normalizedChar, normalizeId(item));
+    }
     return true;
+  }
+
+  useItem(options: {
+    ownerChar: number;
+    targetChar: number;
+    item: Pick<ItemData, "id" | "action" | "argument" | "miscFlags">;
+    targetVitals: PartyVitalsInput;
+  }): ItemUseResult {
+    const ownerChar = normalizeId(options.ownerChar);
+    const targetChar = normalizeId(options.targetChar);
+    const itemId = normalizeId(options.item.id);
+    if (!this.inventory(ownerChar).includes(itemId)) {
+      return { ok: false, itemId, ownerChar, targetChar, reason: "missingItem" };
+    }
+    if (!isConsumableItem(options.item)) {
+      return { ok: false, itemId, ownerChar, targetChar, reason: "notConsumable" };
+    }
+    const effect = decodeItemUseEffect(options.item);
+    if (!effect) {
+      return { ok: false, itemId, ownerChar, targetChar, reason: "unknownEffect" };
+    }
+
+    const vitals = this.ensureVitals(targetChar, options.targetVitals);
+    const applied = applyUseEffect(vitals, effect);
+    this.vitalsByChar.set(targetChar, applied.vitals);
+    this.take(ownerChar, itemId);
+    return {
+      ok: true,
+      itemId,
+      ownerChar,
+      targetChar,
+      effect,
+      previousValue: applied.previousValue,
+      nextValue: applied.nextValue
+    };
+  }
+
+  equip(char: number, item: Pick<ItemData, "id" | "type">): EquipResult {
+    // The current item schema exposes equipment slot type, but not stat bonus fields.
+    // Keep slot state here; stat math can consume bonuses when a data source provides them.
+    const normalizedChar = normalizeId(char);
+    const itemId = normalizeId(item.id);
+    const slot = equipmentSlotForItemType(item.type);
+    if (!slot) {
+      return { ok: false, char: normalizedChar, itemId, reason: "notEquippable" };
+    }
+    const equipped = { ...(this.equippedByChar.get(normalizedChar) ?? {}) };
+    const previousItemId = equipped[slot];
+    if (previousItemId === itemId) {
+      delete equipped[slot];
+      this.setEquippedSlots(normalizedChar, equipped);
+      return { ok: true, char: normalizedChar, itemId, slot, equipped: false, previousItemId };
+    }
+    equipped[slot] = itemId;
+    this.setEquippedSlots(normalizedChar, equipped);
+    return {
+      ok: true,
+      char: normalizedChar,
+      itemId,
+      slot,
+      equipped: true,
+      ...(previousItemId !== undefined ? { previousItemId } : {})
+    };
+  }
+
+  tickMeters(dtMs: number): void {
+    for (const [char, vitals] of this.vitalsByChar.entries()) {
+      this.vitalsByChar.set(char, {
+        ...vitals,
+        hp: tick(vitals.hp, dtMs)
+      });
+    }
   }
 
   money(delta: number): void {
@@ -79,6 +242,144 @@ export class PartyState {
       partyCount: this.partyIds.size
     };
   }
+
+  private ensureVitals(char: number, base: PartyVitalsInput): PartyVitals {
+    const existing = this.vitalsByChar.get(char);
+    if (existing) {
+      return existing;
+    }
+    const maxHp = positiveStat(base.maxHp);
+    const maxPp = stat(base.maxPp);
+    return {
+      hp: createRollingMeter(Math.min(maxHp, stat(base.hp)), base.hpRatePerSec ?? HP_RATE_PER_SEC),
+      maxHp,
+      pp: Math.min(maxPp, stat(base.pp)),
+      maxPp
+    };
+  }
+
+  private clearEquippedItem(char: number, itemId: number): void {
+    const equipped = this.equippedByChar.get(char);
+    if (!equipped) {
+      return;
+    }
+    const next = { ...equipped };
+    for (const slot of Object.keys(next) as EquipmentSlot[]) {
+      if (next[slot] === itemId) {
+        delete next[slot];
+      }
+    }
+    this.setEquippedSlots(char, next);
+  }
+
+  private setEquippedSlots(char: number, equipped: EquippedSlots): void {
+    if (Object.keys(equipped).length === 0) {
+      this.equippedByChar.delete(char);
+      return;
+    }
+    this.equippedByChar.set(char, equipped);
+  }
+}
+
+export function decodeItemUseEffect(
+  item: Pick<ItemData, "action" | "argument" | "miscFlags">
+): ItemUseEffect | undefined {
+  if (!isConsumableItem(item)) {
+    return undefined;
+  }
+  const action = stat(item.action);
+  const argument = stat(item.argument);
+  if (argument <= 0) {
+    return undefined;
+  }
+  if (FIELD_STAT_ACTIONS.healHp.has(action)) {
+    return { kind: "healHp", amount: argument };
+  }
+  if (FIELD_STAT_ACTIONS.healHpPercent.has(action)) {
+    return { kind: "healHpPercent", percent: argument };
+  }
+  if (FIELD_STAT_ACTIONS.recoverPp.has(action)) {
+    return { kind: "recoverPp", amount: argument };
+  }
+  if (FIELD_STAT_ACTIONS.recoverPpPercent.has(action)) {
+    return { kind: "recoverPpPercent", percent: argument };
+  }
+  return undefined;
+}
+
+export function isConsumableItem(item: Pick<ItemData, "miscFlags">): boolean {
+  return item.miscFlags.some((flag) => flag.trim().toLowerCase() === ITEM_DISAPPEARS_FLAG);
+}
+
+export function equipmentSlotForItemType(type: number): EquipmentSlot | undefined {
+  const normalizedType = stat(type);
+  if (normalizedType >= 0x10 && normalizedType <= 0x13) {
+    return "weapon";
+  }
+  if (normalizedType >= 0x14 && normalizedType <= 0x17) {
+    return "body";
+  }
+  if (normalizedType >= 0x18 && normalizedType <= 0x1b) {
+    return "arms";
+  }
+  if (normalizedType >= 0x1c && normalizedType <= 0x1f) {
+    return "other";
+  }
+  return undefined;
+}
+
+function applyUseEffect(vitals: PartyVitals, effect: ItemUseEffect): {
+  vitals: PartyVitals;
+  previousValue: number;
+  nextValue: number;
+} {
+  switch (effect.kind) {
+    case "healHp": {
+      const previousValue = vitals.hp.target;
+      const nextValue = Math.min(vitals.maxHp, previousValue + effect.amount);
+      return {
+        vitals: { ...vitals, hp: setTarget(vitals.hp, nextValue) },
+        previousValue,
+        nextValue
+      };
+    }
+    case "healHpPercent": {
+      const previousValue = vitals.hp.target;
+      const amount = Math.floor((vitals.maxHp * Math.min(100, effect.percent)) / 100);
+      const nextValue = Math.min(vitals.maxHp, previousValue + amount);
+      return {
+        vitals: { ...vitals, hp: setTarget(vitals.hp, nextValue) },
+        previousValue,
+        nextValue
+      };
+    }
+    case "recoverPp": {
+      const previousValue = vitals.pp;
+      const nextValue = Math.min(vitals.maxPp, previousValue + effect.amount);
+      return {
+        vitals: { ...vitals, pp: nextValue },
+        previousValue,
+        nextValue
+      };
+    }
+    case "recoverPpPercent": {
+      const previousValue = vitals.pp;
+      const amount = Math.floor((vitals.maxPp * Math.min(100, effect.percent)) / 100);
+      const nextValue = Math.min(vitals.maxPp, previousValue + amount);
+      return {
+        vitals: { ...vitals, pp: nextValue },
+        previousValue,
+        nextValue
+      };
+    }
+  }
+}
+
+function cloneVitals(vitals: PartyVitals): PartyVitals {
+  return {
+    ...vitals,
+    hp: { ...vitals.hp }
+  };
 }
 
 function normalizeId(value: number): number {
@@ -86,4 +387,15 @@ function normalizeId(value: number): number {
     throw new Error(`Invalid session state id: ${value}`);
   }
   return value;
+}
+
+function positiveStat(value: number): number {
+  return Math.max(1, stat(value));
+}
+
+function stat(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
 }

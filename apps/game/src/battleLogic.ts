@@ -9,7 +9,8 @@ import {
 import {
   buildCombatantFromPartyMember,
   buildPartyMember,
-  type PartyMember
+  type PartyMember,
+  type PartyMemberStatBonuses
 } from "./characterModel";
 
 export type Rng = () => number;
@@ -37,6 +38,7 @@ export type PlayerCombatantOptions = Partial<Pick<Combatant, "name" | "level" | 
   hpRatePerSec?: number;
   character?: CharacterData;
   partyMember?: PartyMember;
+  statBonuses?: PartyMemberStatBonuses;
 };
 
 export type EnemyCombatantOptions = {
@@ -67,7 +69,10 @@ const ENEMY_HP_RATE_PER_SEC = 42;
 export function buildPlayerCombatant(options: PlayerCombatantOptions = {}): Combatant {
   const member = options.partyMember ?? (options.character ? buildPartyMember(options.character) : undefined);
   if (member) {
-    return buildCombatantFromPartyMember(member, { hpRatePerSec: options.hpRatePerSec });
+    return buildCombatantFromPartyMember(member, {
+      hpRatePerSec: options.hpRatePerSec,
+      statBonuses: options.statBonuses
+    });
   }
 
   const maxHp = stat(options.maxHp ?? PLAYER_DEFAULTS.maxHp);
@@ -78,8 +83,8 @@ export function buildPlayerCombatant(options: PlayerCombatantOptions = {}): Comb
     maxPp: PLAYER_DEFAULTS.maxPp,
     pp: PLAYER_DEFAULTS.pp,
     hp: createRollingMeter(maxHp, options.hpRatePerSec ?? PLAYER_DEFAULTS.hpRatePerSec),
-    offense: stat(options.offense ?? PLAYER_DEFAULTS.offense),
-    defense: stat(options.defense ?? PLAYER_DEFAULTS.defense),
+    offense: stat(options.offense ?? PLAYER_DEFAULTS.offense) + stat(options.statBonuses?.offense ?? 0),
+    defense: stat(options.defense ?? PLAYER_DEFAULTS.defense) + stat(options.statBonuses?.defense ?? 0),
     isEnemy: false
   };
 }
