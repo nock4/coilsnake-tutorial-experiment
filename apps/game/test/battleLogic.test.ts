@@ -9,9 +9,11 @@ import {
   outcome,
   PLAYER_DEFAULTS,
   psiPpCost,
+  resolveEnemyActionTurn,
   resolveItemTurn,
   resolvePsiTurn,
   resolveTurn,
+  selectEnemyAction,
   tickBattleMeters,
   turnOrder,
   withCombatant,
@@ -148,6 +150,94 @@ describe("battle turn resolution", () => {
 
     expect(result.defender).toEqual(actor("party", 1));
     expect(result.state.party[1].hp.target).toBeLessThan(result.state.party[1].hp.displayed);
+  });
+
+  it("selects enemy actions by deterministic source-order round robin", () => {
+    const selected = selectEnemyAction(actionSet(
+      enemyAction(10, 1, 1),
+      enemyAction(11, 5, 1),
+      enemyAction(12, 3, 4),
+      enemyAction(13, 0, 0)
+    ), 5);
+
+    expect(selected).toMatchObject({
+      actionIndex: 1,
+      actionId: 11,
+      actionType: 5,
+      target: 1
+    });
+  });
+
+  it("applies a physical enemy action to a party member", () => {
+    const battle = createBattleState(enemy(10, "OPPONENT_D", {
+      offense: 8,
+      actions: actionSet(enemyAction(100, 1, 1))
+    }), {
+      characters: characters([partyCharacterA, partyCharacterB])
+    });
+
+    const result = resolveEnemyActionTurn(battle, actor("enemy", 0), () => 0.5);
+
+    expect(result.skipped).toBe(false);
+    expect(result.effectKind).toBe("physical");
+    expect(result.action).toMatchObject({ actionIndex: 0, actionId: 100, actionType: 1, target: 1 });
+    expect(result.targets).toEqual([actor("party", 0)]);
+    expect(result.amount).toBe(4);
+    expect(result.state.party[0].hp.target).toBe(68);
+    expect(result.state.party[1].hp.target).toBe(48);
+    expect(result.state.enemies[0].nextActionIndex).toBe(1);
+  });
+
+  it("applies an all-target enemy action to all living party members", () => {
+    const battle = createBattleState(enemy(11, "OPPONENT_E", {
+      offense: 20,
+      actions: actionSet(enemyAction(101, 2, 4))
+    }), {
+      characters: characters([partyCharacterA, partyCharacterB])
+    });
+
+    const result = resolveEnemyActionTurn(battle, actor("enemy", 0), () => 0.5);
+
+    expect(result.effectKind).toBe("physical");
+    expect(result.targets).toEqual([actor("party", 0), actor("party", 1)]);
+    expect(result.amount).toBe(33);
+    expect(result.state.party[0].hp.target).toBe(56);
+    expect(result.state.party[1].hp.target).toBe(31);
+  });
+
+  it("degrades a status-class enemy action to small damage with an intended status stub", () => {
+    const battle = createBattleState(enemy(12, "OPPONENT_F", {
+      offense: 20,
+      actions: actionSet(enemyAction(102, 5, 1))
+    }), {
+      characters: characters([partyCharacterA, partyCharacterB])
+    });
+
+    const result = resolveEnemyActionTurn(battle, actor("enemy", 0), () => 0.5);
+
+    expect(result.effectKind).toBe("statusStub");
+    expect(result.intendedStatus).toBe("generic-ailment");
+    expect(result.targets).toEqual([actor("party", 0)]);
+    expect(result.amount).toBe(5);
+    expect(result.state.party[0].hp.target).toBe(67);
+    expect(result.state.party[1].hp.target).toBe(48);
+  });
+
+  it("keeps unknown enemy action types as safe no-ops", () => {
+    const battle = createBattleState(enemy(13, "OPPONENT_G", {
+      offense: 20,
+      actions: actionSet(enemyAction(103, 99, 1), enemyAction(104, 1, 1))
+    }), {
+      characters: characters([partyCharacterA])
+    });
+
+    const result = resolveEnemyActionTurn(battle, actor("enemy", 0), () => 0.5);
+
+    expect(result.effectKind).toBe("unknown");
+    expect(result.amount).toBe(0);
+    expect(result.targets).toEqual([]);
+    expect(result.state.party[0].hp.target).toBe(72);
+    expect(result.state.enemies[0].nextActionIndex).toBe(1);
   });
 });
 
@@ -336,7 +426,7 @@ function actor(side: "party" | "enemy", index: number): BattleActor {
 function enemy(
   id: number,
   name: string,
-  stats: Partial<Pick<BattleEnemy, "hp" | "defense" | "offense" | "level">> = {}
+  stats: Partial<Pick<BattleEnemy, "hp" | "defense" | "offense" | "level" | "actions">> = {}
 ): BattleEnemy {
   return {
     id,
@@ -349,15 +439,18 @@ function enemy(
     experience: 0,
     money: 0,
     bossFlag: false,
-    actions: [
-      { id: 0, arg: 0 },
-      { id: 0, arg: 0 },
-      { id: 0, arg: 0 },
-      { id: 0, arg: 0 }
-    ],
+    actions: stats.actions ?? actionSet(),
     itemDropped: null,
     itemRarity: null
   };
+}
+
+function enemyAction(id: number, actionType: number, target: number): BattleEnemy["actions"][number] {
+  return { id, arg: 0, actionId: id, actionType, target };
+}
+
+function actionSet(...actions: BattleEnemy["actions"][number][]): BattleEnemy["actions"] {
+  return [0, 1, 2, 3].map((index) => actions[index] ?? enemyAction(0, 0, 0)) as BattleEnemy["actions"];
 }
 
 function character(

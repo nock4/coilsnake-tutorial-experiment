@@ -52,6 +52,8 @@ export type Combatant = {
   itemDropped: number | null;
   itemRarity: BattleEnemy["itemRarity"];
   isEnemy: boolean;
+  actions?: BattleEnemy["actions"];
+  nextActionIndex?: number;
 };
 
 export type BattleState = {
@@ -87,6 +89,28 @@ export type TurnResolution = {
   damage: number;
   outcome: BattleOutcome;
   skipped: boolean;
+};
+
+export type EnemyActionEffectKind = "physical" | "psi" | "statusStub" | "assist" | "none" | "unknown";
+
+export type EnemyActionSelection = {
+  action: BattleEnemy["actions"][number];
+  actionIndex: number;
+  actionId: number;
+  actionType?: number;
+  target?: number;
+};
+
+export type EnemyActionResolution = {
+  state: BattleState;
+  actor: BattleActor;
+  targets: BattleActor[];
+  amount: number;
+  outcome: BattleOutcome;
+  skipped: boolean;
+  action: EnemyActionSelection | null;
+  effectKind: EnemyActionEffectKind;
+  intendedStatus?: "generic-ailment";
 };
 
 export type BattleActionBlockReason =
@@ -175,6 +199,13 @@ const STRENGTH_PP_COST: Record<string, number> = {
   sigma: 18,
   omega: 24
 };
+const NOOP_ENEMY_ACTION: BattleEnemy["actions"][number] = {
+  id: 0,
+  arg: 0,
+  actionId: 0,
+  actionType: 0,
+  target: 0
+};
 
 export function buildPlayerCombatant(options: PlayerCombatantOptions = {}): Combatant {
   const member = options.partyMember ?? (options.character ? buildPartyMember(options.character) : undefined);
@@ -245,7 +276,9 @@ export function buildEnemyCombatant(enemy: BattleEnemy, options: EnemyCombatantO
     money: stat(enemy.money),
     itemDropped: enemy.itemDropped === null ? null : stat(enemy.itemDropped),
     itemRarity: enemy.itemRarity,
-    isEnemy: true
+    isEnemy: true,
+    actions: enemy.actions.map((action) => ({ ...action })),
+    nextActionIndex: 0
   };
 }
 
@@ -343,6 +376,87 @@ export function resolveTurn(
     damage: amount,
     outcome: outcome(nextState),
     skipped: false
+  };
+}
+
+/**
+ * Enemy action selection is deterministic round-robin over the configured
+ * Action 1-4 slots. Duplicate slots stay duplicated, matching the source
+ * table order without inferring hidden ROM weighting.
+ */
+export function selectEnemyAction(
+  actions: BattleEnemy["actions"] | undefined,
+  cursor: number
+): EnemyActionSelection {
+  const usableActions = actions && actions.length > 0 ? actions : [NOOP_ENEMY_ACTION];
+  const actionIndex = modulo(stat(cursor), usableActions.length);
+  const action = usableActions[actionIndex] ?? NOOP_ENEMY_ACTION;
+  return {
+    action,
+    actionIndex,
+    actionId: stat(action.actionId ?? action.id),
+    ...(action.actionType !== undefined ? { actionType: stat(action.actionType) } : {}),
+    ...(action.target !== undefined ? { target: stat(action.target) } : {})
+  };
+}
+
+export function resolveEnemyActionTurn(
+  state: BattleState,
+  actorInput: BattleActor | "enemy",
+  rng: Rng
+): EnemyActionResolution {
+  const actor = normalizeActor(actorInput);
+  const currentOutcome = outcome(state);
+  if (currentOutcome !== "ongoing" || actor.side !== "enemy") {
+    return skippedEnemyAction(state, actor, currentOutcome, null);
+  }
+
+  const attacker = combatantFor(state, actor);
+  if (!attacker || !isCombatantAlive(attacker)) {
+    return skippedEnemyAction(state, actor, currentOutcome, null);
+  }
+
+  const selection = selectEnemyAction(attacker.actions, attacker.nextActionIndex ?? 0);
+  let nextState = withCombatant(state, actor, {
+    ...attacker,
+    nextActionIndex: nextEnemyActionIndex(attacker.actions, selection.actionIndex)
+  });
+  const targets = targetActorsForEnemyAction(nextState, selection.target, rng);
+  const effectKind = enemyActionEffectKind(selection.actionType);
+  if (targets.length === 0 || effectKind === "none" || effectKind === "assist" || effectKind === "unknown") {
+    return {
+      state: nextState,
+      actor,
+      targets: [],
+      amount: 0,
+      outcome: outcome(nextState),
+      skipped: false,
+      action: selection,
+      effectKind
+    };
+  }
+
+  let totalAmount = 0;
+  for (const target of targets) {
+    const targetCombatant = combatantFor(nextState, target);
+    if (!targetCombatant || !isCombatantAlive(targetCombatant)) {
+      continue;
+    }
+    const amount = enemyActionDamageAmount(effectKind, attacker, targetCombatant, rng);
+    totalAmount += amount;
+    nextState = withCombatant(nextState, target, applyDamage(targetCombatant, amount));
+  }
+
+  return {
+    state: nextState,
+    actor,
+    targets,
+    amount: totalAmount,
+    outcome: outcome(nextState),
+    skipped: false,
+    action: selection,
+    effectKind,
+    ...(effectKind === "statusStub" ? { intendedStatus: "generic-ailment" as const } : {})
   };
 }
 
@@ -675,8 +789,74 @@ function targetForActor(state: BattleState, actor: BattleActor, targetIndex: num
     return livingTarget(state.enemies, "enemy", targetIndex);
   }
 
-  // Enemy AI is intentionally simple: each enemy attacks the first living party member.
+  // Legacy fallback for direct resolveTurn callers; BattleScene uses
+  // resolveEnemyActionTurn for table-driven enemy AI.
   return livingTarget(state.party, "party");
+}
+
+function nextEnemyActionIndex(actions: BattleEnemy["actions"] | undefined, currentActionIndex: number): number {
+  const length = actions && actions.length > 0 ? actions.length : 1;
+  return modulo(currentActionIndex + 1, length);
+}
+
+function targetActorsForEnemyAction(state: BattleState, target: number | undefined, rng: Rng): BattleActor[] {
+  const living = state.party.flatMap((combatant, index) =>
+    isCombatantAlive(combatant) ? [{ side: "party" as const, index }] : []
+  );
+  if (living.length === 0) {
+    return [];
+  }
+
+  switch (target) {
+    case 1:
+      return [living[0]];
+    case 2: {
+      const index = Math.min(living.length - 1, Math.floor(normalizedRoll(rng()) * living.length));
+      return [living[index]];
+    }
+    case 3:
+    case 4:
+      return living;
+    default:
+      return [];
+  }
+}
+
+function enemyActionEffectKind(actionType: number | undefined): EnemyActionEffectKind {
+  switch (actionType) {
+    case 0:
+      return "none";
+    case 1:
+    case 2:
+      return "physical";
+    case 3:
+      return "psi";
+    case 4:
+      return "assist";
+    case 5:
+      return "statusStub";
+    default:
+      return "unknown";
+  }
+}
+
+function enemyActionDamageAmount(
+  effectKind: EnemyActionEffectKind,
+  attacker: Combatant,
+  defender: Combatant,
+  rng: Rng
+): number {
+  const base = damage(attacker, defender, rng);
+  if (effectKind === "psi") {
+    return Math.max(1, Math.floor(base * 0.85));
+  }
+  if (effectKind === "statusStub") {
+    // Code Address owns exact status/magnitude. Until that ROM routine is
+    // decoded, status-like actions are represented as small offense damage
+    // plus an intendedStatus marker in the pure result.
+    return Math.max(1, Math.floor(base * 0.35));
+  }
+  return base;
 }
 
 function livingTarget(combatants: Combatant[], side: BattleSide, requestedIndex?: number): BattleActor | null {
@@ -725,6 +905,24 @@ function blockedAction(
     outcome: currentOutcome,
     skipped: true,
     blockedReason
+  };
+}
+
+function skippedEnemyAction(
+  state: BattleState,
+  actor: BattleActor,
+  currentOutcome: BattleOutcome,
+  action: EnemyActionSelection | null
+): EnemyActionResolution {
+  return {
+    state,
+    actor,
+    targets: [],
+    amount: 0,
+    outcome: currentOutcome,
+    skipped: true,
+    action,
+    effectKind: "unknown"
   };
 }
 
@@ -860,6 +1058,7 @@ function cloneCombatant(combatant: Combatant): Combatant {
   return {
     ...combatant,
     inventory: [...combatant.inventory],
+    ...(combatant.actions ? { actions: combatant.actions.map((action) => ({ ...action })) } : {}),
     hp: { ...combatant.hp },
     stats: { ...combatant.stats },
     ...(combatant.growth ? { growth: { ...combatant.growth } } : {}),
@@ -901,6 +1100,13 @@ function normalizedRoll(value: number): number {
     return 0.5;
   }
   return Math.min(1, Math.max(0, value));
+}
+
+function modulo(value: number, length: number): number {
+  if (length <= 0) {
+    return 0;
+  }
+  return ((value % length) + length) % length;
 }
 
 function stat(value: number): number {

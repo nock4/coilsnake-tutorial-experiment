@@ -49,6 +49,12 @@ type EnemyGroupRecord = {
   enemies: EnemyGroupEntry[];
 };
 
+type BattleActionRecord = {
+  id: number;
+  actionType: number;
+  target: number;
+};
+
 type MapEnemySubgroupEntry = {
   group: number;
   probability: number;
@@ -77,16 +83,37 @@ type Candidate = {
 
 type BattleSourceTables = {
   enemyConfig: ReturnType<typeof parseIntKeyedYaml>;
+  battleActions: Map<number, BattleActionRecord>;
   enemyGroups: Map<number, EnemyGroupRecord>;
   mapEnemyGroups: Map<number, MapEnemyGroupRecord>;
   onettSectors: Set<number>;
   placements: Array<{ cell: number; mapEnemyGroup: number; x: number; y: number }>;
 };
 
+// CoilSnake-master/coilsnake/assets/structures/eb.yml BATTLE_ACTION_TABLE.
+// These are generic enum labels from table metadata, not action names/text.
+const BATTLE_TARGET_VALUES = new Map([
+  ["none", 0],
+  ["one", 1],
+  ["random", 2],
+  ["row", 3],
+  ["all", 4]
+]);
+
+const BATTLE_ACTION_TYPE_VALUES = new Map([
+  ["nothing", 0],
+  ["physical (affected by shields and defending)", 1],
+  ["physical (unaffected by shields and defending)", 2],
+  ["psi", 3],
+  ["item", 4],
+  ["other", 5]
+]);
+
 export async function buildBattleData(options: BattleBuildOptions): Promise<BattleData> {
   assertBattleInputs(options.projectAbs);
   const tables: BattleSourceTables = {
     enemyConfig: parseIntKeyedYaml(await readFile(path.join(options.projectAbs, "enemy_configuration_table.yml"), "utf8")),
+    battleActions: await readBattleActions(path.join(options.projectAbs, "battle_action_table.yml")),
     enemyGroups: await readEnemyGroups(path.join(options.projectAbs, "enemy_groups.yml")),
     mapEnemyGroups: await readMapEnemyGroups(path.join(options.projectAbs, "map_enemy_groups.yml")),
     onettSectors: await readTownMapSectors(path.join(options.projectAbs, "map_sectors.yml"), TOWN_MAP),
@@ -98,7 +125,9 @@ export async function buildBattleData(options: BattleBuildOptions): Promise<Batt
   const battleGroupRecords = selected.battleGroupIds.map((id) => requireMapEntry(tables.enemyGroups, id, "enemy_groups.yml"));
   const enemyIds = uniqueSorted(battleGroupRecords.flatMap((group) => positiveEnemyIds(group))).slice(0, MAX_ENEMIES);
 
-  const enemies = enemyIds.map((id) => enemyToBattleEnemy(id, requireMapEntry(tables.enemyConfig, id, "enemy_configuration_table.yml")));
+  const enemies = enemyIds.map((id) =>
+    enemyToBattleEnemy(id, requireMapEntry(tables.enemyConfig, id, "enemy_configuration_table.yml"), tables.battleActions)
+  );
   const groups: BattleGroup[] = battleGroupRecords.map((group) => ({
     id: group.id,
     background1: group.background1,
@@ -132,7 +161,7 @@ export async function buildBattleData(options: BattleBuildOptions): Promise<Batt
       experience: "enemy_configuration_table.yml Experience points",
       money: "enemy_configuration_table.yml Money",
       bossFlag: "enemy_configuration_table.yml Boss Flag",
-      actions: "enemy_configuration_table.yml Action 1-4 plus Action 1-4 Argument",
+      actions: "enemy_configuration_table.yml Action 1-4 plus Action 1-4 Argument; numeric actionType/target decoded from battle_action_table.yml",
       itemDropped: "enemy_configuration_table.yml Item Dropped",
       itemRarity: "enemy_configuration_table.yml Item Rarity as numerator/denominator odds"
     },
@@ -164,6 +193,7 @@ export async function buildBattleData(options: BattleBuildOptions): Promise<Batt
 function assertBattleInputs(projectAbs: string): void {
   const required = [
     "enemy_configuration_table.yml",
+    "battle_action_table.yml",
     "enemy_groups.yml",
     "map_enemy_groups.yml",
     "map_enemy_placement.yml",
@@ -309,7 +339,7 @@ function selectFallbackBattleGroups(tables: BattleSourceTables, warnings: Valida
   };
 }
 
-function enemyToBattleEnemy(id: number, entry: Record<string, string>) {
+function enemyToBattleEnemy(id: number, entry: Record<string, string>, battleActions: Map<number, BattleActionRecord>) {
   return {
     id,
     name: entry.Name ?? "",
@@ -323,13 +353,33 @@ function enemyToBattleEnemy(id: number, entry: Record<string, string>) {
     experience: numericField(entry, "Experience points"),
     money: numericField(entry, "Money"),
     bossFlag: booleanField(entry, "Boss Flag"),
-    actions: [1, 2, 3, 4].map((index) => ({
-      id: numericField(entry, `Action ${index}`),
-      arg: numericField(entry, `Action ${index} Argument`)
-    })),
+    actions: [1, 2, 3, 4].map((index) => {
+      const actionId = numericField(entry, `Action ${index}`);
+      const action = requireMapEntry(battleActions, actionId, "battle_action_table.yml");
+      return {
+        id: actionId,
+        arg: numericField(entry, `Action ${index} Argument`),
+        actionId,
+        actionType: action.actionType,
+        target: action.target
+      };
+    }),
     itemDropped: nullableNumericField(entry, "Item Dropped"),
     itemRarity: rarityField(entry, "Item Rarity")
   };
+}
+
+async function readBattleActions(file: string): Promise<Map<number, BattleActionRecord>> {
+  const rows = parseIntKeyedYaml(await readFile(file, "utf8"));
+  const actions = new Map<number, BattleActionRecord>();
+  for (const [id, row] of rows) {
+    actions.set(id, {
+      id,
+      actionType: enumField(row, "Action type", BATTLE_ACTION_TYPE_VALUES),
+      target: enumField(row, "Target", BATTLE_TARGET_VALUES)
+    });
+  }
+  return actions;
 }
 
 async function copyBattleAssets(options: {
@@ -513,6 +563,22 @@ function numericField(entry: Record<string, string>, field: string): number {
     throw new Error(`Invalid or missing numeric battle field "${field}".`);
   }
   return parsed;
+}
+
+function enumField(entry: Record<string, string>, field: string, values: Map<string, number>): number {
+  const raw = entry[field]?.trim();
+  const parsed = parseYamlInteger(raw);
+  if (!Number.isNaN(parsed)) {
+    if (![...values.values()].includes(parsed)) {
+      throw new Error(`Invalid battle enum value "${raw}" for "${field}".`);
+    }
+    return parsed;
+  }
+  const value = values.get(raw?.toLowerCase() ?? "");
+  if (value === undefined) {
+    throw new Error(`Invalid or missing battle enum field "${field}".`);
+  }
+  return value;
 }
 
 function nullableNumericField(entry: Record<string, string>, field: string): number | null {

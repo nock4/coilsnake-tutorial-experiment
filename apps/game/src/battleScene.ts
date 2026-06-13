@@ -22,6 +22,7 @@ import {
   outcome,
   psiBattleKind,
   psiPpCost,
+  resolveEnemyActionTurn,
   resolveItemTurn,
   resolvePsiTurn,
   resolveTurn,
@@ -51,6 +52,13 @@ type PendingItemUse = {
   itemId: number;
   inventorySlot: number;
 };
+type LastEnemyActionDebug = {
+  enemyIndex: number;
+  actionIndex: number;
+  actionId: number;
+  actionType: number | null;
+  target: number | null;
+};
 
 export class BattleScene extends Phaser.Scene {
   private battleData_!: BattleData;
@@ -75,6 +83,7 @@ export class BattleScene extends Phaser.Scene {
   private roundOrder_: BattleActor[] = [];
   private roundCursor_ = 0;
   private currentActor_: BattleActor | null = null;
+  private lastEnemyAction_: LastEnemyActionDebug | null = null;
   private actionDelayMs_ = 0;
   private statusGraphics?: Phaser.GameObjects.Graphics;
   private targetCursor?: Phaser.GameObjects.Graphics;
@@ -120,6 +129,7 @@ export class BattleScene extends Phaser.Scene {
     this.roundOrder_ = [];
     this.roundCursor_ = 0;
     this.currentActor_ = null;
+    this.lastEnemyAction_ = null;
     this.actionDelayMs_ = 0;
   }
 
@@ -516,8 +526,17 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
 
-      const result = resolveTurn(this.battle_, actor, this.rng_);
+      const result = resolveEnemyActionTurn(this.battle_, actor, this.rng_);
       this.battle_ = result.state;
+      this.lastEnemyAction_ = result.action
+        ? {
+          enemyIndex: actor.index,
+          actionIndex: result.action.actionIndex,
+          actionId: result.action.actionId,
+          actionType: result.action.actionType ?? null,
+          target: result.action.target ?? null
+        }
+        : null;
       this.phase_ = "player-rolling";
       this.actionDelayMs_ = ACTION_ADVANCE_DELAY_MS;
       return;
@@ -710,6 +729,7 @@ export class BattleScene extends Phaser.Scene {
       partyTargetIndex: this.partyTargetIndex_,
       turnOrder: this.roundOrder_.map(debugActor),
       currentActor: this.currentActor_ ? debugActor(this.currentActor_) : null,
+      lastEnemyAction: this.lastEnemyAction_,
       party,
       enemies,
       player: {

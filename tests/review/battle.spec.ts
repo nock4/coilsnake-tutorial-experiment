@@ -21,6 +21,13 @@ type BattleDebug = {
   targetIndex: number;
   turnOrder: Array<{ side: "party" | "enemy"; index: number }>;
   currentActor: { side: "party" | "enemy"; index: number } | null;
+  lastEnemyAction: {
+    enemyIndex: number;
+    actionIndex: number;
+    actionId: number;
+    actionType: number | null;
+    target: number | null;
+  } | null;
   party: BattleCombatantDebug[];
   enemies: BattleCombatantDebug[];
   player?: {
@@ -287,6 +294,13 @@ function expectBattleNumbers(state: BattleDebug): void {
   expect(Array.isArray(state.turnOrder)).toBe(true);
   expect(state.party.length).toBeGreaterThan(0);
   expect(state.enemies.length).toBeGreaterThan(0);
+  if (state.lastEnemyAction) {
+    expect(Number.isInteger(state.lastEnemyAction.enemyIndex)).toBe(true);
+    expect(Number.isInteger(state.lastEnemyAction.actionIndex)).toBe(true);
+    expect(Number.isInteger(state.lastEnemyAction.actionId)).toBe(true);
+    expect(state.lastEnemyAction.actionType === null || Number.isInteger(state.lastEnemyAction.actionType)).toBe(true);
+    expect(state.lastEnemyAction.target === null || Number.isInteger(state.lastEnemyAction.target)).toBe(true);
+  }
   for (const member of [...state.party, ...state.enemies]) {
     expect(Number.isFinite(member.hpDisplayed)).toBe(true);
     expect(Number.isFinite(member.hpTarget)).toBe(true);

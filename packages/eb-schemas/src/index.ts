@@ -459,7 +459,10 @@ export const SpriteSheetCollectionSchema = z.object({
 
 export const BattleActionSchema = z.object({
   id: z.number().int().nonnegative(),
-  arg: z.number().int().nonnegative()
+  arg: z.number().int().nonnegative(),
+  actionId: z.number().int().nonnegative().optional(),
+  actionType: z.number().int().min(0).max(5).optional(),
+  target: z.number().int().min(0).max(4).optional()
 });
 
 export const BattleDropRaritySchema = z.object({

@@ -56,6 +56,14 @@ export type BattleVictoryDebug = {
   }>;
 };
 
+export type LastEnemyActionDebug = {
+  enemyIndex: number;
+  actionIndex: number;
+  actionId: number;
+  actionType: number | null;
+  target: number | null;
+};
+
 export type BattleDebug = {
   mode: "battle";
   phase: BattlePhase;
@@ -70,6 +78,7 @@ export type BattleDebug = {
   partyTargetIndex: number;
   turnOrder: BattleActorDebug[];
   currentActor: BattleActorDebug | null;
+  lastEnemyAction: LastEnemyActionDebug | null;
   party: BattleCombatantDebug[];
   enemies: BattleCombatantDebug[];
   player: {

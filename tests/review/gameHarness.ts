@@ -23,6 +23,13 @@ export type FirstSceneDebug = {
   partyTargetIndex?: number;
   turnOrder?: Array<{ side: "party" | "enemy"; index: number }>;
   currentActor?: { side: "party" | "enemy"; index: number } | null;
+  lastEnemyAction?: {
+    enemyIndex: number;
+    actionIndex: number;
+    actionId: number;
+    actionType: number | null;
+    target: number | null;
+  } | null;
   party?: Array<{
     hpDisplayed: number;
     hpTarget: number;

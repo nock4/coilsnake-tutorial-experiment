@@ -219,10 +219,10 @@ describe("generated validation", () => {
         itemRarity: { numerator: 16, denominator: 128 },
         itemDropped: 0,
         actions: [
-          { id: 1, arg: 0 },
-          { id: 2, arg: 3 },
-          { id: 3, arg: 0 },
-          { id: 4, arg: 1 }
+          { id: 1, arg: 0, actionId: 1, actionType: 1, target: 1 },
+          { id: 2, arg: 3, actionId: 2, actionType: 2, target: 4 },
+          { id: 3, arg: 0, actionId: 3, actionType: 3, target: 1 },
+          { id: 4, arg: 1, actionId: 4, actionType: 5, target: 0 }
         ]
       });
       expect(existsSync(path.join(out, "assets/battle/sprites/010.png"))).toBe(true);
@@ -474,6 +474,36 @@ async function writeBattleFixture(project: string): Promise<void> {
     "  Action 4 Argument: 0",
     "  Item Dropped: 0",
     "  Item Rarity: 1/128",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "battle_action_table.yml"), [
+    "1:",
+    "  Action type: physical (affected by shields and defending)",
+    "  Target: one",
+    "2:",
+    "  Action type: physical (unaffected by shields and defending)",
+    "  Target: all",
+    "3:",
+    "  Action type: PSI",
+    "  Target: one",
+    "4:",
+    "  Action type: other",
+    "  Target: none",
+    "5:",
+    "  Action type: item",
+    "  Target: none",
+    "6:",
+    "  Action type: nothing",
+    "  Target: none",
+    "7:",
+    "  Action type: other",
+    "  Target: one",
+    "8:",
+    "  Action type: physical (unaffected by shields and defending)",
+    "  Target: random",
+    "9:",
+    "  Action type: physical (affected by shields and defending)",
+    "  Target: one",
     ""
   ].join("\n"), "utf8");
   await writeFile(path.join(project, "enemy_groups.yml"), [
