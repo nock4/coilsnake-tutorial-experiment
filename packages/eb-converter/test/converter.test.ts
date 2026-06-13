@@ -9,6 +9,7 @@ import {
   resolveScriptReference,
   resolveScriptEvents,
   resolveScriptReferenceFlow,
+  CharacterCollectionSchema,
   TutorialStatusSchema,
   type ScriptCollection
 } from "@eb/schemas";
@@ -235,6 +236,66 @@ describe("generated validation", () => {
       await rm(temp, { recursive: true, force: true });
     }
   });
+
+  it("extracts bounded character data only when opted in", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-characters-"));
+    try {
+      const project = path.join(temp, "project");
+      const out = path.join(temp, "generated");
+      await writeCharacterFixture(project);
+
+      const defaultResult = await convertProject({ project, out });
+      const defaultValidation = await validateGeneratedOutput(out);
+
+      expect(defaultResult.characters).toBeUndefined();
+      expect(existsSync(path.join(out, "characters.json"))).toBe(false);
+      expect(defaultValidation.generatedFiles).not.toContain("characters.json");
+
+      const generated = await convertProject({ project, out, characters: true });
+      const result = await validateGeneratedOutput(out);
+      const characters = CharacterCollectionSchema.parse(generated.characters);
+
+      expect(characters.counts).toEqual({ characters: 2, statFieldsPopulated: 20 });
+      expect(characters.characters[0]).toMatchObject({
+        id: 0,
+        name: "ALPHA",
+        level: 1,
+        maxHp: 30,
+        maxPp: 10,
+        offense: 2,
+        defense: 2,
+        speed: 2,
+        guts: 2,
+        vitality: 2,
+        iq: 2,
+        luck: 2,
+        startingItems: [10],
+        money: 3
+      });
+      expect(characters.characters[1]).toMatchObject({
+        id: 1,
+        name: "BETA",
+        level: 4,
+        maxHp: 75,
+        maxPp: 25,
+        offense: 6,
+        defense: 6,
+        speed: 6,
+        guts: 6,
+        vitality: 5,
+        iq: 5,
+        luck: 6,
+        startingItems: [11],
+        money: 0
+      });
+      expect(result.ok).toBe(true);
+      expect(result.generatedFiles).toContain("characters.json");
+      expect(result.characters).toBe(2);
+      expect(result.characterStatFieldsPopulated).toBe(20);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
 });
 
 async function writeBattleFixture(project: string): Promise<void> {
@@ -343,6 +404,78 @@ async function writeBattleFixture(project: string): Promise<void> {
   await writeFile(path.join(project, "BattleBGs", "003.png"), TINY_PNG);
   await writeFile(path.join(project, "BattleBGs", "004.png"), TINY_PNG);
   await writeFile(path.join(project, "BattleBGs", "005.png"), TINY_PNG);
+}
+
+async function writeCharacterFixture(project: string): Promise<void> {
+  await mkdir(project, { recursive: true });
+  await writeFile(path.join(project, "Project.snake"), "CoilSnakeVersion: 4\n", "utf8");
+  await writeFile(path.join(project, "initial_stats.yml"), [
+    "0:",
+    "  Experience Points: 0",
+    "  Items Possessed:",
+    "  - 10",
+    "  - 0",
+    "  Level: 1",
+    "  Money: 3",
+    "1:",
+    "  Experience Points: 100",
+    "  Items Possessed:",
+    "  - 0",
+    "  - 11",
+    "  Level: 4",
+    "  Money: 0",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "stats_growth_vars.yml"), [
+    "0:",
+    "  Defense: 10",
+    "  Guts: 10",
+    "  IQ: 10",
+    "  Luck: 10",
+    "  Offense: 10",
+    "  Speed: 10",
+    "  Vitality: 10",
+    "1:",
+    "  Defense: 10",
+    "  Guts: 10",
+    "  IQ: 10",
+    "  Luck: 10",
+    "  Offense: 10",
+    "  Speed: 10",
+    "  Vitality: 10",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "exp_table.yml"), [
+    "0:",
+    "  Level 00 EXP: 0",
+    "  Level 01 EXP: 0",
+    "  Level 02 EXP: 5",
+    "  Level 03 EXP: 25",
+    "  Level 04 EXP: 100",
+    "1:",
+    "  Level 00 EXP: 0",
+    "  Level 01 EXP: 0",
+    "  Level 02 EXP: 5",
+    "  Level 03 EXP: 25",
+    "  Level 04 EXP: 100",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "playable_char_gfx_table.yml"), [
+    "0:",
+    "  Default Sprite Group: 1",
+    "1:",
+    "  Default Sprite Group: 2",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "psi_ability_table.yml"), "0:\n  Action: 0\n", "utf8");
+  await writeFile(path.join(project, "psi_name_table.yml"), "0:\n  Name: Neutral PSI\n", "utf8");
+  await writeFile(path.join(project, "naming_skip.yml"), [
+    "Enable Skip: false",
+    "Enable Summary: false",
+    "Name1: ALPHA",
+    "Name2: BETA",
+    ""
+  ].join("\n"), "utf8");
 }
 
 describe("CCScript parser v0", () => {

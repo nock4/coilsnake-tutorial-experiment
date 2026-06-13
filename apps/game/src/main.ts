@@ -37,7 +37,7 @@ class BootScene extends Phaser.Scene {
     const data: GameData = await loadGameData(manifest);
     const battleGroupId = battleGroupIdFromSearch(globalThis.location?.search);
     if (battleGroupId !== undefined && data.battle) {
-      this.scene.start("battle", { battleData: data.battle, groupId: battleGroupId });
+      this.scene.start("battle", { battleData: data.battle, groupId: battleGroupId, characters: data.characters });
       return;
     }
     if (data.world?.available && "mode" in data.world && data.world.mode === "full") {

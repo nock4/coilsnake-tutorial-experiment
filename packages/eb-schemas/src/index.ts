@@ -519,6 +519,41 @@ export const BattleDataSchema = z.object({
   warnings: z.array(ValidationIssueSchema)
 });
 
+export const CharacterDataSchema = z.object({
+  id: z.number().int().nonnegative(),
+  name: z.string(),
+  level: z.number().int().positive(),
+  maxHp: z.number().int().nonnegative(),
+  maxPp: z.number().int().nonnegative(),
+  offense: z.number().int().nonnegative(),
+  defense: z.number().int().nonnegative(),
+  speed: z.number().int().nonnegative(),
+  guts: z.number().int().nonnegative(),
+  vitality: z.number().int().nonnegative(),
+  iq: z.number().int().nonnegative(),
+  luck: z.number().int().nonnegative(),
+  startingItems: z.array(z.number().int().nonnegative()),
+  money: z.number().int().nonnegative()
+});
+
+export const CharacterCollectionSchema = z.object({
+  schemaVersion: z.string(),
+  sourceProjectPath: z.string(),
+  derivation: z.object({
+    source: z.string(),
+    baseStats: z.string(),
+    statFormula: z.string(),
+    hpPpFormula: z.string(),
+    uncertainty: z.string()
+  }),
+  characters: z.array(CharacterDataSchema).max(8),
+  counts: z.object({
+    characters: z.number().int().nonnegative(),
+    statFieldsPopulated: z.number().int().nonnegative()
+  }),
+  warnings: z.array(ValidationIssueSchema)
+});
+
 export const TutorialFixtureHintsSchema = z.object({
   hasRobotCcs: z.boolean(),
   hasHelloWorldLabel: z.boolean(),
@@ -547,7 +582,8 @@ export const ManifestSchema = z.object({
     validationReport: z.string(),
     world: z.string(),
     sprites: z.string(),
-    battle: z.string().optional()
+    battle: z.string().optional(),
+    characters: z.string().optional()
   }),
   counts: z.object({
     scriptFiles: z.number().int().nonnegative(),
@@ -561,6 +597,8 @@ export const ManifestSchema = z.object({
     spriteSheets: z.number().int().nonnegative(),
     battleEnemies: z.number().int().nonnegative().optional(),
     battleGroups: z.number().int().nonnegative().optional(),
+    characters: z.number().int().nonnegative().optional(),
+    characterStatFieldsPopulated: z.number().int().nonnegative().optional(),
     warnings: z.number().int().nonnegative(),
     errors: z.number().int().nonnegative()
   }),
@@ -594,6 +632,8 @@ export type SpriteSheetCollection = z.infer<typeof SpriteSheetCollectionSchema>;
 export type BattleData = z.infer<typeof BattleDataSchema>;
 export type BattleEnemy = z.infer<typeof BattleEnemySchema>;
 export type BattleGroup = z.infer<typeof BattleGroupSchema>;
+export type CharacterCollection = z.infer<typeof CharacterCollectionSchema>;
+export type CharacterData = z.infer<typeof CharacterDataSchema>;
 export type DialogueSegment = z.infer<typeof DialogueSegmentSchema>;
 export type EventEffect = z.infer<typeof EventEffectSchema>;
 export type ScriptCollection = z.infer<typeof ScriptCollectionSchema>;

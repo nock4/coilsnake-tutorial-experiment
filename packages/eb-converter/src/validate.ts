@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import {
   BattleDataSchema,
+  CharacterCollectionSchema,
   ManifestSchema,
   NpcReferenceCollectionSchema,
   ScriptCollectionSchema,
@@ -14,6 +15,7 @@ import {
 } from "@eb/schemas";
 
 const DEFAULT_OUT = "apps/game/public/generated";
+const DEFAULT_CHARACTERS_FILE = "characters.json";
 
 function parseOut(argv: string[]): string {
   const outIndex = argv.indexOf("--out");
@@ -41,6 +43,8 @@ export type GeneratedValidationResult = {
   battleEnemies?: number;
   battleGroups?: number;
   battleAssetsChecked?: number;
+  characters?: number;
+  characterStatFieldsPopulated?: number;
 };
 
 export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<GeneratedValidationResult> {
@@ -75,6 +79,11 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
   const battlePath = path.join(out, battleFile);
   const battleRaw = existsSync(battlePath) ? await readJson(battlePath) : undefined;
   const battle = battleRaw ? BattleDataSchema.parse(battleRaw) : undefined;
+  const characterFile = manifest.files.characters ?? DEFAULT_CHARACTERS_FILE;
+  const characterPath = path.join(out, characterFile);
+  const shouldReadCharacters = Boolean(manifest.files.characters) || existsSync(characterPath);
+  const charactersRaw = shouldReadCharacters ? await readJson(characterPath) : undefined;
+  const characters = charactersRaw ? CharacterCollectionSchema.parse(charactersRaw) : undefined;
 
   assertNoPublicPathLeaks({
     "manifest.json": manifestRaw,
@@ -85,7 +94,8 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
     [manifest.files.validationReport]: validationReportRaw,
     [manifest.files.world]: worldRaw,
     [manifest.files.sprites]: spritesRaw,
-    ...(battleRaw ? { [battleFile]: battleRaw } : {})
+    ...(battleRaw ? { [battleFile]: battleRaw } : {}),
+    ...(charactersRaw ? { [characterFile]: charactersRaw } : {})
   });
 
   const worldAssetsChecked = assertWorldAssetsExist(out, world, sprites);
@@ -103,7 +113,8 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
       manifest.files.validationReport,
       manifest.files.world,
       manifest.files.sprites,
-      ...(battle ? [battleFile] : [])
+      ...(battle ? [battleFile] : []),
+      ...(characters ? [characterFile] : [])
     ],
     counts: manifest.counts,
     validation: validationReport.counts,
@@ -119,6 +130,10 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
       battleEnemies: battle.counts.enemies,
       battleGroups: battle.counts.groups,
       battleAssetsChecked
+    } : {}),
+    ...(characters ? {
+      characters: characters.counts.characters,
+      characterStatFieldsPopulated: characters.counts.statFieldsPopulated
     } : {})
   };
 }

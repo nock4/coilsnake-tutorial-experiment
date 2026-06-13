@@ -1,6 +1,7 @@
 import {
   buildDialoguePages,
   BattleDataSchema,
+  CharacterCollectionSchema,
   ManifestSchema,
   NpcReferenceCollectionSchema,
   resolveScriptReference,
@@ -13,6 +14,7 @@ import {
   WorldArtifactSchema,
   type DialoguePage,
   type BattleData,
+  type CharacterCollection,
   type Manifest,
   type NumericFlagState,
   type NpcReferenceCollection,
@@ -36,6 +38,7 @@ export type GameData = {
   world?: WorldArtifact;
   sprites?: SpriteSheetCollection;
   battle?: BattleData;
+  characters?: CharacterCollection;
 };
 
 async function loadJson<T>(url: string, schema: { parse: (value: unknown) => T }): Promise<T | undefined> {
@@ -49,7 +52,7 @@ async function loadJson<T>(url: string, schema: { parse: (value: unknown) => T }
 
 /** Loads every generated file referenced by an already-validated manifest. */
 export async function loadGameData(manifest: Manifest): Promise<GameData> {
-  const [scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle] = await Promise.all([
+  const [scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle, characters] = await Promise.all([
     loadJson(`/generated/${manifest.files.scripts}`, ScriptCollectionSchema),
     loadJson(`/generated/${manifest.files.npcs}`, NpcReferenceCollectionSchema),
     loadJson(`/generated/${manifest.files.spriteGroups}`, SpriteGroupCollectionSchema),
@@ -59,9 +62,12 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     loadJson(`/generated/${manifest.files.sprites}`, SpriteSheetCollectionSchema),
     manifest.files.battle
       ? loadJson(`/generated/${manifest.files.battle}`, BattleDataSchema)
+      : Promise.resolve(undefined),
+    manifest.files.characters
+      ? loadJson(`/generated/${manifest.files.characters}`, CharacterCollectionSchema)
       : Promise.resolve(undefined)
   ]);
-  return { manifest, scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle };
+  return { manifest, scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle, characters };
 }
 
 export function parseManifest(raw: unknown): Manifest | undefined {

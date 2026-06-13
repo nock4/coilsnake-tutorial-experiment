@@ -42,7 +42,7 @@ Phase 1 delivers data-extraction parity for traversal, not script or behavior pa
 - Event-flag gating is not implemented; imported triggers and visible NPC rules are treated as Phase-1 traversal data.
 - Rope and ladder door types are audited as source data but not emitted as runtime triggers yet.
 - Interiors still use same-map destination pixels. Separate interior map/session semantics are later parity work.
-- The full-world default spawn is derived from fixture data and is not yet Ness's bedroom.
+- The full-world default spawn is derived from fixture data and is not yet the vanilla bedroom spawn.
 
 ## Phase-2 Handoff
 

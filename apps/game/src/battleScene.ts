@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import type { BattleData, BattleEnemy, BattleGroup } from "@eb/schemas";
+import type { BattleData, BattleEnemy, BattleGroup, CharacterCollection } from "@eb/schemas";
 import {
   createBattleState,
   outcome,
@@ -33,7 +33,7 @@ export class BattleScene extends Phaser.Scene {
     super("battle");
   }
 
-  init(data: { battleData: BattleData; groupId?: number }): void {
+  init(data: { battleData: BattleData; groupId?: number; characters?: CharacterCollection }): void {
     this.battleData_ = data.battleData;
     this.group_ = selectBattleGroup(data.battleData, data.groupId);
     const enemy = firstEnemyForGroup(data.battleData, this.group_);
@@ -41,7 +41,8 @@ export class BattleScene extends Phaser.Scene {
       throw new Error(`Battle group ${this.group_.id} has no matching runtime enemy.`);
     }
     this.primaryEnemy_ = enemy;
-    this.battle_ = createBattleState(enemy);
+    const character = data.characters?.characters[0];
+    this.battle_ = createBattleState(enemy, character ? { character } : {});
     this.rng_ = createSeededRng((this.group_.id + 1) * 65537 + enemy.id);
     this.phase_ = "menu";
     this.menuIndex_ = 0;
@@ -206,7 +207,7 @@ export class BattleScene extends Phaser.Scene {
         : ""
     );
     this.hpText?.setText(`${this.battle_.player.name}  HP ${odometer(this.battle_.player.hp.displayed)}`);
-    this.ppText?.setText(`PP ${odometer(0)}`);
+    this.ppText?.setText(`PP ${odometer(this.battle_.player.pp)}`);
   }
 
   private publish(): void {

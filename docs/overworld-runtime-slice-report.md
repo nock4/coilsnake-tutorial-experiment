@@ -45,7 +45,7 @@ order is "S, N, W, E, NW, SW, SE, NE"; inverting that permutation gives the PNG 
 | 14–15  | up-left     |
 
 Verified two ways: derived from CoilSnake source, and visually against the locally rendered sheets for
-groups 1 (Ness) and 5 (robot). The converter emits cardinal pairs for any sheet with ≥ 8 frames; sheets
+groups 1 (lead character) and 5 (robot). The converter emits cardinal pairs for any sheet with ≥ 8 frames; sheets
 with fewer frames reuse the lead pair for every facing (`spriteGroupAnimations` in
 [world.ts](../packages/eb-converter/src/world.ts)). Diagonal pairs (frames 8–15) are **not** yet emitted
 or rendered — diagonal movement resolves to a cardinal facing.

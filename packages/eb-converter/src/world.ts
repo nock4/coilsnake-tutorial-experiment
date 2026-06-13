@@ -966,7 +966,7 @@ async function buildFullWorldArtifacts(options: {
       spawnWorldPixel: spawn,
       spawnDerivation: spawnWorldPixel
         ? "Configured from EB_SPAWN world pixels."
-        : `Derived, not fixture data: nearest walkable point near NPC ${TUTORIAL_NPC_ID}'s placement (deterministic ring search). Vanilla new-game spawn (Ness's bedroom) is Phase-2 scope.`
+        : `Derived, not fixture data: nearest walkable point near NPC ${TUTORIAL_NPC_ID}'s placement (deterministic ring search). Vanilla new-game spawn location is Phase-2 scope.`
     },
     sources,
     counts: {

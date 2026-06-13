@@ -142,7 +142,7 @@ roadblock area.
     `@Hello World!`, but target attribution is not proven.
 - `.codex/videos/earthbound-first-hack-npc744-current-fixture-attempt.mov`
   - Real Snes9x capture under the current narrowed fixture.
-  - Does not satisfy final proof: Ness starts near the visible roadblock marker,
+  - Does not satisfy final proof: the player starts near the visible roadblock marker,
     but Talk returns `*Who are you talking to?`.
 - `.codex/videos/earthbound-first-hack-npc744-current-fixture-attempt-contact.png`
   - Contact sheet for that failed narrowed-fixture attempt.
@@ -296,7 +296,7 @@ roadblock area.
   - Contact sheet for the `V` confirm diagnostic.
 - `.codex/videos/npc744-bedroom-hello-world-proof.mov`
   - Real Snes9x capture under the current narrowed bedroom proof fixture.
-  - Starts from boot/file select, loads the save, moves Ness to the local-only
+  - Starts from boot/file select, loads the save, moves the player to the local-only
     NPC `744` marker, opens the command menu, selects Talk, and leaves imported
     `Hello World!` dialogue visible.
   - Satisfies the exact local NPC `744` proof for the bedroom fixture, not the
@@ -763,7 +763,7 @@ separate roadblock/original-placement investigation.
   - no roadblock-706 success clip was recorded from this retry.
 - 2026-06-01 clean-door roadblock-706 retry:
   - restored `map_doors.yml` from the pre-bedroom-proof backup to remove the
-    broad forced destination edit that made Ness leave the bedroom and spawn far
+    broad forced destination edit that made the player leave the bedroom and spawn far
     from the normal house route.
   - kept the proof narrowed to exactly one NPC `744` placement at `27/29`,
     `X: 192`, `Y: 216`, and exactly one `Text Pointer 1: robot.hello_world`,

@@ -1,4 +1,4 @@
-import type { BattleEnemy } from "@eb/schemas";
+import type { BattleEnemy, CharacterData } from "@eb/schemas";
 import {
   createRollingMeter,
   isDepleted,
@@ -6,6 +6,11 @@ import {
   tick,
   type RollingMeterState
 } from "./rollingMeter";
+import {
+  buildCombatantFromPartyMember,
+  buildPartyMember,
+  type PartyMember
+} from "./characterModel";
 
 export type Rng = () => number;
 export type BattleActor = "player" | "enemy";
@@ -15,6 +20,8 @@ export type Combatant = {
   name: string;
   level: number;
   maxHp: number;
+  maxPp: number;
+  pp: number;
   hp: RollingMeterState;
   offense: number;
   defense: number;
@@ -28,6 +35,8 @@ export type BattleState = {
 
 export type PlayerCombatantOptions = Partial<Pick<Combatant, "name" | "level" | "maxHp" | "offense" | "defense">> & {
   hpRatePerSec?: number;
+  character?: CharacterData;
+  partyMember?: PartyMember;
 };
 
 export type EnemyCombatantOptions = {
@@ -46,6 +55,8 @@ export const PLAYER_DEFAULTS = {
   name: "PLAYER",
   level: 1,
   maxHp: 40,
+  maxPp: 0,
+  pp: 0,
   offense: 12,
   defense: 6,
   hpRatePerSec: 36
@@ -54,11 +65,18 @@ export const PLAYER_DEFAULTS = {
 const ENEMY_HP_RATE_PER_SEC = 42;
 
 export function buildPlayerCombatant(options: PlayerCombatantOptions = {}): Combatant {
+  const member = options.partyMember ?? (options.character ? buildPartyMember(options.character) : undefined);
+  if (member) {
+    return buildCombatantFromPartyMember(member, { hpRatePerSec: options.hpRatePerSec });
+  }
+
   const maxHp = stat(options.maxHp ?? PLAYER_DEFAULTS.maxHp);
   return {
     name: options.name ?? PLAYER_DEFAULTS.name,
     level: stat(options.level ?? PLAYER_DEFAULTS.level),
     maxHp,
+    maxPp: PLAYER_DEFAULTS.maxPp,
+    pp: PLAYER_DEFAULTS.pp,
     hp: createRollingMeter(maxHp, options.hpRatePerSec ?? PLAYER_DEFAULTS.hpRatePerSec),
     offense: stat(options.offense ?? PLAYER_DEFAULTS.offense),
     defense: stat(options.defense ?? PLAYER_DEFAULTS.defense),
@@ -72,6 +90,8 @@ export function buildEnemyCombatant(enemy: BattleEnemy, options: EnemyCombatantO
     name: enemy.name,
     level: stat(enemy.level),
     maxHp,
+    maxPp: 0,
+    pp: 0,
     hp: createRollingMeter(maxHp, options.hpRatePerSec ?? ENEMY_HP_RATE_PER_SEC),
     offense: stat(enemy.offense),
     defense: stat(enemy.defense),

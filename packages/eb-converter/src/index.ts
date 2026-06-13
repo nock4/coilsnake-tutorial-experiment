@@ -18,11 +18,13 @@ import {
   type SpriteSheetCollection,
   type TutorialStatus,
   type BattleData,
+  type CharacterCollection,
   type ValidationIssue,
   type ValidationReport,
   type WorldArtifact
 } from "@eb/schemas";
 import { BATTLE_FILE, buildBattleData } from "./battle";
+import { CHARACTERS_FILE, buildCharacterData } from "./characters";
 import { buildWorldArtifacts, TUTORIAL_NPC_ID, type WorldMode } from "./world";
 
 const DEFAULT_PROJECT = "external/coilsnake-project";
@@ -44,6 +46,7 @@ type CliArgs = {
   out: string;
   worldMode: WorldMode;
   battle: boolean;
+  characters: boolean;
   spawnWorldPixel?: { x: number; y: number };
 };
 
@@ -57,6 +60,7 @@ type ConvertResult = {
   world: WorldArtifact;
   sprites: SpriteSheetCollection;
   battle?: BattleData;
+  characters?: CharacterCollection;
 };
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -65,6 +69,7 @@ export function parseArgs(argv: string[]): CliArgs {
     out: DEFAULT_OUT,
     worldMode: parseWorldMode(process.env.EB_WORLD_MODE),
     battle: parseBattleMode(process.env.EB_BATTLE),
+    characters: parseCharacterMode(process.env.EB_CHARS),
     ...(process.env.EB_SPAWN ? { spawnWorldPixel: parseSpawn(process.env.EB_SPAWN) } : {})
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -80,6 +85,8 @@ export function parseArgs(argv: string[]): CliArgs {
       index += 1;
     } else if (arg === "--battle") {
       args.battle = true;
+    } else if (arg === "--characters" || arg === "--chars") {
+      args.characters = true;
     } else if (arg === "--spawn") {
       args.spawnWorldPixel = parseSpawn(argv[index + 1]);
       index += 1;
@@ -106,6 +113,16 @@ function parseBattleMode(value: string | undefined): boolean {
     return true;
   }
   throw new Error(`Unsupported EB_BATTLE "${value}". Expected "1" or "0".`);
+}
+
+function parseCharacterMode(value: string | undefined): boolean {
+  if (!value || value === "0" || value.toLowerCase() === "false" || value.toLowerCase() === "no") {
+    return false;
+  }
+  if (value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes") {
+    return true;
+  }
+  throw new Error(`Unsupported EB_CHARS "${value}". Expected "1" or "0".`);
 }
 
 function parseSpawn(value: string | undefined): { x: number; y: number } {
@@ -741,6 +758,7 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
   const out = options.out ?? DEFAULT_OUT;
   const worldMode = options.worldMode ?? parseWorldMode(process.env.EB_WORLD_MODE);
   const battleEnabled = options.battle ?? parseBattleMode(process.env.EB_BATTLE);
+  const charactersEnabled = options.characters ?? parseCharacterMode(process.env.EB_CHARS);
   const spawnWorldPixel = options.spawnWorldPixel ?? (process.env.EB_SPAWN ? parseSpawn(process.env.EB_SPAWN) : undefined);
   const projectAbs = resolveFromRoot(project);
   const outAbs = resolveFromRoot(out);
@@ -819,7 +837,17 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
       displayPath: makeDisplayPath(project)
     })
     : undefined;
-  const manifestFiles = battle ? { ...GENERATED_FILES, battle: BATTLE_FILE } : GENERATED_FILES;
+  const characters = charactersEnabled
+    ? await buildCharacterData({
+      projectAbs,
+      displayPath: makeDisplayPath(project)
+    })
+    : undefined;
+  const manifestFiles = {
+    ...GENERATED_FILES,
+    ...(battle ? { battle: BATTLE_FILE } : {}),
+    ...(characters ? { characters: CHARACTERS_FILE } : {})
+  };
   const manifestWarnings = [
     ...warnings,
     ...scripts.warnings,
@@ -827,7 +855,8 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     ...spriteGroups.warnings,
     ...tutorialStatus.warnings,
     ...world.warnings,
-    ...(battle?.warnings ?? [])
+    ...(battle?.warnings ?? []),
+    ...(characters?.warnings ?? [])
   ];
   const generatedFiles = [
     "manifest.json",
@@ -838,7 +867,8 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     GENERATED_FILES.validationReport,
     GENERATED_FILES.world,
     GENERATED_FILES.sprites,
-    ...(battle ? [BATTLE_FILE] : [])
+    ...(battle ? [BATTLE_FILE] : []),
+    ...(characters ? [CHARACTERS_FILE] : [])
   ];
 
   const manifest: Manifest = ManifestSchema.parse({
@@ -859,6 +889,10 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
       ...(battle ? {
         battleEnemies: battle.counts.enemies,
         battleGroups: battle.counts.groups
+      } : {}),
+      ...(characters ? {
+        characters: characters.counts.characters,
+        characterStatFieldsPopulated: characters.counts.statFieldsPopulated
       } : {}),
       warnings: manifestWarnings.length,
       errors: errors.length
@@ -890,8 +924,22 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
   if (battle) {
     await writeJson(path.join(outAbs, BATTLE_FILE), battle);
   }
+  if (characters) {
+    await writeJson(path.join(outAbs, CHARACTERS_FILE), characters);
+  }
 
-  return { manifest, scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, ...(battle ? { battle } : {}) };
+  return {
+    manifest,
+    scripts,
+    npcs,
+    spriteGroups,
+    tutorialStatus,
+    validationReport,
+    world,
+    sprites,
+    ...(battle ? { battle } : {}),
+    ...(characters ? { characters } : {})
+  };
 }
 
 async function readTutorialStatus(
@@ -967,7 +1015,7 @@ async function readTutorialStatus(
   });
   addStep({
     id: "sprite_group_005",
-    label: "Robot Ness sprite metadata exists",
+    label: "Robot tutorial sprite metadata exists",
     status: sprite005 ? "pass" : "fail",
     evidence: sprite005 ? "SpriteGroups/005.png was indexed as metadata only." : "SpriteGroups/005.png was not indexed.",
     path: "SpriteGroups/005.png"
@@ -1607,7 +1655,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
           GENERATED_FILES.validationReport,
           GENERATED_FILES.world,
           GENERATED_FILES.sprites,
-          ...(result.battle ? [BATTLE_FILE] : [])
+          ...(result.battle ? [BATTLE_FILE] : []),
+          ...(result.characters ? [CHARACTERS_FILE] : [])
         ],
         counts: result.manifest.counts,
         world: {

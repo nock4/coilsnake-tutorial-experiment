@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { BattleEnemy } from "@eb/schemas";
+import type { BattleEnemy, CharacterData } from "@eb/schemas";
 import {
   buildEnemyCombatant,
   buildPlayerCombatant,
   createBattleState,
   damage,
   outcome,
+  PLAYER_DEFAULTS,
   resolveTurn,
   tickBattleMeters,
   turnOrder,
@@ -33,6 +34,23 @@ const opponent: BattleEnemy = {
   itemDropped: null
 };
 
+const partyCharacter: CharacterData = {
+  id: 0,
+  name: "PARTY_LEAD",
+  level: 6,
+  maxHp: 72,
+  maxPp: 18,
+  offense: 21,
+  defense: 8,
+  speed: 7,
+  guts: 5,
+  vitality: 6,
+  iq: 4,
+  luck: 3,
+  startingItems: [1],
+  money: 9
+};
+
 function state(): BattleState {
   return createBattleState(opponent, {
     maxHp: 30,
@@ -50,6 +68,39 @@ describe("battle damage", () => {
     expect(damage(player, enemy, () => 0)).toBe(16);
     expect(damage(player, enemy, () => 0.5)).toBe(18);
     expect(damage(player, enemy, () => 1)).toBe(19);
+  });
+});
+
+describe("battle player model", () => {
+  it("builds the player combatant from generated character data when provided", () => {
+    const battle = createBattleState(opponent, { character: partyCharacter, hpRatePerSec: 5 });
+
+    expect(battle.player).toMatchObject({
+      name: "PARTY_LEAD",
+      level: 6,
+      maxHp: 72,
+      maxPp: 18,
+      pp: 18,
+      offense: 21,
+      defense: 8,
+      isEnemy: false
+    });
+    expect(battle.player.hp).toMatchObject({ displayed: 72, target: 72, ratePerSec: 5 });
+  });
+
+  it("keeps the neutral player fallback when generated character data is absent", () => {
+    const battle = createBattleState(opponent);
+
+    expect(battle.player).toMatchObject({
+      name: PLAYER_DEFAULTS.name,
+      level: PLAYER_DEFAULTS.level,
+      maxHp: PLAYER_DEFAULTS.maxHp,
+      maxPp: PLAYER_DEFAULTS.maxPp,
+      pp: PLAYER_DEFAULTS.pp,
+      offense: PLAYER_DEFAULTS.offense,
+      defense: PLAYER_DEFAULTS.defense,
+      isEnemy: false
+    });
   });
 });
 
