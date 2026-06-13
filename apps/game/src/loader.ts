@@ -3,6 +3,7 @@ import {
   ManifestSchema,
   NpcReferenceCollectionSchema,
   resolveScriptReference,
+  resolveScriptReferenceFlow,
   ScriptCollectionSchema,
   SpriteGroupCollectionSchema,
   SpriteSheetCollectionSchema,
@@ -75,7 +76,7 @@ export function buildDialogueForReference(scripts: ScriptCollection | undefined,
   if (!scripts) {
     return [{ text: "Generated scripts.json could not be loaded.", ended: true, unknownCommands: [] }];
   }
-  const resolved = resolveScriptReference(scripts, reference);
+  const resolved = resolveScriptReferenceFlow(scripts, reference);
   if (!resolved) {
     return [{ text: "No imported script text was found.", ended: true, unknownCommands: [] }];
   }

@@ -126,38 +126,94 @@ export function parseCcsFile(relativePath: string, source: string): {
       return;
     }
 
-    const quotedLine = trimmed.match(/^"([^"]*)"\s*(.*)$/);
-    if (quotedLine) {
-      const text = quotedLine[1];
-      const trailingCommand = quotedLine[2].trim();
-      commands.push({
-        cmd: "text",
-        value: text,
-        segments: tokenizeCcsString(text),
-        raw: `"${text}"`,
-        sourceLocation
-      });
-      if (trailingCommand) {
+    for (const part of parseCcsLineParts(withoutComment)) {
+      const partLocation = { ...sourceLocation, column: part.column };
+      if (part.kind === "text") {
         commands.push({
-          cmd: normalizeKnownCommand(trailingCommand),
-          raw: trailingCommand,
-          sourceLocation: {
-            ...sourceLocation,
-            column: line.indexOf(trailingCommand) + 1
-          }
+          cmd: "text",
+          value: part.value,
+          segments: tokenizeCcsString(part.value),
+          raw: `"${part.value}"`,
+          sourceLocation: partLocation
         });
-        addUnknownWarning(commands.at(-1), warnings);
+        continue;
       }
-      return;
-    }
 
-    const cmd = normalizeKnownCommand(trimmed);
-    const command = { cmd, raw: trimmed, sourceLocation };
-    commands.push(command);
-    addUnknownWarning(command, warnings);
+      const command = scriptCommandFromRaw(part.raw, partLocation);
+      commands.push(command);
+      addUnknownWarning(command, warnings);
+    }
   });
 
   return { commands, labels, warnings };
+}
+
+type CcsLinePart =
+  | { kind: "text"; value: string; column: number }
+  | { kind: "command"; raw: string; column: number };
+
+function parseCcsLineParts(line: string): CcsLinePart[] {
+  const parts: CcsLinePart[] = [];
+  let index = 0;
+
+  while (index < line.length) {
+    while (index < line.length && /\s/.test(line[index])) {
+      index += 1;
+    }
+    if (index >= line.length) {
+      break;
+    }
+
+    const column = index + 1;
+    if (line[index] === "\"") {
+      const close = line.indexOf("\"", index + 1);
+      if (close < 0) {
+        parts.push({ kind: "command", raw: line.slice(index).trim(), column });
+        break;
+      }
+      parts.push({ kind: "text", value: line.slice(index + 1, close), column });
+      index = close + 1;
+      continue;
+    }
+
+    const start = index;
+    const identifier = /^[A-Za-z_][\w.]*/.exec(line.slice(index));
+    if (identifier) {
+      index += identifier[0].length;
+      if (line[index] === "(") {
+        let depth = 0;
+        while (index < line.length) {
+          if (line[index] === "(") {
+            depth += 1;
+          } else if (line[index] === ")") {
+            depth -= 1;
+            if (depth === 0) {
+              index += 1;
+              break;
+            }
+          }
+          index += 1;
+        }
+        parts.push({ kind: "command", raw: line.slice(start, index).trim(), column });
+        continue;
+      }
+    }
+
+    while (index < line.length && !/\s/.test(line[index])) {
+      index += 1;
+    }
+    parts.push({ kind: "command", raw: line.slice(start, index).trim(), column });
+  }
+
+  const meaningfulParts = parts.filter((part) => part.kind === "text" || part.raw.length > 0);
+  const hasStructuredPart = meaningfulParts.some((part) =>
+    part.kind === "text" || isStructuredCommandPart(part.raw)
+  );
+  if (!hasStructuredPart) {
+    const raw = line.trim();
+    return raw ? [{ kind: "command", raw, column: Math.max(1, line.search(/\S/) + 1) }] : [];
+  }
+  return meaningfulParts;
 }
 
 type CcsTextCodeRegistryEntry = {
@@ -179,7 +235,12 @@ function prefixed(...values: number[]) {
     values.every((value, index) => bytes[offset + index] === value);
 }
 
-const controlSegment = (code: string, raw: string): DialogueSegment => ({ kind: "control", code, raw });
+const controlSegment = (code: string, raw: string, target?: string): DialogueSegment => ({
+  kind: "control",
+  code,
+  raw,
+  ...(target ? { target } : {})
+});
 
 const substitutionSegment = (
   name: Extract<DialogueSegment, { kind: "substitution" }>["name"],
@@ -360,7 +421,8 @@ function segmentForMacro(raw: string): DialogueSegment | undefined {
     return undefined;
   }
   const name = match[1].toLowerCase();
-  const args = parseNumericArgs(match[2]);
+  const argsText = match[2];
+  const args = parseNumericArgs(argsText);
 
   switch (name) {
     case "linebreak":
@@ -421,8 +483,10 @@ function segmentForMacro(raw: string): DialogueSegment | undefined {
     case "isset":
     case "call":
     case "goto":
+      return controlSegment(name, raw, parseFlowTarget(argsText));
     case "result_is":
     case "result_not":
+    case "hasitem":
     case "store_registers":
     case "load_registers":
     case "swap":
@@ -922,6 +986,64 @@ function stripComment(line: string): string {
   }
   return line;
 }
+
+function scriptCommandFromRaw(raw: string, sourceLocation: ScriptCommand["sourceLocation"]): ScriptCommand {
+  const control = parseControlCommand(raw);
+  if (control) {
+    return {
+      cmd: "control",
+      raw,
+      sourceLocation,
+      code: control.code,
+      ...(control.target ? { target: control.target } : {})
+    };
+  }
+  return {
+    cmd: normalizeKnownCommand(raw),
+    raw,
+    sourceLocation
+  };
+}
+
+function parseControlCommand(raw: string): { code: string; target?: string } | undefined {
+  const match = raw.trim().match(/^([A-Za-z_][\w.]*)\s*(?:\((.*)\))?$/);
+  if (!match) {
+    return undefined;
+  }
+  const code = match[1].toLowerCase();
+  if (!isKnownControlCommand(code)) {
+    return undefined;
+  }
+  const target = code === "call" || code === "goto" ? parseFlowTarget(match[2]) : undefined;
+  return { code, ...(target ? { target } : {}) };
+}
+
+function parseFlowTarget(argsText: string | undefined): string | undefined {
+  const target = argsText?.trim();
+  return target && /^[A-Za-z_][\w.-]*$/.test(target) ? target : undefined;
+}
+
+function isStructuredCommandPart(raw: string): boolean {
+  return Boolean(parseControlCommand(raw)) || isKnownRuntimeCommand(raw.trim().toLowerCase());
+}
+
+function isKnownControlCommand(cmd: string): boolean {
+  return CONTROL_COMMANDS.has(cmd);
+}
+
+const CONTROL_COMMANDS = new Set([
+  "set",
+  "unset",
+  "isset",
+  "call",
+  "goto",
+  "result_is",
+  "result_not",
+  "hasitem",
+  "store_registers",
+  "load_registers",
+  "swap"
+]);
 
 function normalizeKnownCommand(raw: string): string {
   const lower = raw.trim().toLowerCase();

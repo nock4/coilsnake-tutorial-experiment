@@ -2,7 +2,14 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildDialoguePages, ManifestSchema, resolveScriptReference, TutorialStatusSchema } from "@eb/schemas";
+import {
+  buildDialoguePages,
+  ManifestSchema,
+  resolveScriptReference,
+  resolveScriptReferenceFlow,
+  TutorialStatusSchema,
+  type ScriptCollection
+} from "@eb/schemas";
 import { convertProject, parseCcsFile, readNpcReferences, tokenizeCcsString } from "../src/index";
 import { validateGeneratedOutput } from "../src/validate";
 import { classifyProofTarget, findForbiddenProofArtifactText, findNpc744Placements, isNeutralizedMapDoorPointer, proofRecommendation } from "../../../scripts/proof-check";
@@ -189,6 +196,35 @@ describe("CCScript parser v0", () => {
     expect(parsed.commands.map((command) => command.cmd)).toEqual(["label", "text", "next", "end"]);
     expect(parsed.commands[1]).toMatchObject({ value: "http://example.test//kept" });
   });
+
+  it("captures flow command targets from mixed CCScript lines", () => {
+    const parsed = parseCcsFile("ccscript/example.ccs", [
+      "start:",
+      'call(other.target) "Synthetic inline text." next',
+      "goto(local_target)",
+      "local_target:",
+      '"Synthetic target text." end'
+    ].join("\n"));
+
+    expect(parsed.commands.map((command) => command.cmd)).toEqual([
+      "label",
+      "control",
+      "text",
+      "next",
+      "control",
+      "label",
+      "text",
+      "end"
+    ]);
+    expect(parsed.commands[1]).toMatchObject({ cmd: "control", code: "call", target: "other.target" });
+    expect(parsed.commands[4]).toMatchObject({ cmd: "control", code: "goto", target: "local_target" });
+  });
+
+  it("captures flow targets from text control macros", () => {
+    expect(tokenizeCcsString("{goto(other.target)}")).toEqual([
+      { kind: "control", code: "goto", raw: "{goto(other.target)}", target: "other.target" }
+    ]);
+  });
 });
 
 describe("CCScript text segments", () => {
@@ -270,38 +306,44 @@ describe("CCScript text segments", () => {
     expect(buildDialoguePages(embeddedNext.commands.slice(1)).map((page) => page.text)).toEqual(["One", "Two"]);
   });
 
-  it("keeps the tutorial robot and greeter pages stable", async () => {
+  it("keeps the tutorial robot and greeter pages byte-identical between linear and flow resolution", async () => {
     const source = await readFile("external/coilsnake-project/ccscript/robot.ccs", "utf8");
     const parsed = parseCcsFile("ccscript/robot.ccs", source);
-
-    const pagesForLabel = (label: string) => {
-      const start = parsed.commands.findIndex((command) => command.cmd === "label" && command.name === label);
-      const nextLabel = parsed.commands.findIndex((command, index) => index > start && command.cmd === "label");
-      return buildDialoguePages(parsed.commands.slice(start + 1, nextLabel < 0 ? undefined : nextLabel));
+    const scriptCollection: ScriptCollection = {
+      schemaVersion: "test",
+      sourceProjectPath: "external/coilsnake-project",
+      files: [{
+        path: "ccscript/robot.ccs",
+        commands: parsed.commands,
+        labels: parsed.labels,
+        counts: {
+          commands: parsed.commands.length,
+          labels: parsed.labels.length,
+          textCommands: parsed.commands.filter((command) => command.cmd === "text").length,
+          unknownCommands: parsed.commands.filter((command) => command.cmd === "unknown").length
+        },
+        warnings: parsed.warnings
+      }],
+      counts: {
+        files: 1,
+        commands: parsed.commands.length,
+        labels: parsed.labels.length,
+        textCommands: parsed.commands.filter((command) => command.cmd === "text").length,
+        unknownCommands: parsed.commands.filter((command) => command.cmd === "unknown").length
+      },
+      warnings: parsed.warnings
     };
 
-    expect(pagesForLabel("hello_world")).toEqual([
-      {
-        text: "@Hello World!",
-        ended: true,
-        unknownCommands: [],
-        segments: [{ kind: "text", value: "@Hello World!" }]
-      }
-    ]);
-    expect(pagesForLabel("greeter")).toEqual([
-      {
-        text: "@Beep boop. I greet, therefore I am.",
-        ended: false,
-        unknownCommands: [],
-        segments: [{ kind: "text", value: "@Beep boop. I greet, therefore I am." }]
-      },
-      {
-        text: "@New parts arrive tomorrow. Come back then.",
-        ended: true,
-        unknownCommands: [],
-        segments: [{ kind: "text", value: "@New parts arrive tomorrow. Come back then." }]
-      }
-    ]);
+    for (const reference of ["robot.hello_world", "robot.greeter"]) {
+      const legacy = resolveScriptReference(scriptCollection, reference);
+      const flow = resolveScriptReferenceFlow(scriptCollection, reference);
+
+      expect(flow?.truncated).toBe(false);
+      expect(Buffer.compare(
+        Buffer.from(JSON.stringify(buildDialoguePages(flow?.commands ?? []))),
+        Buffer.from(JSON.stringify(buildDialoguePages(legacy?.commands ?? [])))
+      )).toBe(0);
+    }
   });
 });
 

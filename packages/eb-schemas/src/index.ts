@@ -56,7 +56,8 @@ export const DialogueSegmentSchema = z.union([
   z.object({
     kind: z.literal("control"),
     code: z.string(),
-    raw: z.string()
+    raw: z.string(),
+    target: z.string().optional()
   })
 ]);
 
@@ -73,7 +74,9 @@ export const ScriptCommandSchema = z.object({
   sourceLocation: SourceLocationSchema,
   value: z.string().optional(),
   segments: z.array(DialogueSegmentSchema).optional(),
-  name: z.string().optional()
+  name: z.string().optional(),
+  code: z.string().optional(),
+  target: z.string().optional()
 });
 
 export const ScriptFileSchema = z.object({
@@ -423,6 +426,18 @@ export type ResolvedScript = {
   commands: ScriptCommand[];
 };
 
+export type ResolveScriptReferenceFlowOptions = {
+  maxCommands?: number;
+  maxJumps?: number;
+};
+
+export type ResolvedScriptFlow = ResolvedScript & {
+  truncated: boolean;
+  truncatedReason?: "cycle" | "command_budget" | "jump_budget" | "missing_target";
+  commandsVisited: number;
+  jumps: number;
+};
+
 export const DialoguePageSchema = z.object({
   text: z.string(),
   ended: z.boolean(),
@@ -468,6 +483,351 @@ export function resolveScriptReference(scripts: ScriptCollection, reference: str
     commands
   };
 }
+
+type ScriptFile = ScriptCollection["files"][number];
+
+type FlowPointer = {
+  file: ScriptFile;
+  index: number;
+  label: string;
+  labelKey: string;
+};
+
+type FlowFrame = FlowPointer;
+
+type FlowControl =
+  | { kind: "call" | "goto"; target?: string }
+  | { kind: "conditional" };
+
+type FlowAction =
+  | { kind: "next" }
+  | { kind: "jumped" }
+  | { kind: "stop" };
+
+export function resolveScriptReferenceFlow(
+  scripts: ScriptCollection,
+  reference: string,
+  options: ResolveScriptReferenceFlowOptions = {}
+): ResolvedScriptFlow | undefined {
+  const maxCommands = options.maxCommands ?? 800;
+  const maxJumps = options.maxJumps ?? 64;
+  const start = resolveLabelPointer(scripts, reference);
+  if (!start) {
+    return undefined;
+  }
+
+  const commands: ScriptCommand[] = [];
+  const callStack: FlowFrame[] = [];
+  const activeLabels = new Set<string>([start.labelKey]);
+  let current: FlowPointer = start;
+  let pendingConditional = false;
+  let commandsVisited = 0;
+  let jumps = 0;
+  let truncated = false;
+  let truncatedReason: ResolvedScriptFlow["truncatedReason"];
+
+  const markTruncated = (reason: NonNullable<ResolvedScriptFlow["truncatedReason"]>): FlowAction => {
+    truncated = true;
+    truncatedReason = reason;
+    return { kind: "stop" };
+  };
+
+  const popFrame = (): FlowAction => {
+    activeLabels.delete(current.labelKey);
+    const frame = callStack.pop();
+    if (!frame) {
+      return { kind: "stop" };
+    }
+    current = frame;
+    pendingConditional = false;
+    return { kind: "jumped" };
+  };
+
+  const followControl = (control: Extract<FlowControl, { kind: "call" | "goto" }>): FlowAction => {
+    if (pendingConditional) {
+      pendingConditional = false;
+      return { kind: "next" };
+    }
+    if (!control.target) {
+      return markTruncated("missing_target");
+    }
+    const target = resolveTargetPointer(scripts, current.file, control.target);
+    if (!target) {
+      return markTruncated("missing_target");
+    }
+    if (activeLabels.has(target.labelKey)) {
+      return markTruncated("cycle");
+    }
+    jumps += 1;
+    if (jumps > maxJumps) {
+      return markTruncated("jump_budget");
+    }
+
+    if (control.kind === "call") {
+      callStack.push({
+        file: current.file,
+        index: current.index + 1,
+        label: current.label,
+        labelKey: current.labelKey
+      });
+    } else {
+      activeLabels.delete(current.labelKey);
+    }
+
+    activeLabels.add(target.labelKey);
+    current = target;
+    pendingConditional = false;
+    return { kind: "jumped" };
+  };
+
+  const collectTextCommand = (command: ScriptCommand, segments: DialogueSegment[]) => {
+    if (segments.length === 0) {
+      return;
+    }
+    commands.push({
+      ...command,
+      segments
+    });
+  };
+
+  const processTextCommand = (command: ScriptCommand): FlowAction => {
+    const sourceSegments = command.segments ?? [{ kind: "text" as const, value: command.value ?? command.raw }];
+    const collectedSegments: DialogueSegment[] = [];
+
+    for (const segment of sourceSegments) {
+      if (segment.kind === "control" && isTerminatorControl(segment.code)) {
+        if (callStack.length > 0) {
+          collectTextCommand(command, collectedSegments);
+          return popFrame();
+        }
+        collectTextCommand(command, [...collectedSegments, segment]);
+        return { kind: "stop" };
+      }
+
+      const flow = flowControlFromSegment(segment);
+      if (flow?.kind === "conditional") {
+        pendingConditional = true;
+        continue;
+      }
+      if (flow?.kind === "call" || flow?.kind === "goto") {
+        collectTextCommand(command, collectedSegments);
+        const action = followControl(flow);
+        if (action.kind === "next") {
+          continue;
+        }
+        return action;
+      }
+
+      collectedSegments.push(segment);
+      pendingConditional = false;
+    }
+
+    collectTextCommand(command, collectedSegments);
+    return { kind: "next" };
+  };
+
+  while (true) {
+    if (commandsVisited >= maxCommands) {
+      markTruncated("command_budget");
+      break;
+    }
+
+    const command = current.file.commands[current.index];
+    if (!command) {
+      if (callStack.length > 0) {
+        const action = popFrame();
+        if (action.kind === "stop") {
+          break;
+        }
+        continue;
+      }
+      break;
+    }
+
+    if (command.cmd === "label") {
+      if (callStack.length > 0) {
+        const action = popFrame();
+        if (action.kind === "stop") {
+          break;
+        }
+        continue;
+      }
+      break;
+    }
+
+    commandsVisited += 1;
+
+    if (command.cmd === "text") {
+      const action = processTextCommand(command);
+      if (action.kind === "stop") {
+        break;
+      }
+      if (action.kind === "next") {
+        current = { ...current, index: current.index + 1 };
+      }
+      continue;
+    }
+
+    const flow = flowControlFromCommand(command);
+    if (flow?.kind === "conditional") {
+      pendingConditional = true;
+      current = { ...current, index: current.index + 1 };
+      continue;
+    }
+    if (flow?.kind === "call" || flow?.kind === "goto") {
+      const action = followControl(flow);
+      if (action.kind === "stop") {
+        break;
+      }
+      if (action.kind === "next") {
+        current = { ...current, index: current.index + 1 };
+      }
+      continue;
+    }
+
+    if (command.cmd === "end" || command.cmd === "eob") {
+      if (callStack.length > 0) {
+        const action = popFrame();
+        if (action.kind === "stop") {
+          break;
+        }
+        continue;
+      }
+      commands.push(command);
+      break;
+    }
+
+    commands.push(command);
+    pendingConditional = false;
+    current = { ...current, index: current.index + 1 };
+  }
+
+  return {
+    reference,
+    filePath: start.file.path,
+    label: start.label,
+    commands,
+    truncated,
+    ...(truncatedReason ? { truncatedReason } : {}),
+    commandsVisited,
+    jumps
+  };
+}
+
+function resolveLabelPointer(scripts: ScriptCollection, reference: string): FlowPointer | undefined {
+  const split = splitScriptReference(reference);
+  if (!split) {
+    return undefined;
+  }
+  const file = findScriptFileByStem(scripts, split.scriptFileStem);
+  if (!file) {
+    return undefined;
+  }
+  const labelIndex = file.commands.findIndex((command) => command.cmd === "label" && command.name === split.label);
+  if (labelIndex < 0) {
+    return undefined;
+  }
+  return {
+    file,
+    index: labelIndex + 1,
+    label: split.label,
+    labelKey: labelKey(file, split.label)
+  };
+}
+
+function resolveTargetPointer(
+  scripts: ScriptCollection,
+  sourceFile: ScriptFile,
+  targetReference: string
+): FlowPointer | undefined {
+  const trimmed = targetReference.trim();
+  const split = splitScriptReference(trimmed);
+  const file = split ? findScriptFileByStem(scripts, split.scriptFileStem) : sourceFile;
+  const label = split?.label ?? trimmed;
+  if (!file || !label) {
+    return undefined;
+  }
+  const labelIndex = file.commands.findIndex((command) => command.cmd === "label" && command.name === label);
+  if (labelIndex < 0) {
+    return undefined;
+  }
+  return {
+    file,
+    index: labelIndex + 1,
+    label,
+    labelKey: labelKey(file, label)
+  };
+}
+
+function splitScriptReference(reference: string): { scriptFileStem: string; label: string } | undefined {
+  const separator = reference.indexOf(".");
+  if (separator < 1 || separator >= reference.length - 1) {
+    return undefined;
+  }
+  return {
+    scriptFileStem: reference.slice(0, separator),
+    label: reference.slice(separator + 1)
+  };
+}
+
+function findScriptFileByStem(scripts: ScriptCollection, scriptFileStem: string): ScriptFile | undefined {
+  return scripts.files.find((scriptFile) => scriptFileStemForPath(scriptFile.path) === scriptFileStem);
+}
+
+function scriptFileStemForPath(filePath: string): string {
+  return filePath.replace(/^ccscript\//, "").replace(/\.ccs$/i, "");
+}
+
+function labelKey(file: ScriptFile, label: string): string {
+  return `${scriptFileStemForPath(file.path)}.${label}`;
+}
+
+function flowControlFromCommand(command: ScriptCommand): FlowControl | undefined {
+  const code = command.cmd === "control" ? command.code : command.cmd;
+  if (!code) {
+    return undefined;
+  }
+  if (isConditionalControl(code)) {
+    return { kind: "conditional" };
+  }
+  if (code === "call" || code === "goto") {
+    return { kind: code, target: command.target };
+  }
+  return undefined;
+}
+
+function flowControlFromSegment(segment: DialogueSegment): FlowControl | undefined {
+  if (segment.kind !== "control") {
+    return undefined;
+  }
+  if (isConditionalControl(segment.code)) {
+    return { kind: "conditional" };
+  }
+  if (segment.code === "call" || segment.code === "goto") {
+    return { kind: segment.code, target: segment.target };
+  }
+  return undefined;
+}
+
+function isConditionalControl(code: string): boolean {
+  return CONDITIONAL_CONTROL_CODES.has(code);
+}
+
+function isTerminatorControl(code: string): boolean {
+  return code === "end" || code === "eob";
+}
+
+const CONDITIONAL_CONTROL_CODES = new Set([
+  "result_is",
+  "result_not",
+  "isset",
+  "hasitem",
+  "has_item",
+  "hasmoney",
+  "has_money",
+  "checkgoods",
+  "check_goods"
+]);
 
 export function buildDialoguePages(commands: ScriptCommand[]): DialoguePage[] {
   const pages: DialoguePage[] = [];
