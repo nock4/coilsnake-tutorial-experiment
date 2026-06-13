@@ -1,4 +1,4 @@
-import type { BattleEnemy, CharacterData } from "@eb/schemas";
+import type { BattleEnemy, CharacterCollection, CharacterData } from "@eb/schemas";
 import {
   createRollingMeter,
   isDepleted,
@@ -14,7 +14,11 @@ import {
 } from "./characterModel";
 
 export type Rng = () => number;
-export type BattleActor = "player" | "enemy";
+export type BattleSide = "party" | "enemy";
+export type BattleActor = {
+  side: BattleSide;
+  index: number;
+};
 export type BattleOutcome = "ongoing" | "win" | "lose";
 
 export type Combatant = {
@@ -26,15 +30,16 @@ export type Combatant = {
   hp: RollingMeterState;
   offense: number;
   defense: number;
+  speed: number;
   isEnemy: boolean;
 };
 
 export type BattleState = {
-  player: Combatant;
-  enemy: Combatant;
+  party: Combatant[];
+  enemies: Combatant[];
 };
 
-export type PlayerCombatantOptions = Partial<Pick<Combatant, "name" | "level" | "maxHp" | "offense" | "defense">> & {
+export type PlayerCombatantOptions = Partial<Pick<Combatant, "name" | "level" | "maxHp" | "offense" | "defense" | "speed">> & {
   hpRatePerSec?: number;
   character?: CharacterData;
   partyMember?: PartyMember;
@@ -43,14 +48,23 @@ export type PlayerCombatantOptions = Partial<Pick<Combatant, "name" | "level" | 
 
 export type EnemyCombatantOptions = {
   hpRatePerSec?: number;
+  speed?: number;
+};
+
+export type BattleStateOptions = PlayerCombatantOptions & {
+  characters?: CharacterCollection;
+  partyMembers?: PartyMember[];
+  partyOptions?: PlayerCombatantOptions[];
+  enemyOptions?: EnemyCombatantOptions[];
 };
 
 export type TurnResolution = {
   state: BattleState;
   actor: BattleActor;
-  defender: BattleActor;
+  defender: BattleActor | null;
   damage: number;
   outcome: BattleOutcome;
+  skipped: boolean;
 };
 
 export const PLAYER_DEFAULTS = {
@@ -61,6 +75,7 @@ export const PLAYER_DEFAULTS = {
   pp: 0,
   offense: 12,
   defense: 6,
+  speed: 5,
   hpRatePerSec: 36
 } as const;
 
@@ -85,6 +100,7 @@ export function buildPlayerCombatant(options: PlayerCombatantOptions = {}): Comb
     hp: createRollingMeter(maxHp, options.hpRatePerSec ?? PLAYER_DEFAULTS.hpRatePerSec),
     offense: stat(options.offense ?? PLAYER_DEFAULTS.offense) + stat(options.statBonuses?.offense ?? 0),
     defense: stat(options.defense ?? PLAYER_DEFAULTS.defense) + stat(options.statBonuses?.defense ?? 0),
+    speed: stat(options.speed ?? PLAYER_DEFAULTS.speed) + stat(options.statBonuses?.speed ?? 0),
     isEnemy: false
   };
 }
@@ -100,14 +116,38 @@ export function buildEnemyCombatant(enemy: BattleEnemy, options: EnemyCombatantO
     hp: createRollingMeter(maxHp, options.hpRatePerSec ?? ENEMY_HP_RATE_PER_SEC),
     offense: stat(enemy.offense),
     defense: stat(enemy.defense),
+    speed: stat(options.speed ?? enemySpeed(enemy)),
     isEnemy: true
   };
 }
 
-export function createBattleState(enemy: BattleEnemy, playerOptions: PlayerCombatantOptions = {}): BattleState {
+export function buildPartyCombatants(options: BattleStateOptions = {}): Combatant[] {
+  const members = options.partyMembers?.slice(0, 4) ?? [];
+  if (members.length > 0) {
+    return members.map((partyMember, index) => buildPlayerCombatant(playerOptionsAt(options, index, { partyMember })));
+  }
+
+  const characters = options.characters?.characters.slice(0, 4) ?? [];
+  if (characters.length > 0) {
+    return characters.map((character, index) => buildPlayerCombatant(playerOptionsAt(options, index, { character })));
+  }
+
+  if (options.partyMember) {
+    return [buildPlayerCombatant(playerOptionsAt(options, 0, { partyMember: options.partyMember }))];
+  }
+
+  if (options.character) {
+    return [buildPlayerCombatant(playerOptionsAt(options, 0, { character: options.character }))];
+  }
+
+  return [buildPlayerCombatant(playerOptionsAt(options, 0))];
+}
+
+export function createBattleState(enemies: BattleEnemy | BattleEnemy[], options: BattleStateOptions = {}): BattleState {
+  const enemyList = Array.isArray(enemies) ? enemies : [enemies];
   return {
-    player: buildPlayerCombatant(playerOptions),
-    enemy: buildEnemyCombatant(enemy)
+    party: buildPartyCombatants(options),
+    enemies: enemyList.map((enemy, index) => buildEnemyCombatant(enemy, options.enemyOptions?.[index]))
   };
 }
 
@@ -118,19 +158,51 @@ export function damage(attacker: Combatant, defender: Combatant, rng: Rng): numb
   return Math.max(1, Math.floor(base * spread));
 }
 
-export function turnOrder(_state: BattleState): BattleActor[] {
-  return ["player", "enemy"];
+export function turnOrder(state: BattleState): BattleActor[] {
+  return allActors(state)
+    .filter((actor) => {
+      const combatant = combatantFor(state, actor);
+      return Boolean(combatant && isCombatantAlive(combatant));
+    })
+    .sort((a, b) => {
+      const left = combatantFor(state, a);
+      const right = combatantFor(state, b);
+      const speedDelta = stat(right?.speed ?? 0) - stat(left?.speed ?? 0);
+      if (speedDelta !== 0) {
+        return speedDelta;
+      }
+      const sideDelta = sideTieRank(a.side) - sideTieRank(b.side);
+      return sideDelta !== 0 ? sideDelta : a.index - b.index;
+    });
 }
 
-export function resolveTurn(state: BattleState, actor: BattleActor, rng: Rng): TurnResolution {
+export function resolveTurn(
+  state: BattleState,
+  actorInput: BattleActor | "player" | "enemy",
+  rng: Rng,
+  options: { targetIndex?: number } = {}
+): TurnResolution {
+  const actor = normalizeActor(actorInput);
   const currentOutcome = outcome(state);
-  const defender = opposingActor(actor);
   if (currentOutcome !== "ongoing") {
-    return { state, actor, defender, damage: 0, outcome: currentOutcome };
+    return { state, actor, defender: null, damage: 0, outcome: currentOutcome, skipped: true };
   }
 
   const attackerCombatant = combatantFor(state, actor);
+  if (!attackerCombatant || !isCombatantAlive(attackerCombatant)) {
+    return { state, actor, defender: null, damage: 0, outcome: currentOutcome, skipped: true };
+  }
+
+  const defender = targetForActor(state, actor, options.targetIndex);
+  if (!defender) {
+    return { state, actor, defender: null, damage: 0, outcome: currentOutcome, skipped: true };
+  }
+
   const defenderCombatant = combatantFor(state, defender);
+  if (!defenderCombatant) {
+    return { state, actor, defender: null, damage: 0, outcome: currentOutcome, skipped: true };
+  }
+
   const amount = damage(attackerCombatant, defenderCombatant, rng);
   const nextDefender = applyDamage(defenderCombatant, amount);
   const nextState = withCombatant(state, defender, nextDefender);
@@ -139,31 +211,60 @@ export function resolveTurn(state: BattleState, actor: BattleActor, rng: Rng): T
     actor,
     defender,
     damage: amount,
-    outcome: outcome(nextState)
+    outcome: outcome(nextState),
+    skipped: false
   };
 }
 
 export function tickBattleMeters(state: BattleState, dtMs: number): BattleState {
   return {
-    player: { ...state.player, hp: tick(state.player.hp, dtMs) },
-    enemy: { ...state.enemy, hp: tick(state.enemy.hp, dtMs) }
+    party: state.party.map((combatant) => ({ ...combatant, hp: tick(combatant.hp, dtMs) })),
+    enemies: state.enemies.map((combatant) => ({ ...combatant, hp: tick(combatant.hp, dtMs) }))
   };
 }
 
 export function outcome(state: BattleState): BattleOutcome {
-  if (isDepleted(state.enemy.hp)) {
+  if (state.enemies.length === 0 || state.enemies.every((enemy) => isDepleted(enemy.hp))) {
     return "win";
   }
-  if (isDepleted(state.player.hp)) {
+  if (state.party.length === 0 || state.party.every((member) => isDepleted(member.hp))) {
     return "lose";
   }
   return "ongoing";
 }
 
-export function withCombatant(state: BattleState, actor: BattleActor, combatant: Combatant): BattleState {
-  return actor === "player"
-    ? { ...state, player: combatant }
-    : { ...state, enemy: combatant };
+export function withCombatant(
+  state: BattleState,
+  actorInput: BattleActor | "player" | "enemy",
+  combatant: Combatant
+): BattleState {
+  const actor = normalizeActor(actorInput);
+  if (actor.side === "party") {
+    return { ...state, party: replaceAt(state.party, actor.index, combatant) };
+  }
+  return { ...state, enemies: replaceAt(state.enemies, actor.index, combatant) };
+}
+
+export function combatantAt(state: BattleState, actorInput: BattleActor | "player" | "enemy"): Combatant | undefined {
+  return combatantFor(state, normalizeActor(actorInput));
+}
+
+export function isCombatantAlive(combatant: Pick<Combatant, "hp">): boolean {
+  return !isDepleted(combatant.hp);
+}
+
+export function firstLivingIndex(combatants: Combatant[]): number {
+  return combatants.findIndex(isCombatantAlive);
+}
+
+export function normalizeActor(actor: BattleActor | "player" | "enemy"): BattleActor {
+  if (actor === "player") {
+    return { side: "party", index: 0 };
+  }
+  if (actor === "enemy") {
+    return { side: "enemy", index: 0 };
+  }
+  return actor;
 }
 
 function applyDamage(combatant: Combatant, amount: number): Combatant {
@@ -173,12 +274,49 @@ function applyDamage(combatant: Combatant, amount: number): Combatant {
   };
 }
 
-function combatantFor(state: BattleState, actor: BattleActor): Combatant {
-  return actor === "player" ? state.player : state.enemy;
+function combatantFor(state: BattleState, actor: BattleActor): Combatant | undefined {
+  return actor.side === "party" ? state.party[actor.index] : state.enemies[actor.index];
 }
 
-function opposingActor(actor: BattleActor): BattleActor {
-  return actor === "player" ? "enemy" : "player";
+function targetForActor(state: BattleState, actor: BattleActor, targetIndex: number | undefined): BattleActor | null {
+  if (actor.side === "party") {
+    return livingTarget(state.enemies, "enemy", targetIndex);
+  }
+
+  // Enemy AI is intentionally simple: each enemy attacks the first living party member.
+  return livingTarget(state.party, "party");
+}
+
+function livingTarget(combatants: Combatant[], side: BattleSide, requestedIndex?: number): BattleActor | null {
+  if (
+    requestedIndex !== undefined &&
+    requestedIndex >= 0 &&
+    requestedIndex < combatants.length &&
+    isCombatantAlive(combatants[requestedIndex])
+  ) {
+    return { side, index: requestedIndex };
+  }
+
+  const index = firstLivingIndex(combatants);
+  return index >= 0 ? { side, index } : null;
+}
+
+function allActors(state: BattleState): BattleActor[] {
+  return [
+    ...state.party.map((_, index) => ({ side: "party" as const, index })),
+    ...state.enemies.map((_, index) => ({ side: "enemy" as const, index }))
+  ];
+}
+
+function sideTieRank(side: BattleSide): number {
+  return side === "party" ? 0 : 1;
+}
+
+function replaceAt<T>(items: T[], index: number, item: T): T[] {
+  if (index < 0 || index >= items.length) {
+    return items;
+  }
+  return items.map((current, currentIndex) => (currentIndex === index ? item : current));
 }
 
 function normalizedRoll(value: number): number {
@@ -193,4 +331,29 @@ function stat(value: number): number {
     return 0;
   }
   return Math.max(0, Math.floor(value));
+}
+
+function enemySpeed(enemy: BattleEnemy): number {
+  const maybeSpeed = (enemy as BattleEnemy & { speed?: number }).speed;
+  return stat(maybeSpeed ?? enemy.level);
+}
+
+function playerOptionsAt(
+  options: BattleStateOptions,
+  index: number,
+  extra: Pick<PlayerCombatantOptions, "character" | "partyMember"> = {}
+): PlayerCombatantOptions {
+  const indexed = options.partyOptions?.[index] ?? {};
+  return {
+    name: options.name,
+    level: options.level,
+    maxHp: options.maxHp,
+    offense: options.offense,
+    defense: options.defense,
+    speed: options.speed,
+    hpRatePerSec: options.hpRatePerSec,
+    statBonuses: options.statBonuses,
+    ...indexed,
+    ...extra
+  };
 }

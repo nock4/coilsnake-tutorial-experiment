@@ -13,10 +13,27 @@ import {
 export type SceneMode = "world" | "fallback" | "error" | "battle";
 export type BattlePhase = "menu" | "enemy-rolling" | "player-rolling" | "win" | "lose" | "flee";
 
+export type BattleActorDebug = {
+  side: "party" | "enemy";
+  index: number;
+};
+
+export type BattleCombatantDebug = {
+  hpDisplayed: number;
+  hpTarget: number;
+  isRolling: boolean;
+  alive: boolean;
+};
+
 export type BattleDebug = {
   mode: "battle";
   phase: BattlePhase;
   menuIndex: number;
+  targetIndex: number;
+  turnOrder: BattleActorDebug[];
+  currentActor: BattleActorDebug | null;
+  party: BattleCombatantDebug[];
+  enemies: BattleCombatantDebug[];
   player: {
     name: string;
     hpDisplayed: number;

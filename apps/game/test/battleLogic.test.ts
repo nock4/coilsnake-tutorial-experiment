@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BattleEnemy, CharacterData } from "@eb/schemas";
+import type { BattleEnemy, CharacterCollection, CharacterData } from "@eb/schemas";
 import {
   buildEnemyCombatant,
   buildPlayerCombatant,
@@ -11,99 +11,79 @@ import {
   tickBattleMeters,
   turnOrder,
   withCombatant,
+  type BattleActor,
   type BattleState
 } from "../src/battleLogic";
 import { setTarget } from "../src/rollingMeter";
 
-const opponent: BattleEnemy = {
-  id: 1,
-  name: "OPPONENT",
-  spriteId: 1,
-  level: 3,
-  hp: 24,
-  defense: 4,
-  offense: 8,
-  experience: 0,
-  bossFlag: false,
-  actions: [
-    { id: 0, arg: 0 },
-    { id: 0, arg: 0 },
-    { id: 0, arg: 0 },
-    { id: 0, arg: 0 }
-  ],
-  itemDropped: null
-};
+const opponentA: BattleEnemy = enemy(1, "OPPONENT_A", { hp: 24, defense: 4, offense: 8, level: 3 });
+const opponentB: BattleEnemy = enemy(2, "OPPONENT_B", { hp: 30, defense: 4, offense: 8, level: 5 });
+const opponentC: BattleEnemy = enemy(3, "OPPONENT_C", { hp: 18, defense: 2, offense: 7, level: 2 });
 
-const partyCharacter: CharacterData = {
-  id: 0,
-  name: "PARTY_LEAD",
-  level: 6,
-  maxHp: 72,
-  maxPp: 18,
-  offense: 21,
-  defense: 8,
-  speed: 7,
-  guts: 5,
-  vitality: 6,
-  iq: 4,
-  luck: 3,
-  startingItems: [1],
-  money: 9
-};
-
-function state(): BattleState {
-  return createBattleState(opponent, {
-    maxHp: 30,
-    offense: 20,
-    defense: 6,
-    hpRatePerSec: 2
-  });
-}
+const partyCharacterA: CharacterData = character(0, "PARTY_A", { speed: 7, maxHp: 72, maxPp: 18, offense: 21, defense: 8 });
+const partyCharacterB: CharacterData = character(1, "PARTY_B", { speed: 4, maxHp: 48, maxPp: 10, offense: 16, defense: 6 });
 
 describe("battle damage", () => {
   it("is deterministic when RNG is injected", () => {
     const player = buildPlayerCombatant({ offense: 20 });
-    const enemy = buildEnemyCombatant({ ...opponent, defense: 4 });
+    const enemyCombatant = buildEnemyCombatant({ ...opponentA, defense: 4 });
 
-    expect(damage(player, enemy, () => 0)).toBe(16);
-    expect(damage(player, enemy, () => 0.5)).toBe(18);
-    expect(damage(player, enemy, () => 1)).toBe(19);
+    expect(damage(player, enemyCombatant, () => 0)).toBe(16);
+    expect(damage(player, enemyCombatant, () => 0.5)).toBe(18);
+    expect(damage(player, enemyCombatant, () => 1)).toBe(19);
   });
 });
 
 describe("battle player model", () => {
-  it("builds the player combatant from generated character data when provided", () => {
-    const battle = createBattleState(opponent, { character: partyCharacter, hpRatePerSec: 5 });
+  it("builds the party from generated character data when provided", () => {
+    const battle = createBattleState(opponentA, { characters: characters([partyCharacterA]), hpRatePerSec: 5 });
 
-    expect(battle.player).toMatchObject({
-      name: "PARTY_LEAD",
+    expect(battle.party).toHaveLength(1);
+    expect(battle.party[0]).toMatchObject({
+      name: "PARTY_A",
       level: 6,
       maxHp: 72,
       maxPp: 18,
       pp: 18,
       offense: 21,
       defense: 8,
+      speed: 7,
       isEnemy: false
     });
-    expect(battle.player.hp).toMatchObject({ displayed: 72, target: 72, ratePerSec: 5 });
+    expect(battle.party[0].hp).toMatchObject({ displayed: 72, target: 72, ratePerSec: 5 });
   });
 
-  it("applies optional effective stat bonuses to the generated player combatant", () => {
-    const battle = createBattleState(opponent, {
-      character: partyCharacter,
-      statBonuses: { offense: 4, defense: 2 }
+  it("limits the generated party to four combatants", () => {
+    const battle = createBattleState(opponentA, {
+      characters: characters([
+        partyCharacterA,
+        partyCharacterB,
+        character(2, "PARTY_C", { speed: 3 }),
+        character(3, "PARTY_D", { speed: 2 }),
+        character(4, "PARTY_E", { speed: 1 })
+      ])
     });
 
-    expect(battle.player).toMatchObject({
+    expect(battle.party.map((member) => member.name)).toEqual(["PARTY_A", "PARTY_B", "PARTY_C", "PARTY_D"]);
+  });
+
+  it("applies optional effective stat bonuses to generated party combatants", () => {
+    const battle = createBattleState(opponentA, {
+      characters: characters([partyCharacterA]),
+      statBonuses: { offense: 4, defense: 2, speed: 3 }
+    });
+
+    expect(battle.party[0]).toMatchObject({
       offense: 25,
-      defense: 10
+      defense: 10,
+      speed: 10
     });
   });
 
   it("keeps the neutral player fallback when generated character data is absent", () => {
-    const battle = createBattleState(opponent);
+    const battle = createBattleState(opponentA);
 
-    expect(battle.player).toMatchObject({
+    expect(battle.party[0]).toMatchObject({
       name: PLAYER_DEFAULTS.name,
       level: PLAYER_DEFAULTS.level,
       maxHp: PLAYER_DEFAULTS.maxHp,
@@ -111,71 +91,211 @@ describe("battle player model", () => {
       pp: PLAYER_DEFAULTS.pp,
       offense: PLAYER_DEFAULTS.offense,
       defense: PLAYER_DEFAULTS.defense,
+      speed: PLAYER_DEFAULTS.speed,
       isEnemy: false
     });
   });
 });
 
 describe("battle turn resolution", () => {
-  it("uses player-first turn order", () => {
-    expect(turnOrder(state())).toEqual(["player", "enemy"]);
+  it("orders living combatants by speed with deterministic ties", () => {
+    const battle = createBattleState([opponentA, opponentB], {
+      characters: characters([partyCharacterA, partyCharacterB]),
+      enemyOptions: [{ speed: 4 }, { speed: 7 }]
+    });
+
+    expect(turnOrder(battle)).toEqual([
+      actor("party", 0),
+      actor("enemy", 1),
+      actor("party", 1),
+      actor("enemy", 0)
+    ]);
   });
 
-  it("applies attack damage to the defender target HP", () => {
-    const result = resolveTurn(state(), "player", () => 0.5);
+  it("applies player BASH damage to the selected target", () => {
+    const battle = createBattleState([opponentA, opponentB], {
+      maxHp: 30,
+      offense: 20,
+      defense: 6
+    });
 
-    expect(result.actor).toBe("player");
-    expect(result.defender).toBe("enemy");
+    const result = resolveTurn(battle, actor("party", 0), () => 0.5, { targetIndex: 1 });
+
+    expect(result.actor).toEqual(actor("party", 0));
+    expect(result.defender).toEqual(actor("enemy", 1));
     expect(result.damage).toBe(18);
-    expect(result.state.enemy.hp.displayed).toBe(24);
-    expect(result.state.enemy.hp.target).toBe(6);
-    expect(result.state.enemy.hp.isRolling).toBe(true);
+    expect(result.state.enemies[0].hp.target).toBe(24);
+    expect(result.state.enemies[1].hp.displayed).toBe(30);
+    expect(result.state.enemies[1].hp.target).toBe(12);
+    expect(result.state.enemies[1].hp.isRolling).toBe(true);
+  });
+
+  it("uses first-living party targeting for simple enemy AI", () => {
+    let battle = createBattleState([opponentA], {
+      characters: characters([partyCharacterA, partyCharacterB]),
+      enemyOptions: [{ speed: 9 }]
+    });
+    battle = withCombatant(battle, actor("party", 0), {
+      ...battle.party[0],
+      hp: { ...battle.party[0].hp, displayed: 0, target: 0, isRolling: false }
+    });
+
+    const result = resolveTurn(battle, actor("enemy", 0), () => 0.5);
+
+    expect(result.defender).toEqual(actor("party", 1));
+    expect(result.state.party[1].hp.target).toBeLessThan(result.state.party[1].hp.displayed);
   });
 });
 
 describe("battle outcomes", () => {
-  it("wins only when enemy displayed HP reaches zero", () => {
-    let battle = state();
-    battle = withCombatant(battle, "enemy", {
-      ...battle.enemy,
-      hp: setTarget(battle.enemy.hp, 0)
-    });
+  it("wins only when every enemy displayed HP reaches zero", () => {
+    let battle = createBattleState([opponentA, opponentB]);
+    battle = drainDisplayedHp(battle, actor("enemy", 0));
 
     expect(outcome(battle)).toBe("ongoing");
-    battle = tickBattleMeters(battle, 1000);
-    expect(battle.enemy.hp.displayed).toBe(0);
+
+    battle = drainDisplayedHp(battle, actor("enemy", 1));
+
+    expect(battle.enemies.map((enemyCombatant) => enemyCombatant.hp.displayed)).toEqual([0, 0]);
     expect(outcome(battle)).toBe("win");
   });
 
-  it("loses only when player displayed HP reaches zero", () => {
-    let battle = state();
-    battle = withCombatant(battle, "player", {
-      ...battle.player,
-      hp: setTarget(battle.player.hp, 0)
-    });
+  it("loses only when every party member displayed HP reaches zero", () => {
+    let battle = createBattleState([opponentA], { characters: characters([partyCharacterA, partyCharacterB]) });
+    battle = drainDisplayedHp(battle, actor("party", 0));
 
     expect(outcome(battle)).toBe("ongoing");
-    battle = tickBattleMeters(battle, 15_000);
-    expect(battle.player.hp.displayed).toBe(0);
+
+    battle = drainDisplayedHp(battle, actor("party", 1));
+
+    expect(battle.party.map((member) => member.hp.displayed)).toEqual([0, 0]);
     expect(outcome(battle)).toBe("lose");
   });
 
-  it("survives a pending fatal target when the enemy displayed HP reaches zero first", () => {
-    let battle = state();
-    battle = withCombatant(battle, "player", {
-      ...battle.player,
-      hp: setTarget(battle.player.hp, 0)
+  it("survives a party member fatal target when all enemies display zero first", () => {
+    let battle = createBattleState([opponentC], {
+      characters: characters([partyCharacterA, partyCharacterB]),
+      hpRatePerSec: 2
     });
-    battle = withCombatant(battle, "enemy", {
-      ...battle.enemy,
-      hp: setTarget({ ...battle.enemy.hp, displayed: 1, target: 1, isRolling: false }, 0)
+    battle = withCombatant(battle, actor("party", 0), {
+      ...battle.party[0],
+      hp: setTarget(battle.party[0].hp, 0)
+    });
+    battle = withCombatant(battle, actor("enemy", 0), {
+      ...battle.enemies[0],
+      hp: setTarget({ ...battle.enemies[0].hp, displayed: 1, target: 1, isRolling: false }, 0)
     });
 
     battle = tickBattleMeters(battle, 500);
 
-    expect(battle.player.hp.target).toBe(0);
-    expect(battle.player.hp.displayed).toBeGreaterThan(0);
-    expect(battle.enemy.hp.displayed).toBe(0);
+    expect(battle.party[0].hp.target).toBe(0);
+    expect(battle.party[0].hp.displayed).toBeGreaterThan(0);
+    expect(battle.enemies[0].hp.displayed).toBe(0);
     expect(outcome(battle)).toBe("win");
   });
+
+  it("skips displayed-dead combatants in turn order and turn resolution", () => {
+    let battle = createBattleState([opponentA, opponentB], {
+      characters: characters([partyCharacterA, partyCharacterB]),
+      enemyOptions: [{ speed: 9 }, { speed: 3 }]
+    });
+    battle = withCombatant(battle, actor("party", 0), {
+      ...battle.party[0],
+      hp: { ...battle.party[0].hp, displayed: 0, target: 0, isRolling: false }
+    });
+    battle = withCombatant(battle, actor("enemy", 0), {
+      ...battle.enemies[0],
+      hp: { ...battle.enemies[0].hp, displayed: 0, target: 0, isRolling: false }
+    });
+
+    expect(turnOrder(battle)).toEqual([actor("party", 1), actor("enemy", 1)]);
+
+    const result = resolveTurn(battle, actor("party", 0), () => 0.5, { targetIndex: 1 });
+    expect(result.skipped).toBe(true);
+    expect(result.damage).toBe(0);
+    expect(result.state).toBe(battle);
+  });
 });
+
+function drainDisplayedHp(battle: BattleState, target: BattleActor): BattleState {
+  const combatant = target.side === "party" ? battle.party[target.index] : battle.enemies[target.index];
+  return tickBattleMeters(
+    withCombatant(battle, target, {
+      ...combatant,
+      hp: setTarget(combatant.hp, 0)
+    }),
+    15_000
+  );
+}
+
+function actor(side: "party" | "enemy", index: number): BattleActor {
+  return { side, index };
+}
+
+function enemy(
+  id: number,
+  name: string,
+  stats: Partial<Pick<BattleEnemy, "hp" | "defense" | "offense" | "level">> = {}
+): BattleEnemy {
+  return {
+    id,
+    name,
+    spriteId: id,
+    level: stats.level ?? 3,
+    hp: stats.hp ?? 24,
+    defense: stats.defense ?? 4,
+    offense: stats.offense ?? 8,
+    experience: 0,
+    bossFlag: false,
+    actions: [
+      { id: 0, arg: 0 },
+      { id: 0, arg: 0 },
+      { id: 0, arg: 0 },
+      { id: 0, arg: 0 }
+    ],
+    itemDropped: null
+  };
+}
+
+function character(
+  id: number,
+  name: string,
+  stats: Partial<Pick<CharacterData, "maxHp" | "maxPp" | "offense" | "defense" | "speed">> = {}
+): CharacterData {
+  return {
+    id,
+    name,
+    level: 6,
+    maxHp: stats.maxHp ?? 40,
+    maxPp: stats.maxPp ?? 0,
+    offense: stats.offense ?? 12,
+    defense: stats.defense ?? 6,
+    speed: stats.speed ?? 5,
+    guts: 5,
+    vitality: 6,
+    iq: 4,
+    luck: 3,
+    startingItems: [1],
+    money: 9
+  };
+}
+
+function characters(characterList: CharacterData[]): CharacterCollection {
+  return {
+    schemaVersion: "test",
+    sourceProjectPath: "test",
+    derivation: {
+      source: "test",
+      baseStats: "test",
+      statFormula: "test",
+      hpPpFormula: "test",
+      uncertainty: "test"
+    },
+    characters: characterList,
+    counts: {
+      characters: characterList.length,
+      statFieldsPopulated: characterList.length * 7
+    },
+    warnings: []
+  };
+}

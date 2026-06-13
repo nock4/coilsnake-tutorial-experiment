@@ -74,6 +74,7 @@ export function buildCombatantFromPartyMember(
     hp: createRollingMeter(maxHp, options.hpRatePerSec ?? DEFAULT_HP_RATE_PER_SEC),
     offense: effectiveStats.offense,
     defense: effectiveStats.defense,
+    speed: effectiveStats.speed,
     isEnemy: false
   };
 }

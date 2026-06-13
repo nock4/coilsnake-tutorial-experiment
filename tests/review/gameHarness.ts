@@ -4,6 +4,21 @@ export type FirstSceneDebug = {
   mode: "world" | "fallback" | "error" | "battle";
   phase?: "menu" | "enemy-rolling" | "player-rolling" | "win" | "lose" | "flee";
   menuIndex?: number;
+  targetIndex?: number;
+  turnOrder?: Array<{ side: "party" | "enemy"; index: number }>;
+  currentActor?: { side: "party" | "enemy"; index: number } | null;
+  party?: Array<{
+    hpDisplayed: number;
+    hpTarget: number;
+    isRolling: boolean;
+    alive: boolean;
+  }>;
+  enemies?: Array<{
+    hpDisplayed: number;
+    hpTarget: number;
+    isRolling: boolean;
+    alive: boolean;
+  }>;
   dialogueOpen: boolean;
   dialogueText: string;
   dialoguePageIndex: number;

@@ -8,39 +8,54 @@ type BattleDebug = {
   mode: "battle";
   phase: "menu" | "enemy-rolling" | "player-rolling" | "win" | "lose" | "flee";
   menuIndex: number;
-  player: {
+  targetIndex: number;
+  turnOrder: Array<{ side: "party" | "enemy"; index: number }>;
+  currentActor: { side: "party" | "enemy"; index: number } | null;
+  party: BattleCombatantDebug[];
+  enemies: BattleCombatantDebug[];
+  player?: {
     hpDisplayed: number;
     hpTarget: number;
     isRolling: boolean;
   };
-  enemy: {
-    hpDisplayed: number;
-    hpTarget: number;
-    isRolling: boolean;
-  };
+  enemy?: BattleCombatantDebug;
   outcome: "ongoing" | "win" | "lose";
+};
+
+type BattleCombatantDebug = {
+  hpDisplayed: number;
+  hpTarget: number;
+  isRolling: boolean;
+  alive: boolean;
 };
 
 type BattleRun = {
   initial: BattleDebug;
   final: BattleDebug;
-  enemyDisplayed: number[];
-  playerDisplayed: number[];
+  enemyDisplayedTotals: number[];
+  partyDisplayedTotals: number[];
+  enemyDisplayedByIndex: number[][];
+  targetedEnemyIndexes: number[];
+  sawEnemyDisplayedDecreaseByIndex: boolean[];
   sawEnemyRolling: boolean;
-  sawPlayerHpDecrease: boolean;
+  sawPartyHpDecrease: boolean;
 };
 
 test("enters battle and BASH rolls the enemy HP odometer to a win", async ({ page }) => {
   const issues = attachRuntimeIssueCapture(page);
   const run = await runBattleToWin(page);
 
-  expect(run.initial.enemy.hpDisplayed).toBeGreaterThan(0);
-  expect(run.sawEnemyRolling, "enemy HP odometer should animate during at least one attack").toBe(true);
-  expect(run.enemyDisplayed.some((value) => value < run.initial.enemy.hpDisplayed)).toBe(true);
-  expect(run.enemyDisplayed.at(-1)).toBe(0);
+  expect(run.initial.enemies.some((enemy) => enemy.hpDisplayed > 0)).toBe(true);
+  expect(run.sawEnemyRolling, "an enemy HP odometer should animate during at least one attack").toBe(true);
+  expect(run.enemyDisplayedTotals.some((value) => value < totalDisplayed(run.initial.enemies))).toBe(true);
+  expect(run.enemyDisplayedTotals.at(-1)).toBe(0);
   expect(run.final.outcome).toBe("win");
-  expect(run.final.enemy.hpDisplayed).toBe(0);
-  expectNeverIncreases(run.enemyDisplayed, "enemy displayed HP");
+  expect(run.final.enemies.every((enemy) => enemy.hpDisplayed === 0)).toBe(true);
+  for (const index of initiallyLivingEnemyIndexes(run.initial)) {
+    expect(run.targetedEnemyIndexes, `enemy index ${index} should be targeted before win`).toContain(index);
+    expect(run.sawEnemyDisplayedDecreaseByIndex[index], `enemy index ${index} displayed HP should strictly decrease`).toBe(true);
+  }
+  expectNeverIncreases(run.enemyDisplayedTotals, "enemy total displayed HP");
   assertNoRuntimeIssues(issues);
 });
 
@@ -48,11 +63,11 @@ test("player takes counter-damage during the fight", async ({ page }) => {
   const issues = attachRuntimeIssueCapture(page);
   const run = await runBattleToWin(page);
 
-  expect(run.initial.player.hpDisplayed).toBeGreaterThan(0);
-  expect(Number.isFinite(run.initial.player.hpDisplayed)).toBe(true);
-  expect(Number.isFinite(run.initial.player.hpTarget)).toBe(true);
-  expect(run.sawPlayerHpDecrease, "player displayed HP should decrease after a counter-hit").toBe(true);
-  expectNeverIncreases(run.playerDisplayed, "player displayed HP");
+  expect(run.initial.party.some((member) => member.hpDisplayed > 0)).toBe(true);
+  expect(run.initial.party.every((member) => Number.isFinite(member.hpDisplayed))).toBe(true);
+  expect(run.initial.party.every((member) => Number.isFinite(member.hpTarget))).toBe(true);
+  expect(run.sawPartyHpDecrease, "party displayed HP should decrease after a counter-hit").toBe(true);
+  expectNeverIncreases(run.partyDisplayedTotals, "party total displayed HP");
   assertNoRuntimeIssues(issues);
 });
 
@@ -64,33 +79,48 @@ test("no console/page errors during a battle", async ({ page }) => {
 
 async function runBattleToWin(page: Page): Promise<BattleRun> {
   const initial = await gotoGeneratedBattle(page);
-  const enemyDisplayed = [initial.enemy.hpDisplayed];
-  const playerDisplayed = [initial.player.hpDisplayed];
-  let sawEnemyRolling = initial.enemy.isRolling;
-  let sawPlayerHpDecrease = false;
+  const initialEnemyDisplayed = totalDisplayed(initial.enemies);
+  const initialPartyDisplayed = totalDisplayed(initial.party);
+  const enemyDisplayedTotals = [initialEnemyDisplayed];
+  const partyDisplayedTotals = [initialPartyDisplayed];
+  const enemyDisplayedByIndex = initial.enemies.map((enemy) => [enemy.hpDisplayed]);
+  const sawEnemyDisplayedDecreaseByIndex = initial.enemies.map(() => false);
+  const targetedEnemyIndexes = new Set<number>();
+  let sawEnemyRolling = initial.enemies.some((enemy) => enemy.isRolling);
+  let sawPartyHpDecrease = false;
   let final = initial;
   const deadline = Date.now() + 30_000;
 
   while (Date.now() < deadline) {
-    const state = await readRequiredBattleDebug(page);
+    let state = await readRequiredBattleDebug(page);
     final = state;
-    enemyDisplayed.push(state.enemy.hpDisplayed);
-    playerDisplayed.push(state.player.hpDisplayed);
-    sawEnemyRolling ||= state.enemy.isRolling;
-    sawPlayerHpDecrease ||= state.player.hpDisplayed < initial.player.hpDisplayed;
+    const enemyDisplayed = totalDisplayed(state.enemies);
+    const partyDisplayed = totalDisplayed(state.party);
+    enemyDisplayedTotals.push(enemyDisplayed);
+    partyDisplayedTotals.push(partyDisplayed);
+    recordEnemyDisplayed(
+      enemyDisplayedByIndex,
+      sawEnemyDisplayedDecreaseByIndex,
+      state.enemies
+    );
+    sawEnemyRolling ||= state.enemies.some((enemy) => enemy.isRolling);
+    sawPartyHpDecrease ||= partyDisplayed < initialPartyDisplayed;
 
-    if (state.enemy.hpDisplayed === 0) {
+    if (state.enemies.every((enemy) => enemy.hpDisplayed === 0)) {
       expect(state.outcome).toBe("win");
     }
 
-    if (state.outcome === "win" && state.enemy.hpDisplayed === 0) {
+    if (state.outcome === "win" && state.enemies.every((enemy) => enemy.hpDisplayed === 0)) {
       return {
         initial,
         final: state,
-        enemyDisplayed,
-        playerDisplayed,
+        enemyDisplayedTotals,
+        partyDisplayedTotals,
+        enemyDisplayedByIndex,
+        targetedEnemyIndexes: [...targetedEnemyIndexes],
+        sawEnemyDisplayedDecreaseByIndex,
         sawEnemyRolling,
-        sawPlayerHpDecrease
+        sawPartyHpDecrease
       };
     }
 
@@ -99,6 +129,9 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
 
     if (state.phase === "menu") {
       expect(state.menuIndex, "BASH should stay selected for each confirm").toBe(0);
+      state = await selectViableEnemyTarget(page, state);
+      expect(state.enemies[state.targetIndex]?.alive, "BASH target should be a living enemy").toBe(true);
+      targetedEnemyIndexes.add(state.targetIndex);
       await page.keyboard.press("Space");
     }
     await page.waitForTimeout(80);
@@ -106,25 +139,33 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
 
   await expect.poll(async () => {
     const state = await readRequiredBattleDebug(page);
-    return state.outcome === "win" && state.enemy.hpDisplayed === 0;
+    return state.outcome === "win" && state.enemies.every((enemy) => enemy.hpDisplayed === 0);
   }, {
-    message: "battle should finish with enemy displayed HP at zero",
+    message: "battle should finish with every enemy displayed HP at zero",
     timeout: 2_000,
     intervals: [100, 150, 250]
   }).toBe(true);
 
   final = await readRequiredBattleDebug(page);
-  enemyDisplayed.push(final.enemy.hpDisplayed);
-  playerDisplayed.push(final.player.hpDisplayed);
-  sawEnemyRolling ||= final.enemy.isRolling;
-  sawPlayerHpDecrease ||= final.player.hpDisplayed < initial.player.hpDisplayed;
+  enemyDisplayedTotals.push(totalDisplayed(final.enemies));
+  partyDisplayedTotals.push(totalDisplayed(final.party));
+  recordEnemyDisplayed(
+    enemyDisplayedByIndex,
+    sawEnemyDisplayedDecreaseByIndex,
+    final.enemies
+  );
+  sawEnemyRolling ||= final.enemies.some((enemy) => enemy.isRolling);
+  sawPartyHpDecrease ||= totalDisplayed(final.party) < initialPartyDisplayed;
   return {
     initial,
     final,
-    enemyDisplayed,
-    playerDisplayed,
+    enemyDisplayedTotals,
+    partyDisplayedTotals,
+    enemyDisplayedByIndex,
+    targetedEnemyIndexes: [...targetedEnemyIndexes],
+    sawEnemyDisplayedDecreaseByIndex,
     sawEnemyRolling,
-    sawPlayerHpDecrease
+    sawPartyHpDecrease
   };
 }
 
@@ -137,15 +178,16 @@ async function gotoGeneratedBattle(page: Page): Promise<BattleDebug> {
     return Boolean(
       state &&
       state.mode === "battle" &&
-      state.phase === "menu" &&
       state.outcome === "ongoing" &&
       state.menuIndex === 0 &&
-      state.enemy.hpDisplayed > 0 &&
-      Number.isFinite(state.player.hpDisplayed) &&
-      Number.isFinite(state.enemy.hpDisplayed)
+      state.party.length > 0 &&
+      state.enemies.length > 0 &&
+      state.enemies.some((enemy) => enemy.hpDisplayed > 0) &&
+      state.party.every((member) => Number.isFinite(member.hpDisplayed)) &&
+      state.enemies.every((enemy) => Number.isFinite(enemy.hpDisplayed))
     );
   }, {
-    message: "battle debug state should reach the menu",
+    message: "battle debug state should initialize",
     timeout: 10_000,
     intervals: [100, 150, 250, 500]
   }).toBe(true);
@@ -180,16 +222,68 @@ async function readBattleDebug(page: Page): Promise<BattleDebug | undefined> {
 
 function expectBattleNumbers(state: BattleDebug): void {
   expect(Number.isFinite(state.menuIndex)).toBe(true);
-  expect(Number.isFinite(state.player.hpDisplayed)).toBe(true);
-  expect(Number.isFinite(state.player.hpTarget)).toBe(true);
-  expect(Number.isFinite(state.enemy.hpDisplayed)).toBe(true);
-  expect(Number.isFinite(state.enemy.hpTarget)).toBe(true);
-  expect(typeof state.player.isRolling).toBe("boolean");
-  expect(typeof state.enemy.isRolling).toBe("boolean");
+  expect(Number.isFinite(state.targetIndex)).toBe(true);
+  expect(Array.isArray(state.turnOrder)).toBe(true);
+  expect(state.party.length).toBeGreaterThan(0);
+  expect(state.enemies.length).toBeGreaterThan(0);
+  for (const member of [...state.party, ...state.enemies]) {
+    expect(Number.isFinite(member.hpDisplayed)).toBe(true);
+    expect(Number.isFinite(member.hpTarget)).toBe(true);
+    expect(typeof member.isRolling).toBe("boolean");
+    expect(typeof member.alive).toBe("boolean");
+  }
 }
 
 function expectNeverIncreases(values: number[], label: string): void {
   for (let index = 1; index < values.length; index += 1) {
     expect(values[index], `${label} should not increase`).toBeLessThanOrEqual(values[index - 1]);
   }
+}
+
+function totalDisplayed(combatants: BattleCombatantDebug[]): number {
+  return combatants.reduce((sum, combatant) => sum + combatant.hpDisplayed, 0);
+}
+
+async function selectViableEnemyTarget(page: Page, state: BattleDebug): Promise<BattleDebug> {
+  let current = state;
+  for (let attempt = 0; attempt <= current.enemies.length; attempt += 1) {
+    const desiredTargets = desiredTargetIndexes(current);
+    if (desiredTargets.includes(current.targetIndex)) {
+      return current;
+    }
+    await page.keyboard.press("ArrowRight");
+    await page.waitForTimeout(40);
+    current = await readRequiredBattleDebug(page);
+  }
+  return current;
+}
+
+function recordEnemyDisplayed(
+  histories: number[][],
+  sawDecreaseByIndex: boolean[],
+  enemies: BattleCombatantDebug[]
+): void {
+  enemies.forEach((enemy, index) => {
+    const history = histories[index] ?? [];
+    const previous = history.at(-1);
+    if (previous !== undefined && enemy.hpDisplayed < previous) {
+      sawDecreaseByIndex[index] = true;
+    }
+    history.push(enemy.hpDisplayed);
+    histories[index] = history;
+  });
+}
+
+function initiallyLivingEnemyIndexes(state: BattleDebug): number[] {
+  return state.enemies.flatMap((enemy, index) => (enemy.hpDisplayed > 0 ? [index] : []));
+}
+
+function desiredTargetIndexes(state: BattleDebug): number[] {
+  const withRemainingTargetHp = state.enemies.flatMap((enemy, index) =>
+    enemy.alive && enemy.hpTarget > 0 ? [index] : []
+  );
+  if (withRemainingTargetHp.length > 0) {
+    return withRemainingTargetHp;
+  }
+  return state.enemies.flatMap((enemy, index) => (enemy.alive ? [index] : []));
 }
