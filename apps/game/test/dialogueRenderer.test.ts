@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DialoguePage, DialogueSegment } from "@eb/schemas";
 import {
+  createDialogueResolver,
   DefaultResolver,
   INSTANT_TEXT_SPEED_CPS,
   confirmActionForReveal,
@@ -76,6 +77,48 @@ describe("renderSegmentsToText", () => {
       { kind: "text", value: " / " },
       { kind: "substitution", name: "partyChar", args: [3] }
     ])).toBe("[item] / [char 3]");
+  });
+
+  it("resolves generated item and PSI names with neutral fallback", () => {
+    const resolver = createDialogueResolver({
+      items: {
+        schemaVersion: "test",
+        sourceProjectPath: "synthetic",
+        derivation: { source: "synthetic", equippable: "synthetic", helpText: "synthetic" },
+        items: [{
+          id: 5,
+          name: "[item 5 data]",
+          type: 0x10,
+          cost: 0,
+          action: 0,
+          argument: 0,
+          equippable: true,
+          miscFlags: []
+        }],
+        counts: { items: 1, equippable: 1 },
+        warnings: []
+      },
+      psi: {
+        schemaVersion: "test",
+        sourceProjectPath: "synthetic",
+        derivation: { source: "synthetic", names: "synthetic", learnedBy: "synthetic", usableOutsideBattle: "synthetic" },
+        psi: [{
+          id: 7,
+          name: "[psi 7 data]",
+          type: "assist",
+          strength: "stage",
+          usableOutsideBattle: true,
+          learnedBy: [{ charId: 1, level: 3 }]
+        }],
+        counts: { psi: 1, learnedBy: 1 },
+        warnings: []
+      }
+    });
+
+    expect(resolver.itemName(5)).toBe("[item 5 data]");
+    expect(resolver.itemName(6)).toBe("[item 6]");
+    expect(resolver.psiName(7)).toBe("[psi 7 data]");
+    expect(resolver.psiName(8)).toBe("[psi 8]");
   });
 
   it("omits timing, flow, style, window, and raw control segments from display text", () => {

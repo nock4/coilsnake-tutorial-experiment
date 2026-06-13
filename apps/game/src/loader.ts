@@ -2,8 +2,10 @@ import {
   buildDialoguePages,
   BattleDataSchema,
   CharacterCollectionSchema,
+  ItemCollectionSchema,
   ManifestSchema,
   NpcReferenceCollectionSchema,
+  PsiCollectionSchema,
   resolveScriptReference,
   resolveScriptReferenceFlow,
   ScriptCollectionSchema,
@@ -15,9 +17,11 @@ import {
   type DialoguePage,
   type BattleData,
   type CharacterCollection,
+  type ItemCollection,
   type Manifest,
   type NumericFlagState,
   type NpcReferenceCollection,
+  type PsiCollection,
   type ScriptCollection,
   type SpriteGroupCollection,
   type SpriteSheetCollection,
@@ -39,6 +43,8 @@ export type GameData = {
   sprites?: SpriteSheetCollection;
   battle?: BattleData;
   characters?: CharacterCollection;
+  items?: ItemCollection;
+  psi?: PsiCollection;
 };
 
 async function loadJson<T>(url: string, schema: { parse: (value: unknown) => T }): Promise<T | undefined> {
@@ -52,7 +58,7 @@ async function loadJson<T>(url: string, schema: { parse: (value: unknown) => T }
 
 /** Loads every generated file referenced by an already-validated manifest. */
 export async function loadGameData(manifest: Manifest): Promise<GameData> {
-  const [scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle, characters] = await Promise.all([
+  const [scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle, characters, items, psi] = await Promise.all([
     loadJson(`/generated/${manifest.files.scripts}`, ScriptCollectionSchema),
     loadJson(`/generated/${manifest.files.npcs}`, NpcReferenceCollectionSchema),
     loadJson(`/generated/${manifest.files.spriteGroups}`, SpriteGroupCollectionSchema),
@@ -65,9 +71,15 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
       : Promise.resolve(undefined),
     manifest.files.characters
       ? loadJson(`/generated/${manifest.files.characters}`, CharacterCollectionSchema)
+      : Promise.resolve(undefined),
+    manifest.files.items
+      ? loadJson(`/generated/${manifest.files.items}`, ItemCollectionSchema)
+      : Promise.resolve(undefined),
+    manifest.files.psi
+      ? loadJson(`/generated/${manifest.files.psi}`, PsiCollectionSchema)
       : Promise.resolve(undefined)
   ]);
-  return { manifest, scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle, characters };
+  return { manifest, scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle, characters, items, psi };
 }
 
 export function parseManifest(raw: unknown): Manifest | undefined {

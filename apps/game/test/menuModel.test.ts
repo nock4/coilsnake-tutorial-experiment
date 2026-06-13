@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { CharacterCollection } from "@eb/schemas";
+import type { CharacterCollection, ItemCollection, PsiCollection } from "@eb/schemas";
 import type { PartyMember } from "../src/characterModel";
 import {
+  buildCheckDetailScreens,
+  buildCheckScreen,
+  buildCheckViewModel,
+  buildEquipViewModel,
+  buildGoodsViewModel,
+  buildMenuScreens,
+  buildPsiViewModel,
   buildStatusScreen,
   buildStatusViewModel,
   cancelMenu,
@@ -213,6 +220,61 @@ describe("Status view model", () => {
   });
 });
 
+describe("item and PSI menu view models", () => {
+  it("builds Goods, Equip, PSI, and Check from synthetic party data", () => {
+    const input = {
+      partyMembers: [partyMember(1, "MEMBER_A", 5)],
+      partyState: {
+        wallet: 0,
+        party: () => [1],
+        inventory: () => [10, 11, 12]
+      },
+      items: syntheticItems(),
+      psi: syntheticPsi(),
+      resolver: {
+        itemName: (id: number) => `[item ${id} data]`,
+        psiName: (id: number) => `[psi ${id} data]`
+      }
+    };
+
+    const goods = buildGoodsViewModel(input);
+    const equip = buildEquipViewModel(input);
+    const psi = buildPsiViewModel(input);
+    const check = buildCheckViewModel(input);
+
+    expect(goods.member.id).toBe(1);
+    expect(goods.entries.map((entry) => entry.itemId)).toEqual([10, 11, 12]);
+    expect(equip.entries.map((entry) => entry.itemId)).toEqual([10, 12]);
+    expect(psi.entries.map((entry) => entry.psiId)).toEqual([7]);
+    expect(check.entries).toHaveLength(3);
+
+    const checkScreen = buildCheckScreen(check);
+    expect(checkScreen.items.map((item) => item.childScreenId)).toEqual([
+      "check-item-0-10",
+      "check-item-1-11",
+      "check-item-2-12"
+    ]);
+    const detailScreens = buildCheckDetailScreens(check);
+    expect(detailScreens).toHaveLength(3);
+    expect(detailScreens[0].items.length).toBeGreaterThan(1);
+  });
+
+  it("adds concrete menu screens for the package W stub ids", () => {
+    const status = buildStatusViewModel({ partyMembers: [partyMember(1, "MEMBER_A", 5)] });
+    const screens = buildMenuScreens(status, {
+      partyMembers: [partyMember(1, "MEMBER_A", 5)],
+      items: syntheticItems(),
+      psi: syntheticPsi()
+    });
+
+    const byId = new Map(screens.map((screen) => [screen.id, screen]));
+    expect(byId.get("goods")?.items[0]?.id).not.toBe("goods-stub");
+    expect(byId.get("psi")?.items[0]?.id).not.toBe("psi-stub");
+    expect(byId.get("equip")?.items[0]?.id).not.toBe("equip-stub");
+    expect(byId.get("check")?.items[0]?.id).not.toBe("check-stub");
+  });
+});
+
 function partyMember(id: number, name: string, level: number): PartyMember {
   return {
     id,
@@ -233,5 +295,70 @@ function partyMember(id: number, name: string, level: number): PartyMember {
     },
     inventory: [],
     money: 0
+  };
+}
+
+function syntheticItems(): ItemCollection {
+  return {
+    schemaVersion: "test",
+    sourceProjectPath: "synthetic",
+    derivation: { source: "synthetic", equippable: "synthetic", helpText: "synthetic" },
+    items: [
+      itemData(10, true),
+      itemData(11, false),
+      itemData(12, true, "Neutral help text for [item 12 data].")
+    ],
+    counts: { items: 3, equippable: 2 },
+    warnings: []
+  };
+}
+
+function itemData(id: number, equippable: boolean, helpText?: string): ItemCollection["items"][number] {
+  return {
+    id,
+    name: `[item ${id} data]`,
+    type: equippable ? 0x10 : 0x20,
+    cost: 0,
+    action: 0,
+    argument: 0,
+    equippable,
+    miscFlags: [],
+    ...(helpText ? { helpText } : {})
+  };
+}
+
+function syntheticPsi(): PsiCollection {
+  return {
+    schemaVersion: "test",
+    sourceProjectPath: "synthetic",
+    derivation: { source: "synthetic", names: "synthetic", learnedBy: "synthetic", usableOutsideBattle: "synthetic" },
+    psi: [
+      {
+        id: 7,
+        name: "[psi 7 data]",
+        type: "assist",
+        strength: "stage-a",
+        usableOutsideBattle: true,
+        learnedBy: [{ charId: 1, level: 3 }]
+      },
+      {
+        id: 8,
+        name: "[psi 8 data]",
+        type: "assist",
+        strength: "stage-b",
+        usableOutsideBattle: true,
+        learnedBy: [{ charId: 1, level: 9 }]
+      },
+      {
+        id: 9,
+        name: "[psi 9 data]",
+        type: "assist",
+        strength: "stage-c",
+        usableOutsideBattle: false,
+        learnedBy: [{ charId: 3, level: 1 }]
+      }
+    ],
+    counts: { psi: 3, learnedBy: 3 },
+    warnings: []
   };
 }

@@ -7,12 +7,15 @@
 
 export type IntKeyedEntries = Map<number, Record<string, string>>;
 
-const INTEGER_TOKEN = "(?:0x[0-9a-fA-F]+|\\d+)";
+const INTEGER_TOKEN = "(?:0x[0-9a-fA-F]+|\\$[0-9a-fA-F]+|\\d+)";
 
 export function parseYamlInteger(value: string | undefined): number {
   const trimmed = value?.trim() ?? "";
   if (!new RegExp(`^${INTEGER_TOKEN}$`).test(trimmed)) {
     return Number.NaN;
+  }
+  if (trimmed.startsWith("$")) {
+    return Number.parseInt(trimmed.slice(1), 16);
   }
   return Number.parseInt(trimmed, trimmed.toLowerCase().startsWith("0x") ? 16 : 10);
 }

@@ -554,6 +554,65 @@ export const CharacterCollectionSchema = z.object({
   warnings: z.array(ValidationIssueSchema)
 });
 
+export const ItemDataSchema = z.object({
+  id: z.number().int().nonnegative(),
+  name: z.string(),
+  type: z.number().int().nonnegative(),
+  cost: z.number().int().nonnegative(),
+  action: z.number().int().nonnegative(),
+  argument: z.number().int().nonnegative(),
+  equippable: z.boolean(),
+  miscFlags: z.array(z.string()),
+  helpText: z.string().optional()
+});
+
+export const ItemCollectionSchema = z.object({
+  schemaVersion: z.string(),
+  sourceProjectPath: z.string(),
+  derivation: z.object({
+    source: z.string(),
+    equippable: z.string(),
+    helpText: z.string()
+  }),
+  items: z.array(ItemDataSchema),
+  counts: z.object({
+    items: z.number().int().nonnegative(),
+    equippable: z.number().int().nonnegative()
+  }),
+  warnings: z.array(ValidationIssueSchema)
+});
+
+export const PsiLearnedBySchema = z.object({
+  charId: z.number().int().nonnegative(),
+  level: z.number().int().positive()
+});
+
+export const PsiDataSchema = z.object({
+  id: z.number().int().nonnegative(),
+  name: z.string(),
+  type: z.string(),
+  strength: z.string(),
+  usableOutsideBattle: z.boolean(),
+  learnedBy: z.array(PsiLearnedBySchema)
+});
+
+export const PsiCollectionSchema = z.object({
+  schemaVersion: z.string(),
+  sourceProjectPath: z.string(),
+  derivation: z.object({
+    source: z.string(),
+    names: z.string(),
+    learnedBy: z.string(),
+    usableOutsideBattle: z.string()
+  }),
+  psi: z.array(PsiDataSchema),
+  counts: z.object({
+    psi: z.number().int().nonnegative(),
+    learnedBy: z.number().int().nonnegative()
+  }),
+  warnings: z.array(ValidationIssueSchema)
+});
+
 export const TutorialFixtureHintsSchema = z.object({
   hasRobotCcs: z.boolean(),
   hasHelloWorldLabel: z.boolean(),
@@ -583,7 +642,9 @@ export const ManifestSchema = z.object({
     world: z.string(),
     sprites: z.string(),
     battle: z.string().optional(),
-    characters: z.string().optional()
+    characters: z.string().optional(),
+    items: z.string().optional(),
+    psi: z.string().optional()
   }),
   counts: z.object({
     scriptFiles: z.number().int().nonnegative(),
@@ -599,6 +660,10 @@ export const ManifestSchema = z.object({
     battleGroups: z.number().int().nonnegative().optional(),
     characters: z.number().int().nonnegative().optional(),
     characterStatFieldsPopulated: z.number().int().nonnegative().optional(),
+    items: z.number().int().nonnegative().optional(),
+    equippableItems: z.number().int().nonnegative().optional(),
+    psi: z.number().int().nonnegative().optional(),
+    psiLearnedByEntries: z.number().int().nonnegative().optional(),
     warnings: z.number().int().nonnegative(),
     errors: z.number().int().nonnegative()
   }),
@@ -634,6 +699,10 @@ export type BattleEnemy = z.infer<typeof BattleEnemySchema>;
 export type BattleGroup = z.infer<typeof BattleGroupSchema>;
 export type CharacterCollection = z.infer<typeof CharacterCollectionSchema>;
 export type CharacterData = z.infer<typeof CharacterDataSchema>;
+export type ItemCollection = z.infer<typeof ItemCollectionSchema>;
+export type ItemData = z.infer<typeof ItemDataSchema>;
+export type PsiCollection = z.infer<typeof PsiCollectionSchema>;
+export type PsiData = z.infer<typeof PsiDataSchema>;
 export type DialogueSegment = z.infer<typeof DialogueSegmentSchema>;
 export type EventEffect = z.infer<typeof EventEffectSchema>;
 export type ScriptCollection = z.infer<typeof ScriptCollectionSchema>;

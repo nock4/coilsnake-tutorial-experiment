@@ -1,4 +1,4 @@
-import type { DialoguePage, DialogueSegment } from "@eb/schemas";
+import type { CharacterCollection, DialoguePage, DialogueSegment, ItemCollection, PsiCollection } from "@eb/schemas";
 
 export const INSTANT_TEXT_SPEED_CPS = Number.POSITIVE_INFINITY;
 
@@ -31,6 +31,29 @@ export const DefaultResolver: DialogueResolver = {
   formatNumber: (n) => formattedNumber("number", n),
   formatMoney: (n) => formattedNumber("money", n)
 };
+
+export type GeneratedResolverData = {
+  characters?: CharacterCollection;
+  items?: ItemCollection;
+  psi?: PsiCollection;
+};
+
+export function createDialogueResolver(data: GeneratedResolverData = {}): DialogueResolver {
+  const charactersById = new Map(data.characters?.characters.map((character) => [character.id, character.name.trim()]));
+  const itemsById = new Map(data.items?.items.map((item) => [item.id, item.name.trim()]));
+  const psiById = new Map(data.psi?.psi.map((psi) => [psi.id, psi.name.trim()]));
+  return {
+    ...DefaultResolver,
+    playerName: () => nonEmpty(charactersById.get(0)) ?? DefaultResolver.playerName(),
+    partyCharName: (i) => nonEmpty(charactersById.get(Math.trunc(i))) ?? DefaultResolver.partyCharName(i),
+    itemName: (i) => nonEmpty(itemsById.get(Math.trunc(i))) ?? DefaultResolver.itemName(i),
+    psiName: (i) => nonEmpty(psiById.get(Math.trunc(i))) ?? DefaultResolver.psiName(i)
+  };
+}
+
+function nonEmpty(value: string | undefined): string | undefined {
+  return value && value.length > 0 ? value : undefined;
+}
 
 type SubstitutionSegment = Extract<DialogueSegment, { kind: "substitution" }>;
 

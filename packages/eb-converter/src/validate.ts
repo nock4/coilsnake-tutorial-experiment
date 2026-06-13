@@ -4,8 +4,10 @@ import path from "node:path";
 import {
   BattleDataSchema,
   CharacterCollectionSchema,
+  ItemCollectionSchema,
   ManifestSchema,
   NpcReferenceCollectionSchema,
+  PsiCollectionSchema,
   ScriptCollectionSchema,
   SpriteGroupCollectionSchema,
   SpriteSheetCollectionSchema,
@@ -16,6 +18,8 @@ import {
 
 const DEFAULT_OUT = "apps/game/public/generated";
 const DEFAULT_CHARACTERS_FILE = "characters.json";
+const DEFAULT_ITEMS_FILE = "items.json";
+const DEFAULT_PSI_FILE = "psi.json";
 
 function parseOut(argv: string[]): string {
   const outIndex = argv.indexOf("--out");
@@ -45,6 +49,10 @@ export type GeneratedValidationResult = {
   battleAssetsChecked?: number;
   characters?: number;
   characterStatFieldsPopulated?: number;
+  items?: number;
+  equippableItems?: number;
+  psi?: number;
+  psiLearnedByEntries?: number;
 };
 
 export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<GeneratedValidationResult> {
@@ -84,6 +92,16 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
   const shouldReadCharacters = Boolean(manifest.files.characters) || existsSync(characterPath);
   const charactersRaw = shouldReadCharacters ? await readJson(characterPath) : undefined;
   const characters = charactersRaw ? CharacterCollectionSchema.parse(charactersRaw) : undefined;
+  const itemFile = manifest.files.items ?? DEFAULT_ITEMS_FILE;
+  const itemPath = path.join(out, itemFile);
+  const shouldReadItems = Boolean(manifest.files.items) || existsSync(itemPath);
+  const itemsRaw = shouldReadItems ? await readJson(itemPath) : undefined;
+  const items = itemsRaw ? ItemCollectionSchema.parse(itemsRaw) : undefined;
+  const psiFile = manifest.files.psi ?? DEFAULT_PSI_FILE;
+  const psiPath = path.join(out, psiFile);
+  const shouldReadPsi = Boolean(manifest.files.psi) || existsSync(psiPath);
+  const psiRaw = shouldReadPsi ? await readJson(psiPath) : undefined;
+  const psi = psiRaw ? PsiCollectionSchema.parse(psiRaw) : undefined;
 
   assertNoPublicPathLeaks({
     "manifest.json": manifestRaw,
@@ -95,7 +113,9 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
     [manifest.files.world]: worldRaw,
     [manifest.files.sprites]: spritesRaw,
     ...(battleRaw ? { [battleFile]: battleRaw } : {}),
-    ...(charactersRaw ? { [characterFile]: charactersRaw } : {})
+    ...(charactersRaw ? { [characterFile]: charactersRaw } : {}),
+    ...(itemsRaw ? { [itemFile]: itemsRaw } : {}),
+    ...(psiRaw ? { [psiFile]: psiRaw } : {})
   });
 
   const worldAssetsChecked = assertWorldAssetsExist(out, world, sprites);
@@ -114,7 +134,9 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
       manifest.files.world,
       manifest.files.sprites,
       ...(battle ? [battleFile] : []),
-      ...(characters ? [characterFile] : [])
+      ...(characters ? [characterFile] : []),
+      ...(items ? [itemFile] : []),
+      ...(psi ? [psiFile] : [])
     ],
     counts: manifest.counts,
     validation: validationReport.counts,
@@ -134,6 +156,14 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
     ...(characters ? {
       characters: characters.counts.characters,
       characterStatFieldsPopulated: characters.counts.statFieldsPopulated
+    } : {}),
+    ...(items ? {
+      items: items.counts.items,
+      equippableItems: items.counts.equippable
+    } : {}),
+    ...(psi ? {
+      psi: psi.counts.psi,
+      psiLearnedByEntries: psi.counts.learnedBy
     } : {})
   };
 }

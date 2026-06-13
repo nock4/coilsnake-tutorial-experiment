@@ -49,7 +49,7 @@ import {
 } from "./playerController";
 import { PLAYER_SPEED, INTERACTION_DISTANCE } from "./worldScene";
 import { DialogueController, publishDebug, type DebugNpc, type FirstSceneDebug } from "./state";
-import { textSpeedCpsFromSearch } from "./dialogueRenderer";
+import { createDialogueResolver, textSpeedCpsFromSearch } from "./dialogueRenderer";
 import { PartyState } from "./partyState";
 import {
   buildMenuScreens,
@@ -158,6 +158,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   create(): void {
     const world = this.world_;
     this.dialogue.setTextSpeedCps(textSpeedCpsFromSearch(globalThis.location?.search));
+    this.dialogue.setResolver(createDialogueResolver(this.data_));
     this.assetsLoaded = world.chunks.some((chunk) => Boolean(chunk.background || chunk.foreground));
     if (!this.assetsLoaded) {
       this.scene.start("fallback", { gameData: this.data_, reason: "full-world chunk assets missing" });
@@ -809,10 +810,17 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private refreshMenuScreens(): void {
+    const resolver = createDialogueResolver(this.data_);
     this.menuScreens = new Map(buildMenuScreens(buildStatusViewModel({
       characters: this.data_.characters,
       partyState: this.partyState
-    })).map((screen) => [screen.id, screen]));
+    }), {
+      characters: this.data_.characters,
+      items: this.data_.items,
+      psi: this.data_.psi,
+      partyState: this.partyState,
+      resolver
+    }).map((screen) => [screen.id, screen]));
   }
 
   menuRenderStack(): MenuRenderScreen[] {

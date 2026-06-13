@@ -19,12 +19,15 @@ import {
   type TutorialStatus,
   type BattleData,
   type CharacterCollection,
+  type ItemCollection,
+  type PsiCollection,
   type ValidationIssue,
   type ValidationReport,
   type WorldArtifact
 } from "@eb/schemas";
 import { BATTLE_FILE, buildBattleData } from "./battle";
 import { CHARACTERS_FILE, buildCharacterData } from "./characters";
+import { ITEMS_FILE, PSI_FILE, buildItemPsiData } from "./itemsPsi";
 import { buildWorldArtifacts, TUTORIAL_NPC_ID, type WorldMode } from "./world";
 
 const DEFAULT_PROJECT = "external/coilsnake-project";
@@ -47,6 +50,7 @@ type CliArgs = {
   worldMode: WorldMode;
   battle: boolean;
   characters: boolean;
+  items: boolean;
   spawnWorldPixel?: { x: number; y: number };
 };
 
@@ -61,6 +65,8 @@ type ConvertResult = {
   sprites: SpriteSheetCollection;
   battle?: BattleData;
   characters?: CharacterCollection;
+  items?: ItemCollection;
+  psi?: PsiCollection;
 };
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -70,6 +76,7 @@ export function parseArgs(argv: string[]): CliArgs {
     worldMode: parseWorldMode(process.env.EB_WORLD_MODE),
     battle: parseBattleMode(process.env.EB_BATTLE),
     characters: parseCharacterMode(process.env.EB_CHARS),
+    items: parseItemMode(process.env.EB_ITEMS),
     ...(process.env.EB_SPAWN ? { spawnWorldPixel: parseSpawn(process.env.EB_SPAWN) } : {})
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -87,6 +94,8 @@ export function parseArgs(argv: string[]): CliArgs {
       args.battle = true;
     } else if (arg === "--characters" || arg === "--chars") {
       args.characters = true;
+    } else if (arg === "--items" || arg === "--item-data") {
+      args.items = true;
     } else if (arg === "--spawn") {
       args.spawnWorldPixel = parseSpawn(argv[index + 1]);
       index += 1;
@@ -123,6 +132,16 @@ function parseCharacterMode(value: string | undefined): boolean {
     return true;
   }
   throw new Error(`Unsupported EB_CHARS "${value}". Expected "1" or "0".`);
+}
+
+function parseItemMode(value: string | undefined): boolean {
+  if (!value || value === "0" || value.toLowerCase() === "false" || value.toLowerCase() === "no") {
+    return false;
+  }
+  if (value === "1" || value.toLowerCase() === "true" || value.toLowerCase() === "yes") {
+    return true;
+  }
+  throw new Error(`Unsupported EB_ITEMS "${value}". Expected "1" or "0".`);
 }
 
 function parseSpawn(value: string | undefined): { x: number; y: number } {
@@ -759,6 +778,7 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
   const worldMode = options.worldMode ?? parseWorldMode(process.env.EB_WORLD_MODE);
   const battleEnabled = options.battle ?? parseBattleMode(process.env.EB_BATTLE);
   const charactersEnabled = options.characters ?? parseCharacterMode(process.env.EB_CHARS);
+  const itemsEnabled = options.items ?? parseItemMode(process.env.EB_ITEMS);
   const spawnWorldPixel = options.spawnWorldPixel ?? (process.env.EB_SPAWN ? parseSpawn(process.env.EB_SPAWN) : undefined);
   const projectAbs = resolveFromRoot(project);
   const outAbs = resolveFromRoot(out);
@@ -843,10 +863,19 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
       displayPath: makeDisplayPath(project)
     })
     : undefined;
+  const itemPsi = itemsEnabled
+    ? await buildItemPsiData({
+      projectAbs,
+      displayPath: makeDisplayPath(project)
+    })
+    : undefined;
+  const items = itemPsi?.items;
+  const psi = itemPsi?.psi;
   const manifestFiles = {
     ...GENERATED_FILES,
     ...(battle ? { battle: BATTLE_FILE } : {}),
-    ...(characters ? { characters: CHARACTERS_FILE } : {})
+    ...(characters ? { characters: CHARACTERS_FILE } : {}),
+    ...(items ? { items: ITEMS_FILE, psi: PSI_FILE } : {})
   };
   const manifestWarnings = [
     ...warnings,
@@ -856,7 +885,9 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     ...tutorialStatus.warnings,
     ...world.warnings,
     ...(battle?.warnings ?? []),
-    ...(characters?.warnings ?? [])
+    ...(characters?.warnings ?? []),
+    ...(items?.warnings ?? []),
+    ...(psi?.warnings ?? [])
   ];
   const generatedFiles = [
     "manifest.json",
@@ -868,7 +899,8 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     GENERATED_FILES.world,
     GENERATED_FILES.sprites,
     ...(battle ? [BATTLE_FILE] : []),
-    ...(characters ? [CHARACTERS_FILE] : [])
+    ...(characters ? [CHARACTERS_FILE] : []),
+    ...(items ? [ITEMS_FILE, PSI_FILE] : [])
   ];
 
   const manifest: Manifest = ManifestSchema.parse({
@@ -893,6 +925,12 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
       ...(characters ? {
         characters: characters.counts.characters,
         characterStatFieldsPopulated: characters.counts.statFieldsPopulated
+      } : {}),
+      ...(items && psi ? {
+        items: items.counts.items,
+        equippableItems: items.counts.equippable,
+        psi: psi.counts.psi,
+        psiLearnedByEntries: psi.counts.learnedBy
       } : {}),
       warnings: manifestWarnings.length,
       errors: errors.length
@@ -927,6 +965,10 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
   if (characters) {
     await writeJson(path.join(outAbs, CHARACTERS_FILE), characters);
   }
+  if (items && psi) {
+    await writeJson(path.join(outAbs, ITEMS_FILE), items);
+    await writeJson(path.join(outAbs, PSI_FILE), psi);
+  }
 
   return {
     manifest,
@@ -938,7 +980,9 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     world,
     sprites,
     ...(battle ? { battle } : {}),
-    ...(characters ? { characters } : {})
+    ...(characters ? { characters } : {}),
+    ...(items ? { items } : {}),
+    ...(psi ? { psi } : {})
   };
 }
 
@@ -1656,7 +1700,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
           GENERATED_FILES.world,
           GENERATED_FILES.sprites,
           ...(result.battle ? [BATTLE_FILE] : []),
-          ...(result.characters ? [CHARACTERS_FILE] : [])
+          ...(result.characters ? [CHARACTERS_FILE] : []),
+          ...(result.items ? [ITEMS_FILE, PSI_FILE] : [])
         ],
         counts: result.manifest.counts,
         world: {
@@ -1670,6 +1715,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
             chunkFiles: result.world.counts.chunkFiles
           } : {})
         },
+        ...(result.items && result.psi ? {
+          itemPsi: {
+            items: result.items.counts.items,
+            equippableItems: result.items.counts.equippable,
+            psi: result.psi.counts.psi,
+            learnedByEntries: result.psi.counts.learnedBy
+          }
+        } : {}),
         tutorial: result.tutorialStatus.counts,
         warnings: result.manifest.warnings,
         errors: result.manifest.errors

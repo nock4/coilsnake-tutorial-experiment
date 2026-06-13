@@ -10,6 +10,8 @@ import {
   resolveScriptEvents,
   resolveScriptReferenceFlow,
   CharacterCollectionSchema,
+  ItemCollectionSchema,
+  PsiCollectionSchema,
   TutorialStatusSchema,
   type ScriptCollection
 } from "@eb/schemas";
@@ -296,6 +298,81 @@ describe("generated validation", () => {
       await rm(temp, { recursive: true, force: true });
     }
   });
+
+  it("extracts item and PSI data only when opted in", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-items-psi-"));
+    try {
+      const project = path.join(temp, "project");
+      const out = path.join(temp, "generated");
+      await writeItemPsiFixture(project);
+
+      const defaultResult = await convertProject({ project, out });
+      const defaultValidation = await validateGeneratedOutput(out);
+
+      expect(defaultResult.items).toBeUndefined();
+      expect(defaultResult.psi).toBeUndefined();
+      expect(existsSync(path.join(out, "items.json"))).toBe(false);
+      expect(existsSync(path.join(out, "psi.json"))).toBe(false);
+      expect(defaultValidation.generatedFiles).not.toContain("items.json");
+      expect(defaultValidation.generatedFiles).not.toContain("psi.json");
+
+      const generated = await convertProject({ project, out, items: true });
+      const result = await validateGeneratedOutput(out);
+      const items = ItemCollectionSchema.parse(generated.items);
+      const psi = PsiCollectionSchema.parse(generated.psi);
+
+      expect(items.counts).toEqual({ items: 2, equippable: 1 });
+      expect(items.items.map((item) => item.id)).toEqual([10, 11]);
+      expect(items.items[0]).toMatchObject({
+        id: 10,
+        name: "[item 10 data]",
+        type: 0x10,
+        cost: 5,
+        action: 1,
+        argument: 2,
+        equippable: true,
+        miscFlags: ["flag-a", "flag-b"]
+      });
+      expect(items.items[1]).toMatchObject({
+        id: 11,
+        name: "[item 11 data]",
+        type: 0x20,
+        cost: 7,
+        action: 3,
+        argument: 0,
+        equippable: false,
+        miscFlags: []
+      });
+      expect(psi.counts).toEqual({ psi: 2, learnedBy: 3 });
+      expect(psi.psi.map((entry) => entry.id)).toEqual([7, 8]);
+      expect(psi.psi[0]).toMatchObject({
+        id: 7,
+        name: "[psi 0 data]",
+        type: "assist",
+        strength: "stage-a",
+        usableOutsideBattle: true,
+        learnedBy: [
+          { charId: 0, level: 2 },
+          { charId: 3, level: 4 }
+        ]
+      });
+      expect(psi.psi[1]).toMatchObject({
+        id: 8,
+        name: "[psi 1 data]",
+        usableOutsideBattle: false,
+        learnedBy: [{ charId: 1, level: 5 }]
+      });
+      expect(result.ok).toBe(true);
+      expect(result.generatedFiles).toContain("items.json");
+      expect(result.generatedFiles).toContain("psi.json");
+      expect(result.items).toBe(2);
+      expect(result.equippableItems).toBe(1);
+      expect(result.psi).toBe(2);
+      expect(result.psiLearnedByEntries).toBe(3);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
 });
 
 async function writeBattleFixture(project: string): Promise<void> {
@@ -474,6 +551,60 @@ async function writeCharacterFixture(project: string): Promise<void> {
     "Enable Summary: false",
     "Name1: ALPHA",
     "Name2: BETA",
+    ""
+  ].join("\n"), "utf8");
+}
+
+async function writeItemPsiFixture(project: string): Promise<void> {
+  await mkdir(project, { recursive: true });
+  await writeFile(path.join(project, "Project.snake"), "CoilSnakeVersion: 4\n", "utf8");
+  await writeFile(path.join(project, "item_configuration_table.yml"), [
+    "10:",
+    "  Action: 1",
+    "  Argument: 0x02",
+    "  Cost: 5",
+    "  Help Text Pointer: synthetic_item_010",
+    "  Misc Flags:",
+    "  - flag-a",
+    "  - flag-b",
+    "  Name: \"[item 10 data]\"",
+    "  Type: 0x10",
+    "11:",
+    "  Action: 3",
+    "  Argument:",
+    "  Cost: 7",
+    "  Help Text Pointer: synthetic_item_011",
+    "  Misc Flags:",
+    "  Name: \"[item 11 data]\"",
+    "  Type: 0x20",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "psi_ability_table.yml"), [
+    "7:",
+    "  Action: 10",
+    "  Level learned by Slot A: 2",
+    "  Level learned by Slot B: 0",
+    "  Level learned by Slot C: 4",
+    "  PSI Name: 0",
+    "  Strength: stage-a",
+    "  Type: assist",
+    "  Usability Outside of Battle: outside",
+    "8:",
+    "  Action: 11",
+    "  Level learned by Slot A: 0",
+    "  Level learned by Slot B: 5",
+    "  Level learned by Slot C: 0",
+    "  PSI Name: 1",
+    "  Strength: stage-b",
+    "  Type: battle",
+    "  Usability Outside of Battle: battle",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "psi_name_table.yml"), [
+    "0:",
+    "  Name: \"[psi 0 data]\"",
+    "1:",
+    "  Name: \"[psi 1 data]\"",
     ""
   ].join("\n"), "utf8");
 }
