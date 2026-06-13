@@ -214,7 +214,9 @@ describe("generated validation", () => {
         defense: 2,
         offense: 4,
         experience: 7,
+        money: 13,
         bossFlag: false,
+        itemRarity: { numerator: 16, denominator: 128 },
         itemDropped: 0,
         actions: [
           { id: 1, arg: 0 },
@@ -258,11 +260,17 @@ describe("generated validation", () => {
       const result = await validateGeneratedOutput(out);
       const characters = CharacterCollectionSchema.parse(generated.characters);
 
-      expect(characters.counts).toEqual({ characters: 2, statFieldsPopulated: 20 });
+      expect(characters.counts).toEqual({
+        characters: 2,
+        statFieldsPopulated: 22,
+        growthFieldsPopulated: 14,
+        expThresholds: 8
+      });
       expect(characters.characters[0]).toMatchObject({
         id: 0,
         name: "ALPHA",
         level: 1,
+        experience: 0,
         maxHp: 30,
         maxPp: 10,
         offense: 2,
@@ -273,12 +281,28 @@ describe("generated validation", () => {
         iq: 2,
         luck: 2,
         startingItems: [10],
-        money: 3
+        money: 3,
+        growth: {
+          offense: 10,
+          defense: 10,
+          speed: 10,
+          guts: 10,
+          vitality: 10,
+          iq: 10,
+          luck: 10
+        },
+        expTable: [
+          { level: 1, experience: 0 },
+          { level: 2, experience: 5 },
+          { level: 3, experience: 25 },
+          { level: 4, experience: 100 }
+        ]
       });
       expect(characters.characters[1]).toMatchObject({
         id: 1,
         name: "BETA",
         level: 4,
+        experience: 100,
         maxHp: 75,
         maxPp: 25,
         offense: 6,
@@ -294,7 +318,7 @@ describe("generated validation", () => {
       expect(result.ok).toBe(true);
       expect(result.generatedFiles).toContain("characters.json");
       expect(result.characters).toBe(2);
-      expect(result.characterStatFieldsPopulated).toBe(20);
+      expect(result.characterStatFieldsPopulated).toBe(22);
     } finally {
       await rm(temp, { recursive: true, force: true });
     }
@@ -399,6 +423,7 @@ async function writeBattleFixture(project: string): Promise<void> {
     "  Defense: 2",
     "  Offense: 0x04",
     "  Experience points: 7",
+    "  Money: 13",
     "  Level: 3",
     "  Boss Flag: False",
     "  Action 1: 1",
@@ -410,12 +435,14 @@ async function writeBattleFixture(project: string): Promise<void> {
     "  Action 4: 4",
     "  Action 4 Argument: 1",
     "  Item Dropped: 0",
+    "  Item Rarity: 16/128",
     "11:",
     "  Name: Neutral Two",
     "  HP: 14",
     "  Defense: 3",
     "  Offense: 5",
     "  Experience points: 8",
+    "  Money: 17",
     "  Level: 4",
     "  Boss Flag: False",
     "  Action 1: 5",
@@ -427,12 +454,14 @@ async function writeBattleFixture(project: string): Promise<void> {
     "  Action 4: 8",
     "  Action 4 Argument: 0",
     "  Item Dropped: 0",
+    "  Item Rarity: 1/128",
     "12:",
     "  Name: Neutral Extra",
     "  HP: 99",
     "  Defense: 9",
     "  Offense: 9",
     "  Experience points: 9",
+    "  Money: 19",
     "  Level: 9",
     "  Boss Flag: False",
     "  Action 1: 9",
@@ -444,6 +473,7 @@ async function writeBattleFixture(project: string): Promise<void> {
     "  Action 4: 9",
     "  Action 4 Argument: 0",
     "  Item Dropped: 0",
+    "  Item Rarity: 1/128",
     ""
   ].join("\n"), "utf8");
   await writeFile(path.join(project, "enemy_groups.yml"), [

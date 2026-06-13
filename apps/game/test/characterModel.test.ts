@@ -32,6 +32,7 @@ describe("character model", () => {
       id: 2,
       name: "PARTY_MEMBER",
       level: 7,
+      experience: 0,
       maxHp: 88,
       hp: 88,
       maxPp: 24,

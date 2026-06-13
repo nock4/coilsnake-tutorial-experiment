@@ -9,8 +9,13 @@ import {
 import {
   buildCombatantFromPartyMember,
   buildPartyMember,
+  calculateStatsAtLevel,
+  levelForExperience,
   type PartyMember,
-  type PartyMemberStatBonuses
+  type PartyMemberExpThreshold,
+  type PartyMemberGrowth,
+  type PartyMemberStatBonuses,
+  type PartyMemberStats
 } from "./characterModel";
 import {
   applyUseEffectToVitals,
@@ -31,6 +36,7 @@ export type Combatant = {
   charId: number;
   name: string;
   level: number;
+  experience: number;
   maxHp: number;
   maxPp: number;
   pp: number;
@@ -39,12 +45,19 @@ export type Combatant = {
   offense: number;
   defense: number;
   speed: number;
+  stats: PartyMemberStats;
+  growth?: PartyMemberGrowth;
+  expTable?: PartyMemberExpThreshold[];
+  money: number;
+  itemDropped: number | null;
+  itemRarity: BattleEnemy["itemRarity"];
   isEnemy: boolean;
 };
 
 export type BattleState = {
   party: Combatant[];
   enemies: Combatant[];
+  wallet: number;
 };
 
 export type PlayerCombatantOptions = Partial<Pick<Combatant, "name" | "level" | "maxHp" | "offense" | "defense" | "speed">> & {
@@ -64,6 +77,7 @@ export type BattleStateOptions = PlayerCombatantOptions & {
   partyMembers?: PartyMember[];
   partyOptions?: PlayerCombatantOptions[];
   enemyOptions?: EnemyCombatantOptions[];
+  wallet?: number;
 };
 
 export type TurnResolution = {
@@ -97,6 +111,38 @@ export type BattleActionResolution = {
 };
 
 export type PsiBattleKind = "offense" | "recovery" | "assist" | "other";
+
+export type BattleDropSummary = {
+  enemyId: number;
+  itemId: number;
+  itemName: string;
+  recipientCharId: number;
+  roll: number;
+  rarity: NonNullable<BattleEnemy["itemRarity"]>;
+};
+
+export type BattleLevelUpSummary = {
+  charId: number;
+  name: string;
+  fromLevel: number;
+  toLevel: number;
+  statGains: PartyMemberStats & { maxHp: number; maxPp: number };
+};
+
+export type BattleVictorySummary = {
+  expGained: number;
+  moneyGained: number;
+  drops: BattleDropSummary[];
+  levelUps: BattleLevelUpSummary[];
+};
+
+export type BattleVictoryViewModel = {
+  lines: string[];
+  expGained: number;
+  moneyGained: number;
+  itemsFound: string[];
+  levelUps: BattleLevelUpSummary[];
+};
 
 export const PLAYER_DEFAULTS = {
   charId: 0,
@@ -140,18 +186,34 @@ export function buildPlayerCombatant(options: PlayerCombatantOptions = {}): Comb
   }
 
   const maxHp = stat(options.maxHp ?? PLAYER_DEFAULTS.maxHp);
+  const offense = stat(options.offense ?? PLAYER_DEFAULTS.offense) + stat(options.statBonuses?.offense ?? 0);
+  const defense = stat(options.defense ?? PLAYER_DEFAULTS.defense) + stat(options.statBonuses?.defense ?? 0);
+  const speed = stat(options.speed ?? PLAYER_DEFAULTS.speed) + stat(options.statBonuses?.speed ?? 0);
   return {
     charId: PLAYER_DEFAULTS.charId,
     name: options.name ?? PLAYER_DEFAULTS.name,
     level: stat(options.level ?? PLAYER_DEFAULTS.level),
+    experience: 0,
     maxHp,
     maxPp: PLAYER_DEFAULTS.maxPp,
     pp: PLAYER_DEFAULTS.pp,
     inventory: [...PLAYER_DEFAULTS.inventory],
     hp: createRollingMeter(maxHp, options.hpRatePerSec ?? PLAYER_DEFAULTS.hpRatePerSec),
-    offense: stat(options.offense ?? PLAYER_DEFAULTS.offense) + stat(options.statBonuses?.offense ?? 0),
-    defense: stat(options.defense ?? PLAYER_DEFAULTS.defense) + stat(options.statBonuses?.defense ?? 0),
-    speed: stat(options.speed ?? PLAYER_DEFAULTS.speed) + stat(options.statBonuses?.speed ?? 0),
+    offense,
+    defense,
+    speed,
+    stats: {
+      offense,
+      defense,
+      speed,
+      guts: stat(options.statBonuses?.guts ?? 0),
+      vitality: stat(options.statBonuses?.vitality ?? 0),
+      iq: stat(options.statBonuses?.iq ?? 0),
+      luck: stat(options.statBonuses?.luck ?? 0)
+    },
+    money: 0,
+    itemDropped: null,
+    itemRarity: null,
     isEnemy: false
   };
 }
@@ -162,6 +224,7 @@ export function buildEnemyCombatant(enemy: BattleEnemy, options: EnemyCombatantO
     charId: enemy.id,
     name: enemy.name,
     level: stat(enemy.level),
+    experience: stat(enemy.experience),
     maxHp,
     maxPp: 0,
     pp: 0,
@@ -170,6 +233,18 @@ export function buildEnemyCombatant(enemy: BattleEnemy, options: EnemyCombatantO
     offense: stat(enemy.offense),
     defense: stat(enemy.defense),
     speed: stat(options.speed ?? enemySpeed(enemy)),
+    stats: {
+      offense: stat(enemy.offense),
+      defense: stat(enemy.defense),
+      speed: stat(options.speed ?? enemySpeed(enemy)),
+      guts: 0,
+      vitality: 0,
+      iq: 0,
+      luck: 0
+    },
+    money: stat(enemy.money),
+    itemDropped: enemy.itemDropped === null ? null : stat(enemy.itemDropped),
+    itemRarity: enemy.itemRarity,
     isEnemy: true
   };
 }
@@ -198,9 +273,11 @@ export function buildPartyCombatants(options: BattleStateOptions = {}): Combatan
 
 export function createBattleState(enemies: BattleEnemy | BattleEnemy[], options: BattleStateOptions = {}): BattleState {
   const enemyList = Array.isArray(enemies) ? enemies : [enemies];
+  const party = buildPartyCombatants(options);
   return {
-    party: buildPartyCombatants(options),
-    enemies: enemyList.map((enemy, index) => buildEnemyCombatant(enemy, options.enemyOptions?.[index]))
+    party,
+    enemies: enemyList.map((enemy, index) => buildEnemyCombatant(enemy, options.enemyOptions?.[index])),
+    wallet: stat(options.wallet ?? party.reduce((sum, member) => sum + member.money, 0))
   };
 }
 
@@ -431,10 +508,103 @@ export function psiEffectAmount(psi: Pick<PsiData, "strength">, kind: "offense" 
   return Math.max(1, Math.floor(base * spread));
 }
 
+export function applyVictoryRewards(
+  state: BattleState,
+  options: {
+    rng?: Rng;
+    items?: Array<Pick<ItemData, "id" | "name">>;
+  } = {}
+): { state: BattleState; summary: BattleVictorySummary } {
+  const rng = options.rng ?? (() => 1);
+  const defeatedEnemies = state.enemies.filter((enemy) => !isCombatantAlive(enemy));
+  const expGained = defeatedEnemies.reduce((sum, enemy) => sum + stat(enemy.experience), 0);
+  const moneyGained = defeatedEnemies.reduce((sum, enemy) => sum + stat(enemy.money), 0);
+  let nextState: BattleState = {
+    ...state,
+    party: state.party.map(cloneCombatant),
+    enemies: state.enemies.map(cloneCombatant),
+    wallet: stat(state.wallet) + moneyGained
+  };
+
+  const drops: BattleDropSummary[] = [];
+  for (const enemy of defeatedEnemies) {
+    const itemId = stat(enemy.itemDropped ?? 0);
+    const rarity = enemy.itemRarity;
+    if (itemId <= 0 || !rarity) {
+      continue;
+    }
+    const roll = normalizedRoll(rng());
+    if (roll >= dropChance(rarity)) {
+      continue;
+    }
+    const recipientIndex = firstLivingIndex(nextState.party);
+    const recipient = recipientIndex >= 0 ? nextState.party[recipientIndex] : nextState.party[0];
+    if (!recipient) {
+      continue;
+    }
+    const updatedRecipient = {
+      ...recipient,
+      inventory: [...recipient.inventory, itemId]
+    };
+    nextState = withCombatant(nextState, { side: "party", index: recipientIndex >= 0 ? recipientIndex : 0 }, updatedRecipient);
+    drops.push({
+      enemyId: enemy.charId,
+      itemId,
+      itemName: itemNameFor(itemId, options.items),
+      recipientCharId: recipient.charId,
+      roll,
+      rarity
+    });
+  }
+
+  const levelUps: BattleLevelUpSummary[] = [];
+  nextState = {
+    ...nextState,
+    party: nextState.party.map((member) => {
+      if (!isCombatantAlive(member)) {
+        return member;
+      }
+      const applied = applyExperienceToCombatant(member, expGained);
+      if (applied.levelUp) {
+        levelUps.push(applied.levelUp);
+      }
+      return applied.combatant;
+    })
+  };
+
+  return {
+    state: nextState,
+    summary: {
+      expGained,
+      moneyGained,
+      drops,
+      levelUps
+    }
+  };
+}
+
+export function buildVictorySummaryViewModel(summary: BattleVictorySummary): BattleVictoryViewModel {
+  const itemsFound = summary.drops.map((drop) => drop.itemName);
+  const lines = [
+    `EXP ${summary.expGained}`,
+    `Money ${summary.moneyGained}`,
+    itemsFound.length > 0 ? `Found ${itemsFound.join(", ")}` : "Found no items",
+    ...summary.levelUps.map((levelUp) => `${levelUp.name} Lv ${levelUp.toLevel}`)
+  ];
+  return {
+    lines,
+    expGained: summary.expGained,
+    moneyGained: summary.moneyGained,
+    itemsFound,
+    levelUps: summary.levelUps
+  };
+}
+
 export function tickBattleMeters(state: BattleState, dtMs: number): BattleState {
   return {
     party: state.party.map((combatant) => ({ ...combatant, hp: tick(combatant.hp, dtMs) })),
-    enemies: state.enemies.map((combatant) => ({ ...combatant, hp: tick(combatant.hp, dtMs) }))
+    enemies: state.enemies.map((combatant) => ({ ...combatant, hp: tick(combatant.hp, dtMs) })),
+    wallet: state.wallet
   };
 }
 
@@ -598,6 +768,115 @@ function applyItemEffectToCombatant(combatant: Combatant, effect: ItemUseEffect)
     previousValue: applied.previousValue,
     nextValue: applied.nextValue
   };
+}
+
+function applyExperienceToCombatant(combatant: Combatant, expGained: number): {
+  combatant: Combatant;
+  levelUp?: BattleLevelUpSummary;
+} {
+  const currentLevel = Math.max(1, stat(combatant.level));
+  const nextExperience = stat(combatant.experience) + stat(expGained);
+  if (!combatant.growth || !combatant.expTable || combatant.expTable.length === 0) {
+    return {
+      combatant: {
+        ...combatant,
+        experience: nextExperience
+      }
+    };
+  }
+
+  const nextLevel = levelForExperience(combatant.expTable, nextExperience, currentLevel);
+  if (nextLevel <= currentLevel) {
+    return {
+      combatant: {
+        ...combatant,
+        experience: nextExperience
+      }
+    };
+  }
+
+  const calculated = calculateStatsAtLevel(combatant.growth, nextLevel);
+  const nextStats = maxStats(combatant.stats, calculated.stats);
+  const nextMaxHp = Math.max(combatant.maxHp, calculated.maxHp);
+  const nextMaxPp = Math.max(combatant.maxPp, calculated.maxPp);
+  const statGains = {
+    offense: nextStats.offense - combatant.stats.offense,
+    defense: nextStats.defense - combatant.stats.defense,
+    speed: nextStats.speed - combatant.stats.speed,
+    guts: nextStats.guts - combatant.stats.guts,
+    vitality: nextStats.vitality - combatant.stats.vitality,
+    iq: nextStats.iq - combatant.stats.iq,
+    luck: nextStats.luck - combatant.stats.luck,
+    maxHp: nextMaxHp - combatant.maxHp,
+    maxPp: nextMaxPp - combatant.maxPp
+  };
+
+  const maxHpGain = Math.max(0, statGains.maxHp);
+  const maxPpGain = Math.max(0, statGains.maxPp);
+  const nextCombatant: Combatant = {
+    ...combatant,
+    level: nextLevel,
+    experience: nextExperience,
+    maxHp: nextMaxHp,
+    maxPp: nextMaxPp,
+    pp: Math.min(nextMaxPp, combatant.pp + maxPpGain),
+    hp: {
+      ...combatant.hp,
+      displayed: Math.min(nextMaxHp, combatant.hp.displayed + maxHpGain),
+      target: Math.min(nextMaxHp, combatant.hp.target + maxHpGain),
+      isRolling: false
+    },
+    offense: nextStats.offense,
+    defense: nextStats.defense,
+    speed: nextStats.speed,
+    stats: nextStats
+  };
+
+  return {
+    combatant: nextCombatant,
+    levelUp: {
+      charId: combatant.charId,
+      name: combatant.name,
+      fromLevel: currentLevel,
+      toLevel: nextLevel,
+      statGains
+    }
+  };
+}
+
+function maxStats(left: PartyMemberStats, right: PartyMemberStats): PartyMemberStats {
+  return {
+    offense: Math.max(left.offense, right.offense),
+    defense: Math.max(left.defense, right.defense),
+    speed: Math.max(left.speed, right.speed),
+    guts: Math.max(left.guts, right.guts),
+    vitality: Math.max(left.vitality, right.vitality),
+    iq: Math.max(left.iq, right.iq),
+    luck: Math.max(left.luck, right.luck)
+  };
+}
+
+function cloneCombatant(combatant: Combatant): Combatant {
+  return {
+    ...combatant,
+    inventory: [...combatant.inventory],
+    hp: { ...combatant.hp },
+    stats: { ...combatant.stats },
+    ...(combatant.growth ? { growth: { ...combatant.growth } } : {}),
+    ...(combatant.expTable ? { expTable: combatant.expTable.map((entry) => ({ ...entry })) } : {}),
+    ...(combatant.itemRarity ? { itemRarity: { ...combatant.itemRarity } } : {})
+  };
+}
+
+function dropChance(rarity: NonNullable<BattleEnemy["itemRarity"]>): number {
+  if (rarity.denominator <= 0) {
+    return 0;
+  }
+  return Math.min(1, Math.max(0, rarity.numerator / rarity.denominator));
+}
+
+function itemNameFor(itemId: number, items: Array<Pick<ItemData, "id" | "name">> | undefined): string {
+  return items?.find((item) => stat(item.id) === itemId)?.name || `[item ${itemId}]`;
 }
 
 function combatantVitals(combatant: Combatant): PartyVitals {

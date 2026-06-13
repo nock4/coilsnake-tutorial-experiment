@@ -14,6 +14,7 @@ export const CHARACTERS_FILE = "characters.json";
 const MAX_PLAYABLE_CHARACTERS = 8;
 const STAT_FIELDS = [
   "level",
+  "experience",
   "maxHp",
   "maxPp",
   "offense",
@@ -68,6 +69,11 @@ type CalculatedStats = {
   luck: number;
 };
 
+type ExpThreshold = {
+  level: number;
+  experience: number;
+};
+
 export async function buildCharacterData(options: CharacterBuildOptions): Promise<CharacterCollection> {
   assertCharacterInputs(options.projectAbs);
 
@@ -110,6 +116,7 @@ export async function buildCharacterData(options: CharacterBuildOptions): Promis
       id,
       name: name ?? `CHARACTER_${id}`,
       level: initial.level,
+      experience: initial.experience,
       maxHp: calculated.maxHp,
       maxPp: calculated.maxPp,
       offense: calculated.offense,
@@ -120,7 +127,9 @@ export async function buildCharacterData(options: CharacterBuildOptions): Promis
       iq: calculated.iq,
       luck: calculated.luck,
       startingItems: initial.items.filter((item) => item > 0),
-      money: initial.money
+      money: initial.money,
+      growth: growthToRuntime(growth),
+      expTable: parseExpThresholds(expTable.get(id))
     };
   });
 
@@ -128,7 +137,7 @@ export async function buildCharacterData(options: CharacterBuildOptions): Promis
     schemaVersion: SCHEMA_VERSION,
     sourceProjectPath: options.displayPath,
     derivation: {
-      source: "initial_stats.yml provides Level, Experience Points, Money, and Items Possessed; stats_growth_vars.yml provides stat growth variables; exp_table.yml checks Experience Points against Level; naming_skip.yml supplies runtime names when present.",
+      source: "initial_stats.yml provides Level, Experience Points, Money, and Items Possessed; stats_growth_vars.yml provides stat growth variables; exp_table.yml provides cumulative EXP thresholds and checks Experience Points against Level; naming_skip.yml supplies runtime names when present.",
       baseStats: "Level 1 starts at HP 30, PP 10, and 2 for offense, defense, speed, guts, vitality, IQ, and luck.",
       statFormula: "For each level 2..Level, mirrors CoilSnake damage_calc target-stat formula using deterministic midpoint rolls: r=5 for Vitality/IQ through level 10, r=8.5 on levels divisible by 4, otherwise r=4.5; each stat gain is truncated.",
       hpPpFormula: "After each level, HP targets 15 * Vitality and PP targets 5 * IQ; when the target increase is less than 2, deterministic midpoint increments of HP +2 and PP +1 are used.",
@@ -137,7 +146,9 @@ export async function buildCharacterData(options: CharacterBuildOptions): Promis
     characters,
     counts: {
       characters: characters.length,
-      statFieldsPopulated: characters.length * STAT_FIELDS.length
+      statFieldsPopulated: characters.length * STAT_FIELDS.length,
+      growthFieldsPopulated: characters.length * 7,
+      expThresholds: characters.reduce((sum, character) => sum + (character.expTable?.length ?? 0), 0)
     },
     warnings
   });
@@ -236,6 +247,26 @@ function readGrowthStats(entry: Record<string, string>, id: number): GrowthStats
   };
 }
 
+function growthToRuntime(growth: GrowthStats): {
+  offense: number;
+  defense: number;
+  speed: number;
+  guts: number;
+  vitality: number;
+  iq: number;
+  luck: number;
+} {
+  return {
+    offense: growth.Offense,
+    defense: growth.Defense,
+    speed: growth.Speed,
+    guts: growth.Guts,
+    vitality: growth.Vitality,
+    iq: growth.IQ,
+    luck: growth.Luck
+  };
+}
+
 function calculateStats(growth: GrowthStats, endLevel: number): CalculatedStats {
   const stats = {
     maxHp: 30,
@@ -285,22 +316,26 @@ function midpointRoll(statName: keyof GrowthStats, newLevel: number): number {
 }
 
 function levelForExperience(entry: Record<string, string> | undefined, experience: number): number | undefined {
-  if (!entry) {
-    return undefined;
-  }
-  const thresholds = Object.entries(entry)
-    .map(([key, value]) => {
-      const match = /^Level\s+(\d+)\s+EXP$/.exec(key);
-      return match ? { level: Number.parseInt(match[1], 10), experience: parseYamlInteger(value) } : undefined;
-    })
-    .filter((item): item is { level: number; experience: number } =>
-      item !== undefined && Number.isFinite(item.experience)
-    )
-    .sort((a, b) => a.level - b.level);
+  const thresholds = parseExpThresholds(entry);
   return thresholds.reduce<number | undefined>(
     (level, threshold) => experience >= threshold.experience ? threshold.level : level,
     undefined
   );
+}
+
+function parseExpThresholds(entry: Record<string, string> | undefined): ExpThreshold[] {
+  if (!entry) {
+    return [];
+  }
+  return Object.entries(entry)
+    .map(([key, value]) => {
+      const match = /^Level\s+(\d+)\s+EXP$/.exec(key);
+      return match ? { level: Number.parseInt(match[1], 10), experience: parseYamlInteger(value) } : undefined;
+    })
+    .filter((item): item is ExpThreshold =>
+      item !== undefined && item.level > 0 && Number.isFinite(item.experience)
+    )
+    .sort((a, b) => a.level - b.level);
 }
 
 function requiredInteger(value: string | undefined, field: string): number {

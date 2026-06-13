@@ -347,6 +347,7 @@ function enemy(
     defense: stats.defense ?? 4,
     offense: stats.offense ?? 8,
     experience: 0,
+    money: 0,
     bossFlag: false,
     actions: [
       { id: 0, arg: 0 },
@@ -354,7 +355,8 @@ function enemy(
       { id: 0, arg: 0 },
       { id: 0, arg: 0 }
     ],
-    itemDropped: null
+    itemDropped: null,
+    itemRarity: null
   };
 }
 

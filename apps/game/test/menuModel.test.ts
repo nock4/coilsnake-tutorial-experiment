@@ -403,6 +403,7 @@ function partyMember(id: number, name: string, level: number): PartyMember {
     id,
     name,
     level,
+    experience: 0,
     maxHp: 50,
     hp: 50,
     maxPp: 12,

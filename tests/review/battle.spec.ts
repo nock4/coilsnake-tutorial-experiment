@@ -6,7 +6,17 @@ import {
 
 type BattleDebug = {
   mode: "battle";
-  phase: "menu" | "enemy-rolling" | "player-rolling" | "win" | "lose" | "flee";
+  phase:
+    | "enter-transition"
+    | "menu"
+    | "enemy-rolling"
+    | "player-rolling"
+    | "victory-summary"
+    | "exit-transition"
+    | "win"
+    | "lose"
+    | "flee";
+  transitionPhase: "none" | "enter" | "summary" | "exit";
   menuIndex: number;
   targetIndex: number;
   turnOrder: Array<{ side: "party" | "enemy"; index: number }>;
@@ -20,6 +30,12 @@ type BattleDebug = {
   };
   enemy?: BattleCombatantDebug;
   outcome: "ongoing" | "win" | "lose";
+  victorySummary: {
+    expGained: number;
+    moneyGained: number;
+    drops: Array<{ enemyId: number; itemId: number; itemName: string; recipientCharId: number }>;
+    levelUps: Array<{ charId: number; name: string; fromLevel: number; toLevel: number }>;
+  } | null;
 };
 
 type BattleCombatantDebug = {
@@ -39,6 +55,8 @@ type BattleRun = {
   sawEnemyDisplayedDecreaseByIndex: boolean[];
   sawEnemyRolling: boolean;
   sawPartyHpDecrease: boolean;
+  sawVictorySummary: boolean;
+  sawExitTransition: boolean;
 };
 
 test("enters battle and BASH rolls the enemy HP odometer to a win", async ({ page }) => {
@@ -50,6 +68,12 @@ test("enters battle and BASH rolls the enemy HP odometer to a win", async ({ pag
   expect(run.enemyDisplayedTotals.some((value) => value < totalDisplayed(run.initial.enemies))).toBe(true);
   expect(run.enemyDisplayedTotals.at(-1)).toBe(0);
   expect(run.final.outcome).toBe("win");
+  expect(run.sawVictorySummary, "victory summary should appear before battle exit").toBe(true);
+  expect(run.sawExitTransition, "victory summary should dismiss into the exit transition").toBe(true);
+  expect(run.final.victorySummary?.expGained).toBeGreaterThanOrEqual(0);
+  expect(run.final.victorySummary?.moneyGained).toBeGreaterThanOrEqual(0);
+  expect(Array.isArray(run.final.victorySummary?.drops)).toBe(true);
+  expect(Array.isArray(run.final.victorySummary?.levelUps)).toBe(true);
   expect(run.final.enemies.every((enemy) => enemy.hpDisplayed === 0)).toBe(true);
   for (const index of initiallyLivingEnemyIndexes(run.initial)) {
     expect(run.targetedEnemyIndexes, `enemy index ${index} should be targeted before win`).toContain(index);
@@ -88,6 +112,8 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
   const targetedEnemyIndexes = new Set<number>();
   let sawEnemyRolling = initial.enemies.some((enemy) => enemy.isRolling);
   let sawPartyHpDecrease = false;
+  let sawVictorySummary = false;
+  let sawExitTransition = false;
   let final = initial;
   const deadline = Date.now() + 30_000;
 
@@ -97,7 +123,12 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
     const enemyDisplayed = totalDisplayed(state.enemies);
     const partyDisplayed = totalDisplayed(state.party);
     enemyDisplayedTotals.push(enemyDisplayed);
-    partyDisplayedTotals.push(partyDisplayed);
+    // Only sample party HP while the fight is ongoing: winning triggers a
+    // level-up that legitimately RAISES party HP, which must not count against
+    // the monotonic-decrease (counter-damage) check below.
+    if (state.outcome !== "win") {
+      partyDisplayedTotals.push(partyDisplayed);
+    }
     recordEnemyDisplayed(
       enemyDisplayedByIndex,
       sawEnemyDisplayedDecreaseByIndex,
@@ -105,22 +136,28 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
     );
     sawEnemyRolling ||= state.enemies.some((enemy) => enemy.isRolling);
     sawPartyHpDecrease ||= partyDisplayed < initialPartyDisplayed;
+    sawVictorySummary ||= state.phase === "victory-summary" && Boolean(state.victorySummary);
+    sawExitTransition ||= state.phase === "exit-transition";
 
     if (state.enemies.every((enemy) => enemy.hpDisplayed === 0)) {
       expect(state.outcome).toBe("win");
     }
 
-    if (state.outcome === "win" && state.enemies.every((enemy) => enemy.hpDisplayed === 0)) {
+    if (state.outcome === "win" && state.enemies.every((enemy) => enemy.hpDisplayed === 0) && state.phase === "victory-summary") {
+      final = await dismissVictorySummary(page);
+      sawExitTransition ||= final.phase === "exit-transition";
       return {
         initial,
-        final: state,
+        final,
         enemyDisplayedTotals,
         partyDisplayedTotals,
         enemyDisplayedByIndex,
         targetedEnemyIndexes: [...targetedEnemyIndexes],
         sawEnemyDisplayedDecreaseByIndex,
         sawEnemyRolling,
-        sawPartyHpDecrease
+        sawPartyHpDecrease,
+        sawVictorySummary,
+        sawExitTransition
       };
     }
 
@@ -156,6 +193,11 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
   );
   sawEnemyRolling ||= final.enemies.some((enemy) => enemy.isRolling);
   sawPartyHpDecrease ||= totalDisplayed(final.party) < initialPartyDisplayed;
+  sawVictorySummary ||= final.phase === "victory-summary" && Boolean(final.victorySummary);
+  if (final.phase === "victory-summary") {
+    final = await dismissVictorySummary(page);
+    sawExitTransition ||= final.phase === "exit-transition";
+  }
   return {
     initial,
     final,
@@ -165,7 +207,9 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
     targetedEnemyIndexes: [...targetedEnemyIndexes],
     sawEnemyDisplayedDecreaseByIndex,
     sawEnemyRolling,
-    sawPartyHpDecrease
+    sawPartyHpDecrease,
+    sawVictorySummary,
+    sawExitTransition
   };
 }
 
@@ -220,9 +264,26 @@ async function readBattleDebug(page: Page): Promise<BattleDebug | undefined> {
   return page.evaluate(() => (globalThis as unknown as { __battleDebug?: BattleDebug }).__battleDebug);
 }
 
+async function dismissVictorySummary(page: Page): Promise<BattleDebug> {
+  await page.keyboard.press("Space");
+  await expect.poll(async () => {
+    const state = await readBattleDebug(page);
+    return state?.phase === "exit-transition" && state.outcome === "win";
+  }, {
+    message: "victory summary should dismiss into the battle exit transition",
+    timeout: 1_000,
+    intervals: [20, 40, 80, 120]
+  }).toBe(true);
+  const state = await readRequiredBattleDebug(page);
+  expect(state.outcome).toBe("win");
+  expect(state.phase).toBe("exit-transition");
+  return state;
+}
+
 function expectBattleNumbers(state: BattleDebug): void {
   expect(Number.isFinite(state.menuIndex)).toBe(true);
   expect(Number.isFinite(state.targetIndex)).toBe(true);
+  expect(["none", "enter", "summary", "exit"]).toContain(state.transitionPhase);
   expect(Array.isArray(state.turnOrder)).toBe(true);
   expect(state.party.length).toBeGreaterThan(0);
   expect(state.enemies.length).toBeGreaterThan(0);

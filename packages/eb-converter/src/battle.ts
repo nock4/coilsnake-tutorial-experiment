@@ -130,9 +130,11 @@ export async function buildBattleData(options: BattleBuildOptions): Promise<Batt
       defense: "enemy_configuration_table.yml Defense",
       offense: "enemy_configuration_table.yml Offense",
       experience: "enemy_configuration_table.yml Experience points",
+      money: "enemy_configuration_table.yml Money",
       bossFlag: "enemy_configuration_table.yml Boss Flag",
       actions: "enemy_configuration_table.yml Action 1-4 plus Action 1-4 Argument",
-      itemDropped: "enemy_configuration_table.yml Item Dropped"
+      itemDropped: "enemy_configuration_table.yml Item Dropped",
+      itemRarity: "enemy_configuration_table.yml Item Rarity as numerator/denominator odds"
     },
     spriteFormat: {
       source: "CoilSnake-master/coilsnake/model/eb/sprites.py EbBattleSprite",
@@ -319,12 +321,14 @@ function enemyToBattleEnemy(id: number, entry: Record<string, string>) {
     defense: numericField(entry, "Defense"),
     offense: numericField(entry, "Offense"),
     experience: numericField(entry, "Experience points"),
+    money: numericField(entry, "Money"),
     bossFlag: booleanField(entry, "Boss Flag"),
     actions: [1, 2, 3, 4].map((index) => ({
       id: numericField(entry, `Action ${index}`),
       arg: numericField(entry, `Action ${index} Argument`)
     })),
-    itemDropped: nullableNumericField(entry, "Item Dropped")
+    itemDropped: nullableNumericField(entry, "Item Dropped"),
+    itemRarity: rarityField(entry, "Item Rarity")
   };
 }
 
@@ -521,6 +525,26 @@ function nullableNumericField(entry: Record<string, string>, field: string): num
     throw new Error(`Invalid nullable numeric battle field "${field}".`);
   }
   return parsed;
+}
+
+function rarityField(entry: Record<string, string>, field: string): { numerator: number; denominator: number } | null {
+  const value = entry[field]?.trim();
+  if (!value || /^(?:none|null)$/i.test(value)) {
+    return null;
+  }
+  const match = /^(\d+|0x[0-9a-f]+)\s*\/\s*(\d+|0x[0-9a-f]+)$/i.exec(value);
+  if (!match) {
+    throw new Error(`Invalid battle rarity field "${field}".`);
+  }
+  const numerator = parseYamlInteger(match[1]);
+  const denominator = parseYamlInteger(match[2]);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+    throw new Error(`Invalid battle rarity field "${field}".`);
+  }
+  return {
+    numerator: Math.max(0, Math.floor(numerator)),
+    denominator: Math.max(1, Math.floor(denominator))
+  };
 }
 
 function booleanField(entry: Record<string, string>, field: string): boolean {

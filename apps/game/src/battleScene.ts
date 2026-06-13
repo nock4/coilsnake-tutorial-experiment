@@ -12,6 +12,8 @@ import {
   type PsiData
 } from "@eb/schemas";
 import {
+  applyVictoryRewards,
+  buildVictorySummaryViewModel,
   combatantAt,
   createBattleState,
   firstLivingIndex,
@@ -28,9 +30,10 @@ import {
   type BattleActor,
   type BattleOutcome,
   type BattleState,
+  type BattleVictorySummary,
   type Rng
 } from "./battleLogic";
-import { publishBattleDebug, type BattlePhase } from "./state";
+import { publishBattleDebug, type BattlePhase, type BattleTransitionPhase } from "./state";
 
 const MONO = "Menlo, Consolas, monospace";
 const COMMANDS = ["BASH", "PSI", "GOODS", "RUN"] as const;
@@ -38,6 +41,8 @@ const STATUS_TOP = 326;
 const PADDED_HP_DIGITS = 3;
 const ACTION_ADVANCE_DELAY_MS = 350;
 const MENU_MAX_ROWS = 4;
+const ENTER_TRANSITION_MS = 650;
+const EXIT_TRANSITION_MS = 450;
 
 type BattleCommand = typeof COMMANDS[number];
 type BattleSubmenu = "command" | "psi" | "goods" | "target";
@@ -54,7 +59,10 @@ export class BattleScene extends Phaser.Scene {
   private items_?: ItemCollection;
   private psi_?: PsiCollection;
   private rng_: Rng = () => 0.5;
-  private phase_: BattlePhase = "menu";
+  private phase_: BattlePhase = "enter-transition";
+  private transitionPhase_: BattleTransitionPhase = "enter";
+  private transitionMs_ = ENTER_TRANSITION_MS;
+  private victorySummary_: BattleVictorySummary | null = null;
   private commandIndex_ = 0;
   private submenu_: BattleSubmenu = "command";
   private submenuIndex_ = 0;
@@ -72,6 +80,7 @@ export class BattleScene extends Phaser.Scene {
   private targetCursor?: Phaser.GameObjects.Graphics;
   private commandText?: Phaser.GameObjects.Text;
   private partyText?: Phaser.GameObjects.Text;
+  private transitionGraphics?: Phaser.GameObjects.Graphics;
   private enemySprites: Phaser.GameObjects.Image[] = [];
 
   constructor() {
@@ -95,7 +104,10 @@ export class BattleScene extends Phaser.Scene {
     }
     this.battle_ = createBattleState(enemies, { characters: data.characters });
     this.rng_ = createSeededRng((this.group_.id + 1) * 65537 + enemies.reduce((sum, enemy) => sum + enemy.id, 0));
-    this.phase_ = "menu";
+    this.phase_ = "enter-transition";
+    this.transitionPhase_ = "enter";
+    this.transitionMs_ = ENTER_TRANSITION_MS;
+    this.victorySummary_ = null;
     this.commandIndex_ = 0;
     this.submenu_ = "command";
     this.submenuIndex_ = 0;
@@ -134,13 +146,39 @@ export class BattleScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown-ESC", () => this.cancelMenu());
     this.input.keyboard?.on("keydown-BACKSPACE", () => this.cancelMenu());
     void this.loadOptionalGeneratedMenuData();
-    this.advanceToNextActor();
+    this.transitionGraphics = this.add.graphics().setDepth(90);
+    this.renderTransition();
     this.renderStatus();
     this.publish();
   }
 
   update(_: number, delta: number): void {
-    if (!this.isTerminalPhase()) {
+    if (this.phase_ === "enter-transition") {
+      this.transitionMs_ = Math.max(0, this.transitionMs_ - delta);
+      if (this.transitionMs_ <= 0) {
+        this.transitionGraphics?.clear();
+        this.transitionPhase_ = "none";
+        this.advanceToNextActor();
+      } else {
+        this.renderTransition();
+      }
+      this.renderStatus();
+      this.publish();
+      return;
+    }
+
+    if (this.phase_ === "exit-transition") {
+      this.transitionMs_ = Math.max(0, this.transitionMs_ - delta);
+      this.renderTransition();
+      this.renderStatus();
+      this.publish();
+      if (this.transitionMs_ <= 0) {
+        this.exitBattle();
+      }
+      return;
+    }
+
+    if (!this.isBattleFlowPaused()) {
       this.battle_ = tickBattleMeters(this.battle_, delta);
       this.actionDelayMs_ = Math.max(0, this.actionDelayMs_ - delta);
       this.advanceBattleFlow();
@@ -201,6 +239,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private confirmMenu(): void {
+    if (this.phase_ === "victory-summary" || this.phase_ === "lose" || this.phase_ === "flee" || this.phase_ === "win") {
+      this.beginExitTransition();
+      return;
+    }
     if (this.phase_ !== "menu" || this.currentActor_?.side !== "party") {
       return;
     }
@@ -412,8 +454,13 @@ export class BattleScene extends Phaser.Scene {
   private advanceBattleFlow(): void {
     const currentOutcome = outcome(this.battle_);
     if (currentOutcome !== "ongoing") {
-      this.phase_ = currentOutcome;
       this.currentActor_ = null;
+      if (currentOutcome === "win") {
+        this.beginVictorySummary();
+      } else {
+        this.phase_ = "lose";
+        this.transitionPhase_ = "none";
+      }
       return;
     }
 
@@ -439,8 +486,13 @@ export class BattleScene extends Phaser.Scene {
     for (let guard = 0; guard < 100; guard += 1) {
       const currentOutcome = outcome(this.battle_);
       if (currentOutcome !== "ongoing") {
-        this.phase_ = currentOutcome;
         this.currentActor_ = null;
+        if (currentOutcome === "win") {
+          this.beginVictorySummary();
+        } else {
+          this.phase_ = "lose";
+          this.transitionPhase_ = "none";
+        }
         return;
       }
 
@@ -470,6 +522,81 @@ export class BattleScene extends Phaser.Scene {
       this.actionDelayMs_ = ACTION_ADVANCE_DELAY_MS;
       return;
     }
+  }
+
+  private beginVictorySummary(): void {
+    if (this.victorySummary_) {
+      this.phase_ = "victory-summary";
+      this.transitionPhase_ = "summary";
+      return;
+    }
+    const result = applyVictoryRewards(this.battle_, {
+      rng: this.rng_,
+      items: this.items_?.items
+    });
+    this.battle_ = result.state;
+    this.victorySummary_ = result.summary;
+    this.phase_ = "victory-summary";
+    this.transitionPhase_ = "summary";
+    this.submenu_ = "command";
+    this.commandIndex_ = 0;
+    this.currentActor_ = null;
+    this.menuMessage_ = "";
+  }
+
+  private beginExitTransition(): void {
+    if (this.phase_ === "exit-transition") {
+      return;
+    }
+    this.phase_ = "exit-transition";
+    this.transitionPhase_ = "exit";
+    this.transitionMs_ = EXIT_TRANSITION_MS;
+    this.currentActor_ = null;
+    this.transitionGraphics?.clear();
+    this.renderTransition();
+    this.renderStatus();
+    this.publish();
+  }
+
+  private renderTransition(): void {
+    const graphics = this.transitionGraphics;
+    if (!graphics) {
+      return;
+    }
+    graphics.clear();
+    if (this.transitionPhase_ === "enter") {
+      const progress = 1 - this.transitionMs_ / ENTER_TRANSITION_MS;
+      const fade = Math.max(0, 1 - progress);
+      graphics.fillStyle(0xf8fafc, 0.18 * fade);
+      graphics.fillRect(0, 0, this.scale.width, this.scale.height);
+      const cx = this.scale.width / 2;
+      const cy = STATUS_TOP / 2;
+      for (let index = 0; index < 9; index += 1) {
+        const radius = 24 + index * 30 + progress * 90;
+        const alpha = Math.max(0, (0.6 - index * 0.045) * fade);
+        graphics.lineStyle(4, index % 2 === 0 ? 0xf8fafc : 0x38bdf8, alpha);
+        graphics.strokeCircle(cx, cy, radius);
+      }
+      graphics.lineStyle(6, 0xfb7185, 0.22 * fade);
+      graphics.beginPath();
+      graphics.moveTo(cx - 220 + progress * 140, cy - 140);
+      graphics.lineTo(cx + 220 - progress * 80, cy + 140);
+      graphics.strokePath();
+      return;
+    }
+
+    if (this.transitionPhase_ === "exit") {
+      const progress = 1 - this.transitionMs_ / EXIT_TRANSITION_MS;
+      graphics.fillStyle(0x000000, Math.min(1, Math.max(0, progress)));
+      graphics.fillRect(0, 0, this.scale.width, this.scale.height);
+    }
+  }
+
+  private exitBattle(): void {
+    this.transitionGraphics?.clear();
+    this.transitionPhase_ = "none";
+    removeBattleSearchParam();
+    this.scene.start("boot");
   }
 
   private drawBackground(): void {
@@ -546,8 +673,19 @@ export class BattleScene extends Phaser.Scene {
 
   private renderStatus(): void {
     const menuVisible = this.phase_ === "menu" && this.currentActor_?.side === "party";
-    this.commandText?.setText(menuVisible ? this.menuTextLines().join("\n") : "");
-    this.partyText?.setText(this.partyStatusLines().join("\n"));
+    if (this.phase_ === "victory-summary") {
+      this.commandText?.setText("> OK");
+      this.partyText?.setText(this.victorySummaryLines().join("\n"));
+    } else if (this.phase_ === "lose") {
+      this.commandText?.setText("> OK");
+      this.partyText?.setText("The party fell.");
+    } else if (this.phase_ === "flee") {
+      this.commandText?.setText("> OK");
+      this.partyText?.setText("Got away.");
+    } else {
+      this.commandText?.setText(menuVisible ? this.menuTextLines().join("\n") : "");
+      this.partyText?.setText(this.partyStatusLines().join("\n"));
+    }
     this.enemySprites.forEach((sprite, index) => {
       sprite?.setAlpha(isCombatantAlive(this.battle_.enemies[index]) ? 1 : 0.25);
     });
@@ -561,6 +699,7 @@ export class BattleScene extends Phaser.Scene {
     publishBattleDebug({
       mode: "battle",
       phase: this.phase_,
+      transitionPhase: this.transitionPhase_,
       menuIndex: this.commandIndex_,
       commandIndex: this.commandIndex_,
       command: this.currentCommand(),
@@ -584,7 +723,8 @@ export class BattleScene extends Phaser.Scene {
         hpTarget: enemies[0]?.hpTarget ?? 0,
         isRolling: enemies[0]?.isRolling ?? false
       },
-      outcome: currentOutcome
+      outcome: currentOutcome,
+      victorySummary: this.victorySummary_ ? debugVictorySummary(this.victorySummary_) : null
     });
   }
 
@@ -595,6 +735,10 @@ export class BattleScene extends Phaser.Scene {
 
   private isTerminalPhase(): boolean {
     return this.phase_ === "win" || this.phase_ === "lose" || this.phase_ === "flee";
+  }
+
+  private isBattleFlowPaused(): boolean {
+    return this.isTerminalPhase() || this.phase_ === "victory-summary";
   }
 
   private normalizeTargetIndex(): void {
@@ -622,6 +766,16 @@ export class BattleScene extends Phaser.Scene {
       const marker = isCombatantAlive(member) ? " " : "X";
       return `${cursor}${marker} ${fitName(member.name, 9)} HP ${odometer(member.hp.displayed)} PP ${odometer(member.pp)}`;
     });
+  }
+
+  private victorySummaryLines(): string[] {
+    if (!this.victorySummary_) {
+      return [];
+    }
+    return buildVictorySummaryViewModel(this.victorySummary_)
+      .lines
+      .slice(0, 6)
+      .map((line) => fitLine(line, 36));
   }
 
   private menuTextLines(): string[] {
@@ -815,6 +969,30 @@ function debugActor(actor: BattleActor): { side: "party" | "enemy"; index: numbe
   return { side: actor.side, index: actor.index };
 }
 
+function debugVictorySummary(summary: BattleVictorySummary): {
+  expGained: number;
+  moneyGained: number;
+  drops: Array<{ enemyId: number; itemId: number; itemName: string; recipientCharId: number }>;
+  levelUps: Array<{ charId: number; name: string; fromLevel: number; toLevel: number }>;
+} {
+  return {
+    expGained: summary.expGained,
+    moneyGained: summary.moneyGained,
+    drops: summary.drops.map((drop) => ({
+      enemyId: drop.enemyId,
+      itemId: drop.itemId,
+      itemName: drop.itemName,
+      recipientCharId: drop.recipientCharId
+    })),
+    levelUps: summary.levelUps.map((levelUp) => ({
+      charId: levelUp.charId,
+      name: levelUp.name,
+      fromLevel: levelUp.fromLevel,
+      toLevel: levelUp.toLevel
+    }))
+  };
+}
+
 function enemySpritePoint(stageWidth: number, count: number, index: number, widthBudget: number): { x: number; y: number } {
   return {
     x: stageWidth / 2 + (index - (count - 1) / 2) * widthBudget,
@@ -824,6 +1002,10 @@ function enemySpritePoint(stageWidth: number, count: number, index: number, widt
 
 function fitName(name: string, width: number): string {
   return name.length > width ? name.slice(0, width) : name.padEnd(width, " ");
+}
+
+function fitLine(line: string, width: number): string {
+  return line.length > width ? line.slice(0, Math.max(0, width - 3)) + "..." : line;
 }
 
 function livingEnemyIndices(state: BattleState): number[] {
@@ -904,4 +1086,22 @@ function createSeededRng(seed: number): Rng {
     state = (state * 1664525 + 1013904223) >>> 0;
     return state / 0x100000000;
   };
+}
+
+function removeBattleSearchParam(): void {
+  try {
+    const location = globalThis.location;
+    const history = globalThis.history;
+    if (!location || !history) {
+      return;
+    }
+    const url = new URL(location.href);
+    if (!url.searchParams.has("battle")) {
+      return;
+    }
+    url.searchParams.delete("battle");
+    history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch {
+    // Query cleanup is best-effort; scene restart still exits the battle.
+  }
 }

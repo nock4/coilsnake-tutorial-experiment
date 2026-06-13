@@ -462,6 +462,11 @@ export const BattleActionSchema = z.object({
   arg: z.number().int().nonnegative()
 });
 
+export const BattleDropRaritySchema = z.object({
+  numerator: z.number().int().nonnegative(),
+  denominator: z.number().int().positive()
+});
+
 export const BattleEnemySchema = z.object({
   id: z.number().int().nonnegative(),
   name: z.string(),
@@ -471,9 +476,11 @@ export const BattleEnemySchema = z.object({
   defense: z.number().int().nonnegative(),
   offense: z.number().int().nonnegative(),
   experience: z.number().int().nonnegative(),
+  money: z.number().int().nonnegative(),
   bossFlag: z.boolean(),
   actions: z.array(BattleActionSchema).length(4),
-  itemDropped: z.number().int().nonnegative().nullable()
+  itemDropped: z.number().int().nonnegative().nullable(),
+  itemRarity: BattleDropRaritySchema.nullable()
 });
 
 export const BattleGroupSchema = z.object({
@@ -500,9 +507,11 @@ export const BattleDataSchema = z.object({
     defense: z.string(),
     offense: z.string(),
     experience: z.string(),
+    money: z.string(),
     bossFlag: z.string(),
     actions: z.string(),
-    itemDropped: z.string()
+    itemDropped: z.string(),
+    itemRarity: z.string()
   }),
   spriteFormat: z.object({
     source: z.string(),
@@ -528,10 +537,26 @@ export const BattleDataSchema = z.object({
   warnings: z.array(ValidationIssueSchema)
 });
 
+export const CharacterGrowthSchema = z.object({
+  offense: z.number().int().nonnegative(),
+  defense: z.number().int().nonnegative(),
+  speed: z.number().int().nonnegative(),
+  guts: z.number().int().nonnegative(),
+  vitality: z.number().int().nonnegative(),
+  iq: z.number().int().nonnegative(),
+  luck: z.number().int().nonnegative()
+});
+
+export const CharacterExpThresholdSchema = z.object({
+  level: z.number().int().positive(),
+  experience: z.number().int().nonnegative()
+});
+
 export const CharacterDataSchema = z.object({
   id: z.number().int().nonnegative(),
   name: z.string(),
   level: z.number().int().positive(),
+  experience: z.number().int().nonnegative().optional(),
   maxHp: z.number().int().nonnegative(),
   maxPp: z.number().int().nonnegative(),
   offense: z.number().int().nonnegative(),
@@ -542,7 +567,9 @@ export const CharacterDataSchema = z.object({
   iq: z.number().int().nonnegative(),
   luck: z.number().int().nonnegative(),
   startingItems: z.array(z.number().int().nonnegative()),
-  money: z.number().int().nonnegative()
+  money: z.number().int().nonnegative(),
+  growth: CharacterGrowthSchema.optional(),
+  expTable: z.array(CharacterExpThresholdSchema).optional()
 });
 
 export const CharacterCollectionSchema = z.object({
@@ -558,7 +585,9 @@ export const CharacterCollectionSchema = z.object({
   characters: z.array(CharacterDataSchema).max(8),
   counts: z.object({
     characters: z.number().int().nonnegative(),
-    statFieldsPopulated: z.number().int().nonnegative()
+    statFieldsPopulated: z.number().int().nonnegative(),
+    growthFieldsPopulated: z.number().int().nonnegative().optional(),
+    expThresholds: z.number().int().nonnegative().optional()
   }),
   warnings: z.array(ValidationIssueSchema)
 });
@@ -730,8 +759,11 @@ export type SpriteSheetCollection = z.infer<typeof SpriteSheetCollectionSchema>;
 export type BattleData = z.infer<typeof BattleDataSchema>;
 export type BattleEnemy = z.infer<typeof BattleEnemySchema>;
 export type BattleGroup = z.infer<typeof BattleGroupSchema>;
+export type BattleDropRarity = z.infer<typeof BattleDropRaritySchema>;
 export type CharacterCollection = z.infer<typeof CharacterCollectionSchema>;
 export type CharacterData = z.infer<typeof CharacterDataSchema>;
+export type CharacterGrowth = z.infer<typeof CharacterGrowthSchema>;
+export type CharacterExpThreshold = z.infer<typeof CharacterExpThresholdSchema>;
 export type ItemCollection = z.infer<typeof ItemCollectionSchema>;
 export type ItemData = z.infer<typeof ItemDataSchema>;
 export type PsiCollection = z.infer<typeof PsiCollectionSchema>;

@@ -939,6 +939,7 @@ function neutralPartyMember(): PartyMember {
     id: 0,
     name: "PLAYER",
     level: 1,
+    experience: 0,
     maxHp: 40,
     hp: 40,
     maxPp: 0,

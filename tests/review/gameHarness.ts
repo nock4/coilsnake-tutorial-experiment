@@ -2,7 +2,17 @@ import { expect, type Page } from "@playwright/test";
 
 export type FirstSceneDebug = {
   mode: "world" | "fallback" | "error" | "battle";
-  phase?: "menu" | "enemy-rolling" | "player-rolling" | "win" | "lose" | "flee";
+  phase?:
+    | "enter-transition"
+    | "menu"
+    | "enemy-rolling"
+    | "player-rolling"
+    | "victory-summary"
+    | "exit-transition"
+    | "win"
+    | "lose"
+    | "flee";
+  transitionPhase?: "none" | "enter" | "summary" | "exit";
   menuIndex?: number;
   commandIndex?: number;
   command?: "BASH" | "PSI" | "GOODS" | "RUN";
@@ -52,6 +62,12 @@ export type FirstSceneDebug = {
     isRolling: boolean;
   };
   outcome?: "ongoing" | "win" | "lose";
+  victorySummary?: {
+    expGained: number;
+    moneyGained: number;
+    drops: Array<{ enemyId: number; itemId: number; itemName: string; recipientCharId: number }>;
+    levelUps: Array<{ charId: number; name: string; fromLevel: number; toLevel: number }>;
+  } | null;
   npc?: { x: number; y: number };
   npcs?: Array<{
     id: number;

@@ -11,7 +11,18 @@ import {
 } from "./dialogueRenderer";
 
 export type SceneMode = "world" | "fallback" | "error" | "battle";
-export type BattlePhase = "menu" | "enemy-rolling" | "player-rolling" | "win" | "lose" | "flee";
+export type BattlePhase =
+  | "enter-transition"
+  | "menu"
+  | "enemy-rolling"
+  | "player-rolling"
+  | "victory-summary"
+  | "exit-transition"
+  | "win"
+  | "lose"
+  | "flee";
+
+export type BattleTransitionPhase = "none" | "enter" | "summary" | "exit";
 
 export type BattleActorDebug = {
   side: "party" | "enemy";
@@ -28,9 +39,27 @@ export type BattleCombatantDebug = {
   inventoryCount: number;
 };
 
+export type BattleVictoryDebug = {
+  expGained: number;
+  moneyGained: number;
+  drops: Array<{
+    enemyId: number;
+    itemId: number;
+    itemName: string;
+    recipientCharId: number;
+  }>;
+  levelUps: Array<{
+    charId: number;
+    name: string;
+    fromLevel: number;
+    toLevel: number;
+  }>;
+};
+
 export type BattleDebug = {
   mode: "battle";
   phase: BattlePhase;
+  transitionPhase: BattleTransitionPhase;
   menuIndex: number;
   commandIndex: number;
   command: "BASH" | "PSI" | "GOODS" | "RUN";
@@ -55,6 +84,7 @@ export type BattleDebug = {
     isRolling: boolean;
   };
   outcome: "ongoing" | "win" | "lose";
+  victorySummary: BattleVictoryDebug | null;
 };
 
 export type DebugNpc = {
