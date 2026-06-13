@@ -40,9 +40,12 @@ export default defineConfig({
         ...devices["Desktop Chrome"],
         baseURL: "http://127.0.0.1:5173/",
         viewport: { width: 1000, height: 760 },
-        trace: "on",
-        video: "on",
-        screenshot: "on"
+        // retain-on-failure: keep artifacts for failures only. "on" wrote a
+        // video + multi-MB trace for every passing test across every run,
+        // which filled the disk during the parity campaign.
+        trace: "retain-on-failure",
+        video: "retain-on-failure",
+        screenshot: "only-on-failure"
       }
     },
     {

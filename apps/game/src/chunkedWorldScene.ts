@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import type { SpriteSheet, WorldChunked, WorldChunkedNpc } from "@eb/schemas";
+import { resolveDoorTrigger, type DoorTriggerState } from "./doorTriggers";
 import {
   buildDialogueForReference,
   buildMetadataLines,
@@ -103,6 +104,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private collisionHeight = 0;
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
+  private doorTriggerState: DoorTriggerState = { suppressUntilClear: false };
+  private lastDoor?: { from: { x: number; y: number }; to: { x: number; y: number } };
   readonly dialogue = new DialogueController();
   private readonly gameFlags = new GameFlags();
   targetReference = TARGET_REFERENCE;
@@ -213,6 +216,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       blocked: (x, y) => this.blocked(x, y, { includeNpcs: true }),
       frames: this.playerFrames
     });
+    this.handleDoorTrigger();
 
     this.player.x = this.playerState.x;
     this.player.y = this.playerState.y;
@@ -563,6 +567,36 @@ export class ChunkedWorldScene extends Phaser.Scene {
     return false;
   }
 
+  private handleDoorTrigger(): void {
+    // Phase-2 owns eventFlag gating. This slice treats every imported trigger as active.
+    const result = resolveDoorTrigger(
+      this.playerState,
+      this.world_.doors,
+      this.doorTriggerState,
+      this.collisionCellSize
+    );
+    this.doorTriggerState = { suppressUntilClear: result.suppressUntilClear };
+    if (!result.door) {
+      return;
+    }
+
+    const from = { x: this.playerState.x, y: this.playerState.y };
+    const to = this.clampSpawn(result.door.destinationWorldPixel);
+    this.playerState.x = to.x;
+    this.playerState.y = to.y;
+    this.playerState.velocityX = 0;
+    this.playerState.velocityY = 0;
+    this.playerState.moving = false;
+    this.playerState.facing = toFacing(result.door.direction, this.playerState.facing);
+    this.playerState.walkClockMs = 0;
+    this.playerState.animKey = `idle-${this.playerState.facing}`;
+    this.playerState.animFrame = this.playerFrames[this.playerState.facing][0];
+    this.lastDoor = { from, to };
+    this.currentChunk = undefined;
+    this.refreshStreaming(true);
+    this.cameras.main.centerOn(to.x, to.y);
+  }
+
   private actorBodyBlocked(x: number, y: number, bodyX: number, bodyY: number): boolean {
     return Math.abs(x - bodyX) < 14 && y > bodyY - 18 && y < bodyY + 10;
   }
@@ -775,6 +809,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       animKey: this.playerState.animKey,
       animFrame: this.playerState.animFrame,
       inputLocked: this.playerState.inputLocked,
+      lastDoor: this.lastDoor,
       loadedChunkCount: this.loadedChunkCount(),
       activeNpcCount: this.npcRuntimes.size,
       currentChunk: this.currentChunk,

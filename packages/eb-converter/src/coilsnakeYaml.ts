@@ -59,6 +59,25 @@ export type SpritePlacement = {
   line: number;
 };
 
+export type MapDoorEntry = {
+  /** Outer key: vertical 256px door-area band index. */
+  areaY: number;
+  /** Inner key: horizontal 256px door-area band index. */
+  areaX: number;
+  type: string;
+  /** 8px collision-cell X within the 256x256 door area. */
+  x: number;
+  /** 8px collision-cell Y within the 256x256 door area. */
+  y: number;
+  destinationX?: number;
+  destinationY?: number;
+  direction?: string;
+  style?: number;
+  eventFlag?: string;
+  textPointer?: string;
+  line: number;
+};
+
 /**
  * Parses CoilSnake map_sprites.yml. Layout:
  *   <areaY>:
@@ -151,6 +170,127 @@ export function placementToWorldPixel(placement: SpritePlacement): { x: number; 
   return {
     x: placement.areaX * SPRITE_AREA_SIZE + placement.x,
     y: placement.areaY * SPRITE_AREA_SIZE + placement.y
+  };
+}
+
+/** DoorModule and MapSpriteModule use the same 32x40 pointer-table area grid. */
+export const DOOR_AREA_SIZE = SPRITE_AREA_SIZE;
+
+/**
+ * Door X/Y are collision-cell indexes inside a 256px area; one imported door
+ * trigger occupies the corresponding 8x8 collision cell.
+ */
+export const DOOR_TRIGGER_CELL_SIZE = 8;
+
+/**
+ * Parses CoilSnake map_doors.yml. Layout:
+ *   <areaY>:
+ *     <areaX>:
+ *     - Destination X: <world px>
+ *       Destination Y: <world px>
+ *       Direction: <direction>
+ *       Event Flag: <raw>
+ *       Style: <int>
+ *       Text Pointer: <raw>
+ *       Type: door
+ *       X: <8px cell>
+ *       Y: <8px cell>
+ */
+export function parseMapDoors(source: string): MapDoorEntry[] {
+  const doors: MapDoorEntry[] = [];
+  const lines = source.split(/\r?\n/);
+  let areaY: number | undefined;
+  let areaX: number | undefined;
+  let current: Partial<MapDoorEntry> | undefined;
+  const outerPattern = new RegExp(`^(${INTEGER_TOKEN}):\\s*$`);
+  const innerPattern = new RegExp(`^ {2}(${INTEGER_TOKEN}):\\s*(?:null)?\\s*$`);
+  const itemPattern = /^ {2}-\s*(?:(.*?):\s*(.*))?$/;
+  const fieldPattern = /^ {4}([^:]+):\s*(.*)$/;
+
+  const commit = () => {
+    if (
+      current?.type &&
+      current.x !== undefined &&
+      current.y !== undefined &&
+      current.areaX !== undefined &&
+      current.areaY !== undefined &&
+      current.line !== undefined
+    ) {
+      doors.push(current as MapDoorEntry);
+    }
+    current = undefined;
+  };
+
+  const assign = (entry: Partial<MapDoorEntry>, key: string, rawValue: string): void => {
+    const value = stripQuotes(rawValue.trim());
+    switch (key.trim()) {
+      case "Type":
+        entry.type = value;
+        break;
+      case "X":
+        entry.x = parseYamlInteger(value);
+        break;
+      case "Y":
+        entry.y = parseYamlInteger(value);
+        break;
+      case "Destination X":
+        entry.destinationX = parseYamlInteger(value);
+        break;
+      case "Destination Y":
+        entry.destinationY = parseYamlInteger(value);
+        break;
+      case "Direction":
+        entry.direction = value;
+        break;
+      case "Style":
+        entry.style = parseYamlInteger(value);
+        break;
+      case "Event Flag":
+        entry.eventFlag = value;
+        break;
+      case "Text Pointer":
+        entry.textPointer = value;
+        break;
+    }
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const outerMatch = outerPattern.exec(line);
+    if (outerMatch) {
+      commit();
+      areaY = parseYamlInteger(outerMatch[1]);
+      areaX = undefined;
+      continue;
+    }
+    const innerMatch = innerPattern.exec(line);
+    if (innerMatch) {
+      commit();
+      areaX = parseYamlInteger(innerMatch[1]);
+      continue;
+    }
+    const itemMatch = itemPattern.exec(line);
+    if (itemMatch) {
+      commit();
+      current = { areaY: areaY ?? 0, areaX: areaX ?? 0, line: index + 1 };
+      if (itemMatch[1]) {
+        assign(current, itemMatch[1], itemMatch[2] ?? "");
+      }
+      continue;
+    }
+    const fieldMatch = fieldPattern.exec(line);
+    if (fieldMatch && current) {
+      assign(current, fieldMatch[1], fieldMatch[2]);
+    }
+  }
+  commit();
+  return doors.filter((door) => !Number.isNaN(door.x) && !Number.isNaN(door.y));
+}
+
+export function doorTriggerToWorldPixel(door: Pick<MapDoorEntry, "areaX" | "areaY" | "x" | "y">): { x: number; y: number } {
+  return {
+    x: door.areaX * DOOR_AREA_SIZE + door.x * DOOR_TRIGGER_CELL_SIZE,
+    y: door.areaY * DOOR_AREA_SIZE + door.y * DOOR_TRIGGER_CELL_SIZE
   };
 }
 

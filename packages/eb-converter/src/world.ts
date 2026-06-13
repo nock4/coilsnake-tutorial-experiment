@@ -10,16 +10,20 @@ import {
   type SpriteSheetCollection,
   type ValidationIssue,
   type WorldChunkedNpc,
+  type WorldDoor,
   type WorldNpc,
   type WorldRegion
 } from "@eb/schemas";
 import { parseFts, drawArrangement, isBlankArrangement, isSolidSurface, type FtsTileset, type FtsPalette } from "./fts";
 import {
+  doorTriggerToWorldPixel,
   parseIntKeyedYaml,
+  parseMapDoors,
   parseMapSprites,
   parseMapTiles,
   parseYamlInteger,
   placementToWorldPixel,
+  type MapDoorEntry,
   type SpritePlacement
 } from "./coilsnakeYaml";
 import { encodePngRgba, readPngHeader } from "./png";
@@ -39,6 +43,7 @@ export const PLAYER_SPRITE_GROUP = 1;
 const WORLD_ASSET_DIR = "assets/world";
 const WORLD_CHUNK_ASSET_DIR = `${WORLD_ASSET_DIR}/chunks`;
 const SPRITE_ASSET_DIR = "assets/sprites";
+const WORLD_DOOR_TYPES = new Set(["door", "stairway", "escalator"]);
 
 type Issue = ValidationIssue;
 
@@ -398,6 +403,38 @@ function pushUniqueIssues(target: Issue[], additions: Issue[]): void {
   }
 }
 
+function countDoorTypes(entries: MapDoorEntry[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const entry of entries) {
+    counts[entry.type] = (counts[entry.type] ?? 0) + 1;
+  }
+  return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)));
+}
+
+function emitWorldDoors(entries: MapDoorEntry[]): WorldDoor[] {
+  return entries
+    .filter((entry) => WORLD_DOOR_TYPES.has(entry.type))
+    .map((entry) => {
+      const worldPixel = doorTriggerToWorldPixel(entry);
+      const hasDestination =
+        entry.destinationX !== undefined &&
+        entry.destinationY !== undefined &&
+        Number.isFinite(entry.destinationX) &&
+        Number.isFinite(entry.destinationY);
+      // CoilSnake stairway/escalator rows do not carry Destination X/Y fields.
+      // Keep a uniform runtime shape by making those trigger-only entries self-targeting.
+      return {
+        type: entry.type as WorldDoor["type"],
+        worldPixel,
+        destinationWorldPixel: hasDestination ? { x: entry.destinationX as number, y: entry.destinationY as number } : worldPixel,
+        ...(entry.direction ? { direction: entry.direction } : {}),
+        ...(entry.style !== undefined && !Number.isNaN(entry.style) ? { style: entry.style } : {}),
+        ...(entry.eventFlag ? { eventFlag: entry.eventFlag } : {}),
+        ...(entry.textPointer ? { textPointer: entry.textPointer } : {})
+      };
+    });
+}
+
 async function copySpriteSheets(options: {
   projectAbs: string;
   outAbs: string;
@@ -496,12 +533,13 @@ export async function buildWorldArtifacts(options: {
     return readFile(file, "utf8");
   };
 
-  const [mapTilesSource, mapSectorsSource, mapSpritesSource, npcConfigSource, spriteGroupsSource] = await Promise.all([
+  const [mapTilesSource, mapSectorsSource, mapSpritesSource, npcConfigSource, spriteGroupsSource, mapDoorsSource] = await Promise.all([
     readOptional("map_tiles.map"),
     readOptional("map_sectors.yml"),
     readOptional("map_sprites.yml"),
     readOptional("npc_config_table.yml"),
-    readOptional("sprite_groups.yml")
+    readOptional("sprite_groups.yml"),
+    readOptional("map_doors.yml")
   ]);
 
   const sources = {
@@ -597,6 +635,7 @@ export async function buildWorldArtifacts(options: {
       placements,
       npcConfigSource,
       spriteGroupsSource,
+      mapDoorsSource,
       sources,
       warnings,
       sectorLookup,
@@ -740,6 +779,7 @@ async function buildFullWorldArtifacts(options: {
   placements: SpritePlacement[];
   npcConfigSource: string | undefined;
   spriteGroupsSource: string | undefined;
+  mapDoorsSource: string | undefined;
   sources: {
     mapTiles: boolean;
     mapSectors: boolean;
@@ -764,6 +804,7 @@ async function buildFullWorldArtifacts(options: {
     placements,
     npcConfigSource,
     spriteGroupsSource,
+    mapDoorsSource,
     sources,
     warnings,
     sectorLookup,
@@ -886,6 +927,9 @@ async function buildFullWorldArtifacts(options: {
   }
   const spriteBuild = await copySpriteSheets({ projectAbs, outAbs, displayPath, neededGroups, spriteGroupsMeta });
   const sheetByGroup = attachSheetsToNpcs(npcs, spriteBuild.sheets);
+  const mapDoors = mapDoorsSource ? parseMapDoors(mapDoorsSource) : [];
+  const doorTypes = countDoorTypes(mapDoors);
+  const doors = emitWorldDoors(mapDoors);
 
   const world = WorldChunkedSchema.parse({
     schemaVersion: SCHEMA_VERSION,
@@ -920,11 +964,14 @@ async function buildFullWorldArtifacts(options: {
       solidCells,
       mapTilesetsUsed: mapTilesetsUsed.size,
       palettesUsed: palettesUsed.size,
+      doors: doors.length,
+      doorTypes,
       chunks: chunks.length,
       chunksWritten,
       voidChunks,
       chunkFiles
     },
+    doors,
     warnings: [...warnings, ...spriteBuild.warnings]
   });
 

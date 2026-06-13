@@ -211,6 +211,18 @@ export const WorldChunkSchema = z.object({
   void: z.boolean()
 });
 
+export const WorldDoorTypeSchema = z.enum(["door", "stairway", "escalator"]);
+
+export const WorldDoorSchema = z.object({
+  type: WorldDoorTypeSchema,
+  worldPixel: PixelSchema,
+  destinationWorldPixel: PixelSchema,
+  direction: z.string().optional(),
+  style: z.number().int().nonnegative().optional(),
+  eventFlag: z.string().optional(),
+  textPointer: z.string().optional()
+});
+
 export const WorldChunkedSchema = z.object({
   schemaVersion: z.string(),
   sourceProjectPath: z.string(),
@@ -231,11 +243,14 @@ export const WorldChunkedSchema = z.object({
   }),
   sources: WorldSourcesSchema,
   counts: WorldCountsSchema.extend({
+    doors: z.number().int().nonnegative(),
+    doorTypes: z.record(z.number().int().nonnegative()),
     chunks: z.number().int().nonnegative(),
     chunksWritten: z.number().int().nonnegative(),
     voidChunks: z.number().int().nonnegative(),
     chunkFiles: z.number().int().nonnegative()
   }),
+  doors: z.array(WorldDoorSchema),
   warnings: z.array(ValidationIssueSchema)
 });
 
@@ -335,6 +350,7 @@ export type WorldChunked = z.infer<typeof WorldChunkedSchema>;
 export type WorldArtifact = z.infer<typeof WorldArtifactSchema>;
 export type WorldNpc = z.infer<typeof WorldNpcSchema>;
 export type WorldChunkedNpc = z.infer<typeof WorldChunkedNpcSchema>;
+export type WorldDoor = z.infer<typeof WorldDoorSchema>;
 export type SpriteSheet = z.infer<typeof SpriteSheetSchema>;
 export type SpriteFacing = z.infer<typeof SpriteFacingSchema>;
 export type SpriteAnimations = z.infer<typeof SpriteAnimationsSchema>;

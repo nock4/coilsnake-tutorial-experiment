@@ -13,7 +13,9 @@ import {
   parseFts
 } from "../src/fts";
 import {
+  doorTriggerToWorldPixel,
   parseIntKeyedYaml,
+  parseMapDoors,
   parseMapSprites,
   parseMapTiles,
   parseYamlInteger,
@@ -158,6 +160,45 @@ describe("coilsnake yaml readers", () => {
     expect(placements[0]).toMatchObject({ areaY: 27, areaX: 29, npcId: 744, x: 192, y: 216 });
     expect(placementToWorldPixel(placements[0])).toEqual({ x: 7616, y: 7128 });
     expect(placementToWorldPixel(placements[1])).toEqual({ x: 8000, y: 1088 });
+  });
+
+  it("parses map door entries and maps trigger cells to world pixels", () => {
+    const doors = parseMapDoors([
+      "1:",
+      "  2:",
+      "  - Destination X: 640",
+      "    Destination Y: 768",
+      "    Direction: up",
+      "    Event Flag: 0x0",
+      "    Style: 1",
+      "    Text Pointer: $0",
+      "    Type: door",
+      "    X: 3",
+      "    Y: 4",
+      "  - Direction: ne",
+      "    Type: stairway",
+      "    X: 5",
+      "    Y: 6",
+      "  3: null",
+      ""
+    ].join("\n"));
+
+    expect(doors).toHaveLength(2);
+    expect(doors[0]).toMatchObject({
+      areaY: 1,
+      areaX: 2,
+      type: "door",
+      x: 3,
+      y: 4,
+      destinationX: 640,
+      destinationY: 768,
+      direction: "up",
+      eventFlag: "0x0",
+      style: 1,
+      textPointer: "$0"
+    });
+    expect(doorTriggerToWorldPixel(doors[0])).toEqual({ x: 536, y: 288 });
+    expect(doorTriggerToWorldPixel(doors[1])).toEqual({ x: 552, y: 304 });
   });
 
   it("parses map tile rows as hex", () => {
@@ -359,6 +400,29 @@ describe("world artifact build (synthetic project)", () => {
       ""
     ].join("\n"), "utf8");
 
+    await writeFile(path.join(project, "map_doors.yml"), [
+      "1:",
+      "  2:",
+      "  - Destination X: 640",
+      "    Destination Y: 768",
+      "    Direction: up",
+      "    Event Flag: 0x0",
+      "    Style: 1",
+      "    Text Pointer: $0",
+      "    Type: door",
+      "    X: 3",
+      "    Y: 4",
+      "  - Direction: sw",
+      "    Type: stairway",
+      "    X: 5",
+      "    Y: 6",
+      "  - Text Pointer: example.object",
+      "    Type: object",
+      "    X: 7",
+      "    Y: 8",
+      ""
+    ].join("\n"), "utf8");
+
     await writeFile(path.join(project, "npc_config_table.yml"), [
       "100:",
       "  Direction: left",
@@ -503,6 +567,25 @@ describe("world artifact build (synthetic project)", () => {
       });
       expect(byChunk.get("1,1")).toMatchObject({ background: "assets/world/chunks/background-1-1.png", foreground: null, void: false });
       expect(world.counts).toMatchObject({ chunks: 4, chunksWritten: 3, voidChunks: 1, chunkFiles: 4 });
+      expect(world.counts.doors).toBe(2);
+      expect(world.counts.doorTypes).toEqual({ door: 1, object: 1, stairway: 1 });
+      expect(world.doors).toEqual([
+        {
+          type: "door",
+          worldPixel: { x: 536, y: 288 },
+          destinationWorldPixel: { x: 640, y: 768 },
+          direction: "up",
+          style: 1,
+          eventFlag: "0x0",
+          textPointer: "$0"
+        },
+        {
+          type: "stairway",
+          worldPixel: { x: 552, y: 304 },
+          destinationWorldPixel: { x: 552, y: 304 },
+          direction: "sw"
+        }
+      ]);
 
       expect(world.collision.width).toBe(128);
       expect(world.collision.height).toBe(128);

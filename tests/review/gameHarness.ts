@@ -26,6 +26,7 @@ export type FirstSceneDebug = {
   animKey?: string;
   animFrame?: number;
   inputLocked?: boolean;
+  lastDoor?: { from: { x: number; y: number }; to: { x: number; y: number } };
   loadedChunkCount?: number;
   activeNpcCount?: number;
   currentChunk?: { cx: number; cy: number };
