@@ -12,6 +12,7 @@ import {
   ShopDataSchema,
   SpriteGroupCollectionSchema,
   SpriteSheetCollectionSchema,
+  TeleportDestinationsSchema,
   TutorialStatusSchema,
   ValidationReportSchema,
   WorldArtifactSchema,
@@ -27,6 +28,7 @@ import {
   type ShopData,
   type SpriteGroupCollection,
   type SpriteSheetCollection,
+  type TeleportDestinations,
   type TutorialStatus,
   type ValidationReport,
   type WorldArtifact
@@ -43,6 +45,7 @@ export type GameData = {
   validationReport?: ValidationReport;
   world?: WorldArtifact;
   sprites?: SpriteSheetCollection;
+  teleportDestinations?: TeleportDestinations;
   battle?: BattleData;
   characters?: CharacterCollection;
   items?: ItemCollection;
@@ -61,7 +64,21 @@ async function loadJson<T>(url: string, schema: { parse: (value: unknown) => T }
 
 /** Loads every generated file referenced by an already-validated manifest. */
 export async function loadGameData(manifest: Manifest): Promise<GameData> {
-  const [scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle, characters, items, psi, shops] = await Promise.all([
+  const [
+    scripts,
+    npcs,
+    spriteGroups,
+    tutorialStatus,
+    validationReport,
+    world,
+    sprites,
+    teleportDestinations,
+    battle,
+    characters,
+    items,
+    psi,
+    shops
+  ] = await Promise.all([
     loadJson(`/generated/${manifest.files.scripts}`, ScriptCollectionSchema),
     loadJson(`/generated/${manifest.files.npcs}`, NpcReferenceCollectionSchema),
     loadJson(`/generated/${manifest.files.spriteGroups}`, SpriteGroupCollectionSchema),
@@ -69,6 +86,9 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     loadJson(`/generated/${manifest.files.validationReport}`, ValidationReportSchema),
     loadJson(`/generated/${manifest.files.world}`, WorldArtifactSchema),
     loadJson(`/generated/${manifest.files.sprites}`, SpriteSheetCollectionSchema),
+    manifest.files.teleportDestinations
+      ? loadJson(`/generated/${manifest.files.teleportDestinations}`, TeleportDestinationsSchema)
+      : Promise.resolve(undefined),
     manifest.files.battle
       ? loadJson(`/generated/${manifest.files.battle}`, BattleDataSchema)
       : Promise.resolve(undefined),
@@ -85,7 +105,22 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
       ? loadJson(`/generated/${manifest.files.shops}`, ShopDataSchema)
       : Promise.resolve(undefined)
   ]);
-  return { manifest, scripts, npcs, spriteGroups, tutorialStatus, validationReport, world, sprites, battle, characters, items, psi, shops };
+  return {
+    manifest,
+    scripts,
+    npcs,
+    spriteGroups,
+    tutorialStatus,
+    validationReport,
+    world,
+    sprites,
+    teleportDestinations,
+    battle,
+    characters,
+    items,
+    psi,
+    shops
+  };
 }
 
 export function parseManifest(raw: unknown): Manifest | undefined {

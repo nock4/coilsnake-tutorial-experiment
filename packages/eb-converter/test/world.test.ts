@@ -18,6 +18,7 @@ import {
   parseMapDoors,
   parseMapSprites,
   parseMapTiles,
+  parseTeleportDestinationTable,
   parseYamlInteger,
   placementToWorldPixel
 } from "../src/coilsnakeYaml";
@@ -199,6 +200,29 @@ describe("coilsnake yaml readers", () => {
     });
     expect(doorTriggerToWorldPixel(doors[0])).toEqual({ x: 536, y: 288 });
     expect(doorTriggerToWorldPixel(doors[1])).toEqual({ x: 552, y: 304 });
+  });
+
+  it("parses teleport destinations as world-pixel coordinates", () => {
+    const destinations = parseTeleportDestinationTable([
+      "2:",
+      "  Direction: 3",
+      "  Unknown: 0",
+      "  Warp Style: 7",
+      "  X: 320",
+      "  Y: 448",
+      "5:",
+      "  Direction: 7",
+      "  Unknown: 0",
+      "  Warp Style: 1",
+      "  X: 640",
+      "  Y: 768",
+      ""
+    ].join("\n"));
+
+    expect(destinations).toEqual([
+      { id: 2, x: 320, y: 448, direction: 3, warpStyle: 7 },
+      { id: 5, x: 640, y: 768, direction: 7, warpStyle: 1 }
+    ]);
   });
 
   it("parses map tile rows as hex", () => {
@@ -551,6 +575,21 @@ describe("world artifact build (synthetic project)", () => {
       const project = path.join(temp, "project");
       const out = path.join(temp, "generated");
       await writeSyntheticChunkProject(project);
+      await writeFile(path.join(project, "teleport_destination_table.yml"), [
+        "2:",
+        "  Direction: 3",
+        "  Unknown: 0",
+        "  Warp Style: 7",
+        "  X: 320",
+        "  Y: 448",
+        "5:",
+        "  Direction: 7",
+        "  Unknown: 0",
+        "  Warp Style: 1",
+        "  X: 640",
+        "  Y: 768",
+        ""
+      ].join("\n"), "utf8");
 
       const result = await convertProject({ project, out, worldMode: "full" });
       const world = result.world;
@@ -595,6 +634,18 @@ describe("world artifact build (synthetic project)", () => {
           direction: "sw"
         }
       ]);
+
+      expect(result.teleportDestinations).toMatchObject({
+        units: { x: "world-pixels", y: "world-pixels" },
+        destinations: [
+          { id: 2, x: 320, y: 448, direction: 3, warpStyle: 7 },
+          { id: 5, x: 640, y: 768, direction: 7, warpStyle: 1 }
+        ],
+        counts: { destinations: 2 }
+      });
+      expect(result.manifest.files.teleportDestinations).toBe("teleport-destinations.json");
+      expect(result.manifest.counts.teleportDestinations).toBe(2);
+      expect(existsSync(path.join(out, "teleport-destinations.json"))).toBe(true);
 
       expect(world.collision.width).toBe(128);
       expect(world.collision.height).toBe(128);
@@ -649,6 +700,7 @@ describe("world artifact build (synthetic project)", () => {
       expect(validated.worldAvailable).toBe(true);
       expect(validated.worldNpcs).toBe(3);
       expect(validated.spriteSheets).toBe(3);
+      expect(validated.teleportDestinations).toBe(2);
       expect(validated.worldAssetsChecked).toBe(7);
     } finally {
       await rm(temp, { recursive: true, force: true });

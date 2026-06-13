@@ -394,6 +394,26 @@ export const WorldDoorSchema = z.object({
   textPointer: z.string().optional()
 });
 
+export const TeleportDestinationSchema = z.object({
+  id: z.number().int().nonnegative(),
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  direction: z.number().int().nonnegative(),
+  warpStyle: z.number().int().nonnegative()
+});
+
+export const TeleportDestinationsSchema = z.object({
+  schemaVersion: z.string(),
+  units: z.object({
+    x: z.literal("world-pixels"),
+    y: z.literal("world-pixels")
+  }),
+  destinations: z.array(TeleportDestinationSchema),
+  counts: z.object({
+    destinations: z.number().int().nonnegative()
+  })
+});
+
 export const WorldChunkedSchema = z.object({
   schemaVersion: z.string(),
   sourceProjectPath: z.string(),
@@ -703,6 +723,7 @@ export const ManifestSchema = z.object({
     validationReport: z.string(),
     world: z.string(),
     sprites: z.string(),
+    teleportDestinations: z.string().optional(),
     battle: z.string().optional(),
     characters: z.string().optional(),
     items: z.string().optional(),
@@ -719,6 +740,7 @@ export const ManifestSchema = z.object({
     spriteImages: z.number().int().nonnegative(),
     worldNpcs: z.number().int().nonnegative(),
     spriteSheets: z.number().int().nonnegative(),
+    teleportDestinations: z.number().int().nonnegative().optional(),
     battleEnemies: z.number().int().nonnegative().optional(),
     battleGroups: z.number().int().nonnegative().optional(),
     characters: z.number().int().nonnegative().optional(),
@@ -755,6 +777,8 @@ export type WorldArtifact = z.infer<typeof WorldArtifactSchema>;
 export type WorldNpc = z.infer<typeof WorldNpcSchema>;
 export type WorldChunkedNpc = z.infer<typeof WorldChunkedNpcSchema>;
 export type WorldDoor = z.infer<typeof WorldDoorSchema>;
+export type TeleportDestination = z.infer<typeof TeleportDestinationSchema>;
+export type TeleportDestinations = z.infer<typeof TeleportDestinationsSchema>;
 export type SpriteSheet = z.infer<typeof SpriteSheetSchema>;
 export type SpriteFacing = z.infer<typeof SpriteFacingSchema>;
 export type SpriteAnimations = z.infer<typeof SpriteAnimationsSchema>;

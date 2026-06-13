@@ -7,6 +7,7 @@ import {
   SCHEMA_VERSION,
   ScriptCollectionSchema,
   SpriteGroupCollectionSchema,
+  TeleportDestinationsSchema,
   TutorialStatusSchema,
   ValidationReportSchema,
   type DialogueSegment,
@@ -24,6 +25,7 @@ import {
   type ShopData,
   type ValidationIssue,
   type ValidationReport,
+  type TeleportDestinations,
   type WorldArtifact
 } from "@eb/schemas";
 import { BATTLE_FILE, buildBattleData } from "./battle";
@@ -31,6 +33,7 @@ import { CHARACTERS_FILE, buildCharacterData } from "./characters";
 import { ITEMS_FILE, PSI_FILE, buildItemPsiData } from "./itemsPsi";
 import { SHOPS_FILE, buildShopData } from "./shops";
 import { buildWorldArtifacts, TUTORIAL_NPC_ID, type WorldMode } from "./world";
+import { parseTeleportDestinationTable } from "./coilsnakeYaml";
 
 const DEFAULT_PROJECT = "external/coilsnake-project";
 const DEFAULT_OUT = "apps/game/public/generated";
@@ -43,6 +46,7 @@ const GENERATED_FILES = {
   world: "world.json",
   sprites: "sprites.json"
 } as const;
+const TELEPORT_DESTINATIONS_FILE = "teleport-destinations.json";
 
 const TUTORIAL_URL = "https://github.com/pk-hack/CoilSnake/wiki/Tutorial%3A-Your-First-Hack";
 
@@ -66,6 +70,7 @@ type ConvertResult = {
   validationReport: ValidationReport;
   world: WorldArtifact;
   sprites: SpriteSheetCollection;
+  teleportDestinations?: TeleportDestinations;
   battle?: BattleData;
   characters?: CharacterCollection;
   items?: ItemCollection;
@@ -916,8 +921,10 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
       displayPath: makeDisplayPath(project)
     })
     : undefined;
+  const teleportDestinations = await readTeleportDestinations(projectAbs, projectExists, worldMode);
   const manifestFiles = {
     ...GENERATED_FILES,
+    ...(teleportDestinations ? { teleportDestinations: TELEPORT_DESTINATIONS_FILE } : {}),
     ...(battle ? { battle: BATTLE_FILE } : {}),
     ...(characters ? { characters: CHARACTERS_FILE } : {}),
     ...(items ? { items: ITEMS_FILE, psi: PSI_FILE } : {}),
@@ -945,6 +952,7 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     GENERATED_FILES.validationReport,
     GENERATED_FILES.world,
     GENERATED_FILES.sprites,
+    ...(teleportDestinations ? [TELEPORT_DESTINATIONS_FILE] : []),
     ...(battle ? [BATTLE_FILE] : []),
     ...(characters ? [CHARACTERS_FILE] : []),
     ...(items ? [ITEMS_FILE, PSI_FILE] : []),
@@ -966,6 +974,7 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
       spriteImages: spriteGroups.counts.images,
       worldNpcs: world.counts.npcs,
       spriteSheets: sprites.counts.sheets,
+      ...(teleportDestinations ? { teleportDestinations: teleportDestinations.counts.destinations } : {}),
       ...(battle ? {
         battleEnemies: battle.counts.enemies,
         battleGroups: battle.counts.groups
@@ -1011,6 +1020,9 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
   await writeJson(path.join(outAbs, GENERATED_FILES.validationReport), validationReport);
   await writeJson(path.join(outAbs, GENERATED_FILES.world), world);
   await writeJson(path.join(outAbs, GENERATED_FILES.sprites), sprites);
+  if (teleportDestinations) {
+    await writeJson(path.join(outAbs, TELEPORT_DESTINATIONS_FILE), teleportDestinations);
+  }
   if (battle) {
     await writeJson(path.join(outAbs, BATTLE_FILE), battle);
   }
@@ -1034,6 +1046,7 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     validationReport,
     world,
     sprites,
+    ...(teleportDestinations ? { teleportDestinations } : {}),
     ...(battle ? { battle } : {}),
     ...(characters ? { characters } : {}),
     ...(items ? { items } : {}),
@@ -1312,6 +1325,32 @@ async function readSpriteGroups(
     images,
     counts: { images: images.length },
     warnings: []
+  });
+}
+
+async function readTeleportDestinations(
+  projectAbs: string,
+  projectExists: boolean,
+  worldMode: WorldMode
+): Promise<TeleportDestinations | undefined> {
+  if (worldMode !== "full" || !projectExists) {
+    return undefined;
+  }
+  const file = path.join(projectAbs, "teleport_destination_table.yml");
+  if (!existsSync(file)) {
+    return undefined;
+  }
+  const destinations = parseTeleportDestinationTable(await readFile(file, "utf8"));
+  return TeleportDestinationsSchema.parse({
+    schemaVersion: SCHEMA_VERSION,
+    units: {
+      x: "world-pixels",
+      y: "world-pixels"
+    },
+    destinations,
+    counts: {
+      destinations: destinations.length
+    }
   });
 }
 
@@ -1770,6 +1809,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
           GENERATED_FILES.validationReport,
           GENERATED_FILES.world,
           GENERATED_FILES.sprites,
+          ...(result.teleportDestinations ? [TELEPORT_DESTINATIONS_FILE] : []),
           ...(result.battle ? [BATTLE_FILE] : []),
           ...(result.characters ? [CHARACTERS_FILE] : []),
           ...(result.items ? [ITEMS_FILE, PSI_FILE] : []),
@@ -1780,6 +1820,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
           available: result.world.available,
           npcs: result.world.counts.npcs,
           spriteSheets: result.sprites.counts.sheets,
+          ...(result.teleportDestinations ? {
+            teleportDestinations: result.teleportDestinations.counts.destinations
+          } : {}),
           ...("mode" in result.world && result.world.mode === "full" ? {
             chunks: result.world.counts.chunks,
             chunksWritten: result.world.counts.chunksWritten,

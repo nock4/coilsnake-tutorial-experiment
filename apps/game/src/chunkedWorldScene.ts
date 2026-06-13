@@ -23,7 +23,12 @@ import {
   type ChunkGrid
 } from "./chunkStreaming";
 import { interactionEvents, type GameEvent } from "./eventRunner";
-import { RuntimeEventHost, RuntimeEventSequence, type EventWarpDestination } from "./eventHost";
+import {
+  resolveTeleportDestination,
+  RuntimeEventHost,
+  RuntimeEventSequence,
+  type EventWarpDestination
+} from "./eventHost";
 import { GameFlags } from "./gameFlags";
 import { behaviorForNpc } from "./npcBehaviors";
 import {
@@ -682,19 +687,21 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.applyDoorWarp({
       x: result.door.destinationWorldPixel.x,
       y: result.door.destinationWorldPixel.y,
+      worldPixel: result.door.destinationWorldPixel,
       direction: result.door.direction
     });
   }
 
   private applyDoorWarp(destination: EventWarpDestination): void {
     const from = { x: this.playerState.x, y: this.playerState.y };
-    const to = this.clampSpawn(destination);
+    const to = this.clampSpawn(destination.worldPixel ?? destination);
+    this.doorTriggerState = { suppressUntilClear: true };
     this.playerState.x = to.x;
     this.playerState.y = to.y;
     this.playerState.velocityX = 0;
     this.playerState.velocityY = 0;
     this.playerState.moving = false;
-    this.playerState.facing = toFacing(destination.direction, this.playerState.facing);
+    this.playerState.facing = destination.facing ?? toFacing(destination.direction, this.playerState.facing);
     this.playerState.walkClockMs = 0;
     this.playerState.animKey = `idle-${this.playerState.facing}`;
     this.playerState.animFrame = this.playerFrames[this.playerState.facing][0];
@@ -1148,10 +1155,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private resolveEventWarpDestination(dest: number, style?: number): EventWarpDestination | undefined {
-    void dest;
-    void style;
-    // Generated effects carry teleport table ids; world.json does not yet expose that table.
-    return undefined;
+    return resolveTeleportDestination(this.data_.teleportDestinations, dest, style);
   }
 
   private startEventBattle(group: number): boolean {

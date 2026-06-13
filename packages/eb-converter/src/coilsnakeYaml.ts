@@ -81,6 +81,17 @@ export type MapDoorEntry = {
   line: number;
 };
 
+export type TeleportDestinationEntry = {
+  id: number;
+  /** World-pixel X coordinate, matching map_doors.yml Destination X units. */
+  x: number;
+  /** World-pixel Y coordinate, matching map_doors.yml Destination Y units. */
+  y: number;
+  /** CCScript/stdarg direction id: 1 north, 3 east, 5 south, 7 west; 0 is a no-facing sentinel. */
+  direction: number;
+  warpStyle: number;
+};
+
 /**
  * Parses CoilSnake map_sprites.yml. Layout:
  *   <areaY>:
@@ -295,6 +306,34 @@ export function doorTriggerToWorldPixel(door: Pick<MapDoorEntry, "areaX" | "area
     x: door.areaX * DOOR_AREA_SIZE + door.x * DOOR_TRIGGER_CELL_SIZE,
     y: door.areaY * DOOR_AREA_SIZE + door.y * DOOR_TRIGGER_CELL_SIZE
   };
+}
+
+/**
+ * Parses CoilSnake teleport_destination_table.yml.
+ *
+ * Unlike map_doors.yml trigger X/Y, destination-table X/Y are already world
+ * pixels. That matches the direct door Destination X/Y fields consumed by
+ * emitWorldDoors, so the runtime can place the player at these coordinates
+ * without area/cell scaling.
+ */
+export function parseTeleportDestinationTable(source: string): TeleportDestinationEntry[] {
+  const entries = parseIntKeyedYaml(source);
+  return [...entries.entries()]
+    .map(([id, entry]) => ({
+      id,
+      x: parseYamlInteger(entry.X),
+      y: parseYamlInteger(entry.Y),
+      direction: parseYamlInteger(entry.Direction),
+      warpStyle: parseYamlInteger(entry["Warp Style"])
+    }))
+    .filter((entry) =>
+      !Number.isNaN(entry.id) &&
+      !Number.isNaN(entry.x) &&
+      !Number.isNaN(entry.y) &&
+      !Number.isNaN(entry.direction) &&
+      !Number.isNaN(entry.warpStyle)
+    )
+    .sort((a, b) => a.id - b.id);
 }
 
 /** Parses map_tiles.map: rows of space-separated 3-digit hex arrangement ids. */

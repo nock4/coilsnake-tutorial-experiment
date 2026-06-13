@@ -12,6 +12,7 @@ import {
   ShopDataSchema,
   SpriteGroupCollectionSchema,
   SpriteSheetCollectionSchema,
+  TeleportDestinationsSchema,
   TutorialStatusSchema,
   ValidationReportSchema,
   WorldArtifactSchema
@@ -57,6 +58,7 @@ export type GeneratedValidationResult = {
   psiLearnedByEntries?: number;
   shops?: number;
   shopItemEntries?: number;
+  teleportDestinations?: number;
 };
 
 export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<GeneratedValidationResult> {
@@ -87,6 +89,13 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
   const world = WorldArtifactSchema.parse(worldRaw);
   const spritesRaw = await readJson(path.join(out, manifest.files.sprites));
   const sprites = SpriteSheetCollectionSchema.parse(spritesRaw);
+  const teleportDestinationsFile = manifest.files.teleportDestinations ?? "teleport-destinations.json";
+  const teleportDestinationsPath = path.join(out, teleportDestinationsFile);
+  const shouldReadTeleportDestinations = Boolean(manifest.files.teleportDestinations) || existsSync(teleportDestinationsPath);
+  const teleportDestinationsRaw = shouldReadTeleportDestinations ? await readJson(teleportDestinationsPath) : undefined;
+  const teleportDestinations = teleportDestinationsRaw
+    ? TeleportDestinationsSchema.parse(teleportDestinationsRaw)
+    : undefined;
   const battleFile = manifest.files.battle ?? "battle.json";
   const battlePath = path.join(out, battleFile);
   const battleRaw = existsSync(battlePath) ? await readJson(battlePath) : undefined;
@@ -121,6 +130,7 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
     [manifest.files.validationReport]: validationReportRaw,
     [manifest.files.world]: worldRaw,
     [manifest.files.sprites]: spritesRaw,
+    ...(teleportDestinationsRaw ? { [teleportDestinationsFile]: teleportDestinationsRaw } : {}),
     ...(battleRaw ? { [battleFile]: battleRaw } : {}),
     ...(charactersRaw ? { [characterFile]: charactersRaw } : {}),
     ...(itemsRaw ? { [itemFile]: itemsRaw } : {}),
@@ -159,6 +169,9 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
     worldNpcs: world.counts.npcs,
     spriteSheets: sprites.counts.sheets,
     worldAssetsChecked,
+    ...(teleportDestinations ? {
+      teleportDestinations: teleportDestinations.counts.destinations
+    } : {}),
     ...(battle ? {
       battleEnemies: battle.counts.enemies,
       battleGroups: battle.counts.groups,

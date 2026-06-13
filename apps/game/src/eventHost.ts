@@ -7,7 +7,9 @@ import {
   type EventExecutorAdvanceResult,
   type EventExecutorHost,
   type EventWait,
-  type ScriptCollection
+  type ScriptCollection,
+  type SpriteFacing,
+  type TeleportDestinations
 } from "@eb/schemas";
 import { renderSegmentsToText } from "./dialogueRenderer";
 import { GameFlags } from "./gameFlags";
@@ -31,6 +33,10 @@ export type EventWarpDestination = {
   x: number;
   y: number;
   direction?: string;
+  worldPixel?: { x: number; y: number };
+  facing?: SpriteFacing;
+  warpStyle?: number;
+  transition?: "fade" | "instant";
 };
 
 export type EventHostDebug = {
@@ -80,6 +86,44 @@ export function dialoguePagesForConfirmEffects(
     pages.push(pageForConfirmEffect(effect));
   }
   return pages.length > 0 ? pages : [emptyPage()];
+}
+
+export function teleportDirectionToFacing(direction: number | undefined): SpriteFacing | undefined {
+  switch (direction) {
+    case 1:
+      return "up";
+    case 3:
+      return "right";
+    case 5:
+      return "down";
+    case 7:
+      return "left";
+    default:
+      return undefined;
+  }
+}
+
+export function resolveTeleportDestination(
+  table: TeleportDestinations | undefined,
+  dest: number,
+  style?: number
+): EventWarpDestination | undefined {
+  const entry = table?.destinations.find((item) => item.id === dest);
+  if (!entry) {
+    return undefined;
+  }
+  const worldPixel = { x: entry.x, y: entry.y };
+  const facing = teleportDirectionToFacing(entry.direction);
+  const warpStyle = style ?? entry.warpStyle;
+  const transition = style !== undefined && style > 0 ? "fade" : "instant";
+  return {
+    x: worldPixel.x,
+    y: worldPixel.y,
+    worldPixel,
+    warpStyle,
+    transition,
+    ...(facing ? { facing, direction: facing } : {})
+  };
 }
 
 export class RuntimeEventHost implements EventExecutorHost {
@@ -265,8 +309,20 @@ export class RuntimeEventHost implements EventExecutorHost {
       return;
     }
     this.recordWarp(dest, style);
-    this.fade();
+    if (this.shouldFadeWarp(destination, style)) {
+      this.fade();
+    }
     this.options.applyWarpDestination(destination);
+  }
+
+  private shouldFadeWarp(destination: EventWarpDestination, style?: number): boolean {
+    if (destination.transition === "fade") {
+      return true;
+    }
+    if (destination.transition === "instant") {
+      return false;
+    }
+    return style !== undefined && style > 0;
   }
 
   private fade(): void {

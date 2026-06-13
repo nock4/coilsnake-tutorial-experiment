@@ -5,12 +5,15 @@ import {
   resolveScriptReferenceFlow,
   type DialogueSegment,
   type ScriptCollection,
-  type ScriptCommand
+  type ScriptCommand,
+  type TeleportDestinations
 } from "@eb/schemas";
 import {
   dialoguePagesForConfirmEffects,
+  resolveTeleportDestination,
   RuntimeEventHost,
   RuntimeEventSequence,
+  teleportDirectionToFacing,
   type EventWarpDestination
 } from "../src/eventHost";
 import { GameFlags } from "../src/gameFlags";
@@ -76,6 +79,55 @@ function scripts(files: Record<string, ScriptCommand[]>): ScriptCollection {
     warnings: []
   };
 }
+
+function teleportDestinations(): TeleportDestinations {
+  return {
+    schemaVersion: "test",
+    units: { x: "world-pixels", y: "world-pixels" },
+    destinations: [
+      { id: 0, x: 0, y: 0, direction: 0, warpStyle: 0 },
+      { id: 2, x: 320, y: 448, direction: 3, warpStyle: 7 },
+      { id: 5, x: 640, y: 768, direction: 7, warpStyle: 1 }
+    ],
+    counts: { destinations: 3 }
+  };
+}
+
+describe("teleport destination resolver", () => {
+  it("maps CoilSnake direction ids to cardinal facings", () => {
+    expect(teleportDirectionToFacing(1)).toBe("up");
+    expect(teleportDirectionToFacing(3)).toBe("right");
+    expect(teleportDirectionToFacing(5)).toBe("down");
+    expect(teleportDirectionToFacing(7)).toBe("left");
+    expect(teleportDirectionToFacing(0)).toBeUndefined();
+  });
+
+  it("resolves an index to world pixels, facing, and warp style", () => {
+    expect(resolveTeleportDestination(teleportDestinations(), 2)).toMatchObject({
+      x: 320,
+      y: 448,
+      worldPixel: { x: 320, y: 448 },
+      direction: "right",
+      facing: "right",
+      warpStyle: 7,
+      transition: "instant"
+    });
+
+    expect(resolveTeleportDestination(teleportDestinations(), 5, 4)).toMatchObject({
+      x: 640,
+      y: 768,
+      worldPixel: { x: 640, y: 768 },
+      direction: "left",
+      facing: "left",
+      warpStyle: 4,
+      transition: "fade"
+    });
+  });
+
+  it("returns undefined for absent destination ids", () => {
+    expect(resolveTeleportDestination(teleportDestinations(), 99)).toBeUndefined();
+  });
+});
 
 describe("RuntimeEventHost", () => {
   it("routes contiguous text effects through one DialogueController paging session", () => {
@@ -185,7 +237,7 @@ describe("RuntimeEventHost", () => {
     expect(partyState.bank).toBe(6);
     expect(partyState.party()).toEqual([1]);
     expect(applied).toEqual([{ x: 40, y: 50, direction: "left" }]);
-    expect(fadeCalls).toEqual(["out", "in"]);
+    expect(fadeCalls).toEqual([]);
     expect(shops).toEqual([2]);
     expect(host.debug().records).toMatchObject({
       warps: 1,
@@ -196,6 +248,82 @@ describe("RuntimeEventHost", () => {
       lastShopStoreId: 2,
       audio: 1,
       lastBattleGroup: 9
+    });
+  });
+
+  it("records missing warp destinations as no-ops", () => {
+    const file = "ccscript/missing.ccs";
+    const collection = scripts({
+      [file]: [
+        label(file, "start", 1),
+        effect(file, 2, { kind: "warp", dest: 99, raw: "warp" }),
+        runtime(file, "end", 3)
+      ]
+    });
+    const applied: EventWarpDestination[] = [];
+    const host = new RuntimeEventHost({
+      dialogue: new DialogueController(),
+      flags: new GameFlags(),
+      partyState: new PartyState(),
+      resolveWarpDestination: (dest, style) => resolveTeleportDestination(teleportDestinations(), dest, style),
+      applyWarpDestination: (destination) => applied.push(destination)
+    });
+    const sequence = new RuntimeEventSequence(collection, host);
+
+    expect(sequence.start("missing.start")).toBe(true);
+
+    expect(applied).toEqual([]);
+    expect(host.debug().records).toMatchObject({
+      warps: 1,
+      warpNoops: 1,
+      lastWarpDest: 99
+    });
+  });
+
+  it("fades teleport styles while applying the resolved destination", () => {
+    const file = "ccscript/teleport.ccs";
+    const collection = scripts({
+      [file]: [
+        label(file, "start", 1),
+        effect(file, 2, { kind: "teleport", dest: 5, style: 4, raw: "teleport" }),
+        runtime(file, "end", 3)
+      ]
+    });
+    const applied: EventWarpDestination[] = [];
+    const fadeCalls: string[] = [];
+    const host = new RuntimeEventHost({
+      dialogue: new DialogueController(),
+      flags: new GameFlags(),
+      partyState: new PartyState(),
+      scene: {
+        cameras: {
+          main: {
+            fadeOut: () => fadeCalls.push("out"),
+            fadeIn: () => fadeCalls.push("in")
+          }
+        },
+        time: { delayedCall: (_delay, callback) => callback() }
+      },
+      resolveWarpDestination: (dest, style) => resolveTeleportDestination(teleportDestinations(), dest, style),
+      applyWarpDestination: (destination) => applied.push(destination)
+    });
+    const sequence = new RuntimeEventSequence(collection, host);
+
+    expect(sequence.start("teleport.start")).toBe(true);
+
+    expect(applied).toHaveLength(1);
+    expect(applied[0]).toMatchObject({
+      worldPixel: { x: 640, y: 768 },
+      facing: "left",
+      warpStyle: 4,
+      transition: "fade"
+    });
+    expect(fadeCalls).toEqual(["out", "in"]);
+    expect(host.debug().records).toMatchObject({
+      warps: 1,
+      warpNoops: 0,
+      lastWarpDest: 5,
+      lastTeleportStyle: 4
     });
   });
 });
