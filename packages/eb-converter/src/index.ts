@@ -34,8 +34,10 @@ import { ITEMS_FILE, PSI_FILE, buildItemPsiData } from "./itemsPsi";
 import { SHOPS_FILE, buildShopData } from "./shops";
 import { buildWorldArtifacts, TUTORIAL_NPC_ID, type WorldMode } from "./world";
 import { parseTeleportDestinationTable } from "./coilsnakeYaml";
+import { DEFAULT_EB_ROM_PATH, ROM_NEW_GAME_START_DERIVATION, readEbNewGameStartFromRom } from "./romStart";
 
 const DEFAULT_PROJECT = "external/coilsnake-project";
+const DEFAULT_FULL_WORLD_PROJECT = "external/coilsnake-full";
 const DEFAULT_OUT = "apps/game/public/generated";
 const GENERATED_FILES = {
   scripts: "scripts.json",
@@ -59,6 +61,8 @@ type CliArgs = {
   items: boolean;
   shops: boolean;
   spawnWorldPixel?: { x: number; y: number };
+  spawnWorldPixelDerivation?: string;
+  romPath?: string;
 };
 
 type ConvertResult = {
@@ -88,7 +92,8 @@ export function parseArgs(argv: string[]): CliArgs {
     characters: parseCharacterMode(process.env.EB_CHARS),
     items: itemsEnabled,
     shops: parseShopMode(process.env.EB_SHOPS) || itemsEnabled,
-    ...(process.env.EB_SPAWN ? { spawnWorldPixel: parseSpawn(process.env.EB_SPAWN) } : {})
+    ...(process.env.EB_SPAWN ? { spawnWorldPixel: parseSpawn(process.env.EB_SPAWN) } : {}),
+    ...(process.env.EB_ROM ? { romPath: process.env.EB_ROM } : {})
   };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -112,6 +117,9 @@ export function parseArgs(argv: string[]): CliArgs {
       args.shops = true;
     } else if (arg === "--spawn") {
       args.spawnWorldPixel = parseSpawn(argv[index + 1]);
+      index += 1;
+    } else if (arg === "--rom") {
+      args.romPath = argv[index + 1];
       index += 1;
     }
   }
@@ -823,9 +831,17 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
   const charactersEnabled = options.characters ?? parseCharacterMode(process.env.EB_CHARS);
   const itemsEnabled = options.items ?? parseItemMode(process.env.EB_ITEMS);
   const shopsEnabled = options.shops ?? (parseShopMode(process.env.EB_SHOPS) || itemsEnabled);
-  const spawnWorldPixel = options.spawnWorldPixel ?? (process.env.EB_SPAWN ? parseSpawn(process.env.EB_SPAWN) : undefined);
   const projectAbs = resolveFromRoot(project);
   const outAbs = resolveFromRoot(out);
+  const configuredSpawnWorldPixel = options.spawnWorldPixel ?? (process.env.EB_SPAWN ? parseSpawn(process.env.EB_SPAWN) : undefined);
+  const romStartPath = configuredSpawnWorldPixel ? undefined : defaultFullWorldRomPath(worldMode, projectAbs, options.romPath ?? process.env.EB_ROM);
+  const romStartWorldPixel = romStartPath ? await readEbNewGameStartFromRom(resolveFromRoot(romStartPath)) : undefined;
+  const spawnWorldPixel = configuredSpawnWorldPixel ?? romStartWorldPixel;
+  const spawnWorldPixelDerivation = configuredSpawnWorldPixel
+    ? options.spawnWorldPixelDerivation
+    : romStartWorldPixel
+      ? ROM_NEW_GAME_START_DERIVATION
+      : undefined;
   const warnings: ValidationIssue[] = [];
   const errors: ValidationIssue[] = [];
   const generatedAt = await readPreviousGeneratedAt(outAbs) ?? new Date().toISOString();
@@ -853,7 +869,8 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     displayPath: makeDisplayPath(project),
     projectExists,
     worldMode,
-    spawnWorldPixel
+    spawnWorldPixel,
+    spawnWorldPixelDerivation
   });
   const world = worldBuild.world;
   const sprites = worldBuild.sprites;
@@ -1771,6 +1788,20 @@ function resolveFromRoot(inputPath: string): string {
     return inputPath;
   }
   return path.resolve(process.env.INIT_CWD ?? findWorkspaceRoot(process.cwd()), inputPath);
+}
+
+function defaultFullWorldRomPath(
+  worldMode: WorldMode,
+  projectAbs: string,
+  configuredRomPath: string | undefined
+): string | undefined {
+  if (worldMode !== "full") {
+    return undefined;
+  }
+  if (configuredRomPath) {
+    return configuredRomPath;
+  }
+  return projectAbs === resolveFromRoot(DEFAULT_FULL_WORLD_PROJECT) ? DEFAULT_EB_ROM_PATH : undefined;
 }
 
 function toPosix(inputPath: string): string {

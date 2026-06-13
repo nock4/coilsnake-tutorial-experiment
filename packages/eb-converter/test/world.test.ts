@@ -24,6 +24,12 @@ import {
 } from "../src/coilsnakeYaml";
 import { chooseRegion, encodeCollisionRows, findSpawn, spriteGroupAnimations } from "../src/world";
 import { encodePngRgba, readPngHeader } from "../src/png";
+import {
+  EB_ROM_SIZE_BYTES,
+  NEW_GAME_START_X_FILE_OFFSET,
+  NEW_GAME_START_Y_FILE_OFFSET,
+  ROM_NEW_GAME_START_DERIVATION
+} from "../src/romStart";
 
 /** Builds a fully synthetic .fts source (no extracted game data). */
 function syntheticFts(): string {
@@ -702,6 +708,39 @@ describe("world artifact build (synthetic project)", () => {
       expect(validated.spriteSheets).toBe(3);
       expect(validated.teleportDestinations).toBe(2);
       expect(validated.worldAssetsChecked).toBe(7);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("uses a ROM-derived full-world spawn when present and falls back when absent", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-world-rom-start-"));
+    try {
+      const project = path.join(temp, "project");
+      const out = path.join(temp, "generated");
+      const rom = path.join(temp, "synthetic.sfc");
+      await writeSyntheticChunkProject(project);
+
+      const bytes = new Uint8Array(EB_ROM_SIZE_BYTES);
+      bytes[NEW_GAME_START_X_FILE_OFFSET] = 0x20;
+      bytes[NEW_GAME_START_X_FILE_OFFSET + 1] = 0x01;
+      bytes[NEW_GAME_START_Y_FILE_OFFSET] = 0x80;
+      bytes[NEW_GAME_START_Y_FILE_OFFSET + 1] = 0x01;
+      await writeFile(rom, bytes);
+
+      const romResult = await convertProject({ project, out, worldMode: "full", romPath: rom });
+      if (!("mode" in romResult.world)) {
+        throw new Error("expected chunked world");
+      }
+      expect(romResult.world.player.spawnWorldPixel).toEqual({ x: 0x0120, y: 0x0180 });
+      expect(romResult.world.player.spawnDerivation).toBe(ROM_NEW_GAME_START_DERIVATION);
+
+      const fallbackResult = await convertProject({ project, out, worldMode: "full", romPath: path.join(temp, "missing.sfc") });
+      if (!("mode" in fallbackResult.world)) {
+        throw new Error("expected chunked world");
+      }
+      expect(fallbackResult.world.player.spawnWorldPixel).not.toEqual({ x: 0x0120, y: 0x0180 });
+      expect(fallbackResult.world.player.spawnDerivation).toContain("nearest walkable point near NPC 744");
     } finally {
       await rm(temp, { recursive: true, force: true });
     }

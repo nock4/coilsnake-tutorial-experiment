@@ -519,8 +519,9 @@ export async function buildWorldArtifacts(options: {
   projectExists: boolean;
   worldMode?: WorldMode;
   spawnWorldPixel?: { x: number; y: number };
+  spawnWorldPixelDerivation?: string;
 }): Promise<WorldBuildResult> {
-  const { projectAbs, outAbs, displayPath, projectExists, worldMode = "region", spawnWorldPixel } = options;
+  const { projectAbs, outAbs, displayPath, projectExists, worldMode = "region", spawnWorldPixel, spawnWorldPixelDerivation } = options;
   const warnings: Issue[] = [];
 
   if (!projectExists) {
@@ -647,6 +648,7 @@ export async function buildWorldArtifacts(options: {
       sectorLookup,
       tilesetForMapTileset,
       spawnWorldPixel,
+      spawnWorldPixelDerivation,
       anchorWorld
     });
   }
@@ -800,6 +802,7 @@ async function buildFullWorldArtifacts(options: {
   sectorLookup: (sectorCol: number, sectorRow: number) => SectorInfo | undefined;
   tilesetForMapTileset: (mapTileset: number) => { tileset: FtsTileset; palettes: Map<number, FtsPalette> } | undefined;
   spawnWorldPixel: { x: number; y: number } | undefined;
+  spawnWorldPixelDerivation: string | undefined;
   anchorWorld: { x: number; y: number };
 }): Promise<WorldBuildResult> {
   const {
@@ -818,6 +821,7 @@ async function buildFullWorldArtifacts(options: {
     sectorLookup,
     tilesetForMapTileset,
     spawnWorldPixel,
+    spawnWorldPixelDerivation,
     anchorWorld
   } = options;
 
@@ -965,7 +969,7 @@ async function buildFullWorldArtifacts(options: {
       ...(sheetByGroup.has(PLAYER_SPRITE_GROUP) ? { sheet: sheetByGroup.get(PLAYER_SPRITE_GROUP) } : {}),
       spawnWorldPixel: spawn,
       spawnDerivation: spawnWorldPixel
-        ? "Configured from EB_SPAWN world pixels."
+        ? spawnWorldPixelDerivation ?? "Configured from EB_SPAWN world pixels."
         : `Derived, not fixture data: nearest walkable point near NPC ${TUTORIAL_NPC_ID}'s placement (deterministic ring search). Vanilla new-game spawn location is Phase-2 scope.`
     },
     sources,
