@@ -8,7 +8,7 @@ import {
   tapKeyUntil,
   waitForDebug,
   walkToNpc
-} from "./gameHarness";
+} from "../gameHarness";
 
 type WalkPair = [number, number];
 type PlayerAnimations = Record<"up" | "right" | "down" | "left", WalkPair>;

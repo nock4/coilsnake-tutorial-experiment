@@ -1,8 +1,10 @@
 import { spawn } from "node:child_process";
 import { rm } from "node:fs/promises";
+import { buildContentSlice, DEFAULT_GENERATED_OUT, DEFAULT_SLICE_SOURCE } from "../packages/content-builder/src/build";
 import { convertProject } from "../packages/eb-converter/src/index";
 
-const GENERATED_OUT = "apps/game/public/generated";
+const GENERATED_OUT = DEFAULT_GENERATED_OUT;
+const SOURCE = DEFAULT_SLICE_SOURCE;
 const TEMP_BUILD_OUT = "apps/game/dist";
 
 async function main(): Promise<void> {
@@ -31,15 +33,13 @@ async function main(): Promise<void> {
     console.error(error instanceof Error ? error.message : String(error));
   } finally {
     try {
-      console.log("Restoring region-mode generated data...");
-      await convertProject({
-        project: "external/coilsnake-project",
-        worldMode: "region",
-        out: GENERATED_OUT,
-        battle: false
+      console.log("Restoring original content slice generated data...");
+      await buildContentSlice({
+        sourceFile: SOURCE,
+        out: GENERATED_OUT
       });
     } catch (restoreError) {
-      console.error(`Region-mode restore failed: ${restoreError instanceof Error ? restoreError.message : String(restoreError)}`);
+      console.error(`Content slice restore failed: ${restoreError instanceof Error ? restoreError.message : String(restoreError)}`);
       exitCode = 1;
     }
 

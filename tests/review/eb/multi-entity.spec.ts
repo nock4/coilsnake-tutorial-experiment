@@ -7,7 +7,7 @@ import {
   waitForDebug,
   walkToNpc,
   type FirstSceneDebug
-} from "./gameHarness";
+} from "../gameHarness";
 
 type Direction = "up" | "right" | "down" | "left";
 type DebugNpc = NonNullable<FirstSceneDebug["npcs"]>[number];

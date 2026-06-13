@@ -22,7 +22,7 @@ const reporter: ReporterDescription[] = process.env.PLAYWRIGHT_ENABLE_REPLAY ===
 const webServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER === "1"
   ? undefined
   : {
-      command: "pnpm dev",
+      command: "pnpm dev:serve",
       url: "http://127.0.0.1:5173/",
       reuseExistingServer: !process.env.CI,
       timeout: 30_000
@@ -40,7 +40,7 @@ export default defineConfig({
   projects: [
     {
       name: "review-chromium",
-      testIgnore: [/full-world\.spec\.ts/, /battle\.spec\.ts/, /original-slice\.spec\.ts/],
+      testIgnore: [/[/\\]eb[/\\]/, /full-world\.spec\.ts/, /battle\.spec\.ts/],
       use: {
         ...devices["Desktop Chrome"],
         baseURL: "http://127.0.0.1:5173/",
@@ -78,6 +78,18 @@ export default defineConfig({
       }
     },
     {
+      name: "eb-reference-chromium",
+      testMatch: /[/\\]eb[/\\].*\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: "http://127.0.0.1:5173/",
+        viewport: { width: 1000, height: 760 },
+        trace: "retain-on-failure",
+        video: "retain-on-failure",
+        screenshot: "only-on-failure"
+      }
+    },
+    {
       name: "original-slice-chromium",
       testMatch: /original-slice\.spec\.ts/,
       use: {
@@ -91,7 +103,7 @@ export default defineConfig({
     },
     {
       name: "replay-chromium",
-      testIgnore: [/full-world\.spec\.ts/, /battle\.spec\.ts/, /original-slice\.spec\.ts/],
+      testIgnore: [/[/\\]eb[/\\]/, /full-world\.spec\.ts/, /battle\.spec\.ts/],
       use: {
         ...replayDevices["Replay Chromium"],
         baseURL: "http://127.0.0.1:5173/",

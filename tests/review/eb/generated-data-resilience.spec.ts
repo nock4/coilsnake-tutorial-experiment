@@ -5,7 +5,7 @@ import {
   gotoFirstScene,
   waitForDebug,
   walkToNpc
-} from "./gameHarness";
+} from "../gameHarness";
 
 test("invalid scripts.json keeps the world scene alive and shows a generated fallback", async ({ page }) => {
   const issues = attachRuntimeIssueCapture(page);

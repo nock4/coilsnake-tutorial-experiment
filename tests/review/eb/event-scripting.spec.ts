@@ -6,7 +6,7 @@ import {
   waitForDebug,
   walkToNpc,
   type FirstSceneDebug
-} from "./gameHarness";
+} from "../gameHarness";
 
 const GREETER_NPC_ID = 745;
 const ROBOT_NPC_ID = 744;

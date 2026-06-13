@@ -8,16 +8,16 @@ const SOURCE = DEFAULT_SLICE_SOURCE;
 async function main(): Promise<void> {
   let exitCode = 1;
   try {
-    console.log("Generating full-world review data...");
+    console.log("Generating EB reference review data...");
     await convertProject({
-      project: "external/coilsnake-full",
-      worldMode: "full",
+      project: "external/coilsnake-project",
+      worldMode: "region",
       out: GENERATED_OUT
     });
 
     exitCode = await run(
       "pnpm",
-      ["exec", "playwright", "test", "--project", "full-world-chromium"],
+      ["exec", "playwright", "test", "--project", "eb-reference-chromium"],
       {
         ...cleanEnv(),
         PLAYWRIGHT_DISABLE_REPLAY: "1"

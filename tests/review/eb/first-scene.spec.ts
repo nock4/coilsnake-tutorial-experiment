@@ -9,7 +9,7 @@ import {
   readRequiredDebug,
   waitForDebug,
   walkToNpc
-} from "./gameHarness";
+} from "../gameHarness";
 
 test("world scene renders imported map and plays imported dialogue", async ({ page }) => {
   const issues = attachRuntimeIssueCapture(page);
