@@ -6,6 +6,8 @@ export type FirstSceneDebug = {
   dialogueText: string;
   dialoguePageIndex: number;
   dialoguePageCount: number;
+  revealComplete?: boolean;
+  revealedText?: string;
   targetReference: string;
   player?: { x: number; y: number };
   npc?: { x: number; y: number };

@@ -34,6 +34,7 @@ import {
   type PlayerState
 } from "./playerController";
 import { DialogueController, publishDebug, type DebugNpc, type FirstSceneDebug } from "./state";
+import { textSpeedCpsFromSearch } from "./dialogueRenderer";
 
 export const PLAYER_SPEED = 110; // world pixels per second
 export const INTERACTION_DISTANCE = 28; // world pixels between feet positions
@@ -102,6 +103,7 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     const world = this.world_;
+    this.dialogue.setTextSpeedCps(textSpeedCpsFromSearch(globalThis.location?.search));
     this.assetsLoaded = this.textures.exists("world-bg");
 
     if (!this.assetsLoaded) {
@@ -493,9 +495,11 @@ export class WorldScene extends Phaser.Scene {
     const state: FirstSceneDebug = {
       mode: "world",
       dialogueOpen: this.dialogue.open,
-      dialogueText: this.dialogue.open ? this.dialogue.currentText : this.dialogue.pages[this.dialogue.pageIndex]?.text ?? "",
+      dialogueText: this.dialogue.currentText,
       dialoguePageIndex: this.dialogue.pageIndex,
       dialoguePageCount: this.dialogue.pages.length,
+      revealComplete: this.dialogue.revealComplete,
+      revealedText: this.dialogue.open ? this.dialogue.revealedText : "",
       targetReference: this.targetReference,
       player: this.player ? { x: this.playerState.x, y: this.playerState.y } : undefined,
       npc: npc744 ? { x: npc744.state.player.x, y: npc744.state.player.y } : undefined,

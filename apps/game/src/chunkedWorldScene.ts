@@ -48,6 +48,7 @@ import {
 } from "./playerController";
 import { PLAYER_SPEED, INTERACTION_DISTANCE } from "./worldScene";
 import { DialogueController, publishDebug, type DebugNpc, type FirstSceneDebug } from "./state";
+import { textSpeedCpsFromSearch } from "./dialogueRenderer";
 
 type ChunkLayer = "background" | "foreground";
 type WorldChunk = WorldChunked["chunks"][number];
@@ -134,6 +135,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
 
   create(): void {
     const world = this.world_;
+    this.dialogue.setTextSpeedCps(textSpeedCpsFromSearch(globalThis.location?.search));
     this.assetsLoaded = world.chunks.some((chunk) => Boolean(chunk.background || chunk.foreground));
     if (!this.assetsLoaded) {
       this.scene.start("fallback", { gameData: this.data_, reason: "full-world chunk assets missing" });
@@ -796,9 +798,11 @@ export class ChunkedWorldScene extends Phaser.Scene {
     const state: FirstSceneDebug = {
       mode: "world",
       dialogueOpen: this.dialogue.open,
-      dialogueText: this.dialogue.open ? this.dialogue.currentText : this.dialogue.pages[this.dialogue.pageIndex]?.text ?? "",
+      dialogueText: this.dialogue.currentText,
       dialoguePageIndex: this.dialogue.pageIndex,
       dialoguePageCount: this.dialogue.pages.length,
+      revealComplete: this.dialogue.revealComplete,
+      revealedText: this.dialogue.open ? this.dialogue.revealedText : "",
       targetReference: this.targetReference,
       player: this.player ? { x: this.playerState.x, y: this.playerState.y } : undefined,
       npc: npc744 ? { x: npc744.state.player.x, y: npc744.state.player.y } : undefined,

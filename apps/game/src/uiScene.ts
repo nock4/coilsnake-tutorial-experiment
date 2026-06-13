@@ -70,13 +70,15 @@ export class UiScene extends Phaser.Scene {
     }
 
     const open = world.dialogue.open;
-    const text = open ? world.dialogue.currentText : "";
+    const text = open ? world.dialogue.revealedText : "";
     const footer = open
-      ? (world.dialogue.isLastPage ? "Space/Enter: close" : "Space/Enter: next")
+      ? (!world.dialogue.revealComplete
+          ? "Space/Enter: finish"
+          : (world.dialogue.isLastPage ? "Space/Enter: close" : "Space/Enter: next"))
       : "";
     const panelVisible = world.debugPanelVisible;
     const runtimeLines = panelVisible ? world.runtimeLines() : [];
-    const signature = `${open}|${text}|${footer}|${world.prompt}|${panelVisible}|${runtimeLines.join("/")}`;
+    const signature = `${open}|${text}|${footer}|${world.dialogue.revealComplete}|${world.prompt}|${panelVisible}|${runtimeLines.join("/")}`;
     if (signature === this.lastSignature) {
       return;
     }

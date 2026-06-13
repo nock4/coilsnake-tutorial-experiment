@@ -8,6 +8,7 @@ import {
   type GameData
 } from "./loader";
 import { DialogueController, publishDebug, type FirstSceneDebug } from "./state";
+import { textSpeedCpsFromSearch } from "./dialogueRenderer";
 
 const MONO = "Menlo, Consolas, monospace";
 const INTERACTION_DISTANCE = 128;
@@ -40,6 +41,7 @@ export class FallbackScene extends Phaser.Scene {
 
   create(): void {
     const width = this.scale.width;
+    this.dialogue.setTextSpeedCps(textSpeedCpsFromSearch(globalThis.location?.search));
     this.cameras.main.setBackgroundColor("#10141b");
     this.targetReference = chooseReference(this.data_);
 
@@ -87,6 +89,7 @@ export class FallbackScene extends Phaser.Scene {
 
   update(_: number, delta: number): void {
     if (!this.player || this.dialogue.open) {
+      this.dialogueText?.setText(this.dialogue.open ? this.dialogue.revealedText : "");
       this.publish();
       return;
     }
@@ -130,7 +133,7 @@ export class FallbackScene extends Phaser.Scene {
   }
 
   private render(): void {
-    this.dialogueText?.setText(this.dialogue.open ? this.dialogue.currentText : "");
+    this.dialogueText?.setText(this.dialogue.open ? this.dialogue.revealedText : "");
     this.publish();
   }
 
@@ -144,9 +147,11 @@ export class FallbackScene extends Phaser.Scene {
     const state: FirstSceneDebug = {
       mode: "fallback",
       dialogueOpen: this.dialogue.open,
-      dialogueText: this.dialogue.open ? this.dialogue.currentText : this.dialogue.pages[this.dialogue.pageIndex]?.text ?? "",
+      dialogueText: this.dialogue.currentText,
       dialoguePageIndex: this.dialogue.pageIndex,
       dialoguePageCount: this.dialogue.pages.length,
+      revealComplete: this.dialogue.revealComplete,
+      revealedText: this.dialogue.open ? this.dialogue.revealedText : "",
       targetReference: this.targetReference,
       player: this.player ? { x: this.player.x, y: this.player.y } : undefined,
       npc: this.npcMarker ? { x: this.npcMarker.x, y: this.npcMarker.y } : undefined,

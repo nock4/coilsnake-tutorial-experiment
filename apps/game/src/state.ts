@@ -1,4 +1,13 @@
 import type { DialoguePage, TutorialStatus } from "@eb/schemas";
+import {
+  DefaultResolver,
+  INSTANT_TEXT_SPEED_CPS,
+  confirmActionForReveal,
+  renderPageToText,
+  revealState,
+  type DialogueResolver,
+  type RevealState
+} from "./dialogueRenderer";
 
 export type SceneMode = "world" | "fallback" | "error";
 
@@ -20,6 +29,8 @@ export type FirstSceneDebug = {
   dialogueText: string;
   dialoguePageIndex: number;
   dialoguePageCount: number;
+  revealComplete?: boolean;
+  revealedText?: string;
   targetReference: string;
   player?: { x: number; y: number };
   npc?: { x: number; y: number };
@@ -87,6 +98,23 @@ export class DialogueController {
    */
   static readonly REOPEN_COOLDOWN_MS = 75;
   private lastTransitionAt = 0;
+  private resolver: DialogueResolver = DefaultResolver;
+  private textSpeedCps = INSTANT_TEXT_SPEED_CPS;
+  private pageStartedAt = 0;
+  private revealForcedComplete = false;
+
+  constructor(options: { resolver?: DialogueResolver; textSpeedCps?: number } = {}) {
+    this.resolver = options.resolver ?? DefaultResolver;
+    this.textSpeedCps = options.textSpeedCps ?? INSTANT_TEXT_SPEED_CPS;
+  }
+
+  setResolver(resolver: DialogueResolver): void {
+    this.resolver = resolver;
+  }
+
+  setTextSpeedCps(cps: number): void {
+    this.textSpeedCps = cps;
+  }
 
   /** True when enough time has passed since the last transition to open. */
   canOpen(): boolean {
@@ -98,7 +126,7 @@ export class DialogueController {
     this.pageIndex = 0;
     this.open = true;
     this.opens += 1;
-    this.lastTransitionAt = Date.now();
+    this.resetReveal(Date.now());
   }
 
   /** Advances a page; returns false when the dialogue closed instead. */
@@ -106,16 +134,25 @@ export class DialogueController {
     if (!this.open) {
       return false;
     }
-    if (Date.now() - this.lastTransitionAt < DialogueController.ADVANCE_COOLDOWN_MS) {
+    const now = Date.now();
+    if (now - this.lastTransitionAt < DialogueController.ADVANCE_COOLDOWN_MS) {
       return true; // ignore bounced confirm presses right after a transition
     }
+
+    if (confirmActionForReveal(this.revealStateAt(now).revealComplete) === "completeReveal") {
+      this.revealForcedComplete = true;
+      this.lastTransitionAt = now;
+      return true;
+    }
+
     this.advances += 1;
-    this.lastTransitionAt = Date.now();
+    this.lastTransitionAt = now;
     if (this.pageIndex + 1 >= this.pages.length) {
       this.close();
       return false;
     }
     this.pageIndex += 1;
+    this.resetReveal(now);
     return true;
   }
 
@@ -126,13 +163,40 @@ export class DialogueController {
     }
     this.open = false;
     this.pageIndex = 0;
+    this.revealForcedComplete = false;
   }
 
   get currentText(): string {
-    return this.pages[this.pageIndex]?.text ?? "";
+    return renderPageToText(this.pages[this.pageIndex], this.resolver);
+  }
+
+  get revealedText(): string {
+    return this.currentRevealState.revealedText;
+  }
+
+  get revealComplete(): boolean {
+    return this.currentRevealState.revealComplete;
+  }
+
+  get currentRevealState(): RevealState {
+    return this.revealStateAt(Date.now());
   }
 
   get isLastPage(): boolean {
     return this.pageIndex >= this.pages.length - 1;
+  }
+
+  private resetReveal(now: number): void {
+    this.lastTransitionAt = now;
+    this.pageStartedAt = now;
+    this.revealForcedComplete = false;
+  }
+
+  private revealStateAt(now: number): RevealState {
+    const fullText = this.currentText;
+    if (!this.open || this.revealForcedComplete) {
+      return revealState(fullText, 0, INSTANT_TEXT_SPEED_CPS);
+    }
+    return revealState(fullText, now - this.pageStartedAt, this.textSpeedCps);
   }
 }
