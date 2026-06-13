@@ -10,9 +10,9 @@ import {
   type FirstSceneDebug
 } from "./gameHarness";
 
-const ORIGINAL_NPC_ID = 1002;
-const FIRST_PAGE = "I counted every stepping stone by the pond.";
-const SECOND_PAGE = "There are twelve, but I still start over when the wind moves the reeds.";
+const ORIGINAL_NPC_ID = 2001;
+const FIRST_PAGE = "Bosch! Wake up. Your phone minted something at 4am, and it is signed with your name.";
+const SECOND_PAGE = "The payload just says 'Swag is eternal.' You didn't write that. Somebody beat you to being you.";
 
 test("original content slice renders, moves, and plays original multi-page dialogue", async ({ page }) => {
   const issues = attachRuntimeIssueCapture(page);
@@ -22,13 +22,13 @@ test("original content slice renders, moves, and plays original multi-page dialo
     available: true,
     widthPixels: 640,
     heightPixels: 512,
-    npcCount: 3,
-    visibleNpcCount: 3,
+    npcCount: 4,
+    visibleNpcCount: 4,
     assetsLoaded: true
   });
-  expect(initial.statusLines.join("\n")).toContain("World: 20x16 tiles @ (0,0) | NPCs: 3/3");
-  expect(initial.targetReference).toBe("slice.mira");
-  expect(initial.npcs?.map((npc) => npc.id).sort()).toEqual([1001, 1002, 1003]);
+  expect(initial.statusLines.join("\n")).toContain("World: 20x16 tiles @ (0,0) | NPCs: 4/4");
+  expect(initial.targetReference).toBe("slice.biscuit");
+  expect(initial.npcs?.map((npc) => npc.id).sort()).toEqual([2001, 2002, 2003, 2004]);
   expect(await countCanvasColors(page)).toBeGreaterThan(8);
 
   const moved = await sampleWhileHolding(page, "ArrowRight", 350);
@@ -71,7 +71,7 @@ async function gotoOriginalSlice(page: Page): Promise<FirstSceneDebug> {
     state.world?.assetsLoaded === true &&
     state.world.widthPixels === 640 &&
     state.world.heightPixels === 512 &&
-    state.targetReference === "slice.mira" &&
+    state.targetReference === "slice.biscuit" &&
     Boolean(state.npcs?.some((npc) => npc.id === ORIGINAL_NPC_ID))
   );
 }

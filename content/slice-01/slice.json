@@ -1,148 +1,116 @@
 {
   "id": "slice-01",
-  "title": "Willowfen Commons",
-  "description": "A small original meadow commons with a pond, footpath, and friendly townsfolk.",
+  "title": "Signal Town — Bosch's Block",
+  "description": "Swagbound opening beat: Bosch wakes to find a smoother 'public version' of himself already walked the block. Grab something real and head out to prove the you that just woke up got here first.",
   "tileSize": 32,
   "palette": [
-    {
-      "symbol": "G",
-      "name": "meadow grass",
-      "solid": false,
-      "color": "#4fae63",
-      "accent": "#6dca79"
-    },
-    {
-      "symbol": "P",
-      "name": "packed clay path",
-      "solid": false,
-      "color": "#caa76d",
-      "accent": "#dfbf83"
-    },
-    {
-      "symbol": "T",
-      "name": "cedar hedge",
-      "solid": true,
-      "color": "#24543a",
-      "accent": "#2f704a"
-    },
-    {
-      "symbol": "W",
-      "name": "blue pond",
-      "solid": true,
-      "color": "#3b83c5",
-      "accent": "#69add8"
-    },
-    {
-      "symbol": "F",
-      "name": "field flowers",
-      "solid": false,
-      "color": "#55b967",
-      "accent": "#f0d35d"
-    }
+    { "symbol": "W", "name": "house wall", "solid": true, "color": "#3b2f4a", "accent": "#54456a" },
+    { "symbol": "f", "name": "wood floor", "solid": false, "color": "#b98b5e", "accent": "#cda277" },
+    { "symbol": "B", "name": "bed", "solid": true, "color": "#9a3b5a", "accent": "#c75d7e" },
+    { "symbol": "R", "name": "rug", "solid": false, "color": "#3f6f9a", "accent": "#5b93c2" },
+    { "symbol": "D", "name": "doorway", "solid": false, "color": "#7c5a3a", "accent": "#a07845" },
+    { "symbol": "s", "name": "sidewalk", "solid": false, "color": "#9aa0a8", "accent": "#b9bfc6" },
+    { "symbol": "O", "name": "road", "solid": false, "color": "#5a5e66", "accent": "#74787f" },
+    { "symbol": "g", "name": "lot grass", "solid": false, "color": "#4f8a52", "accent": "#69a76a" }
   ],
   "grid": [
-    "TTTTTTTTTTTTTTTTTTTT",
-    "TGGGGGGGGGGGGGGGGGGT",
-    "TGGGGGGGGWWGGGGGGGGT",
-    "TGGGGPPPPPPPPGGGGGGT",
-    "TGGGGPGGGGGGPGGGGGGT",
-    "TGGGGPGTTTGGPGGGGGGT",
-    "TGGGGPPPPPPPPGGGGGGT",
-    "TGGGGGGGGPGGGGGGGGGT",
-    "TGGFGGGGGPGGGGGFGGGT",
-    "TGGGGGPPPPPPPGGGGGGT",
-    "TGGGGGPGGGGGPGGGGGGT",
-    "TGGGGGPGWWWGPGGGGGGT",
-    "TGGGGGPPPPPPPGGGGGGT",
-    "TGGGGGGGGGGGGGGGGGGT",
-    "TGGGGGGGGGGGGGGGGGGT",
-    "TTTTTTTTTTTTTTTTTTTT"
+    "WWWWWWWWWWWWWggggggg",
+    "WfffffffffffWggggggg",
+    "WfBBffffffffWggggggg",
+    "WfffffffRfffWggggggg",
+    "WfffffffffffWggggggg",
+    "WfffffffffffWggggggg",
+    "WfffffffffffWggggggg",
+    "WfffffffffffWggggggg",
+    "WWWWWWDWWWWWWggggggg",
+    "ggggggsggggggggggggg",
+    "gggsssssssgggggggggg",
+    "gggsssssssgggggggggg",
+    "OOOOOOOOOOOOOOOOOOOO",
+    "OOOOOOOOOOOOOOOOOOOO",
+    "gggggggggggggggggggg",
+    "gggggggggggggggggggg"
   ],
   "player": {
-    "sprite": "player",
-    "spawn": { "x": 6, "y": 12 },
-    "facing": "up"
+    "sprite": "bosch",
+    "spawn": { "x": 4, "y": 4 },
+    "facing": "down"
   },
   "sprites": [
     {
-      "id": "player",
+      "id": "bosch",
       "groupId": 1,
       "role": "player",
-      "colors": {
-        "hair": "#312a26",
-        "shirt": "#315f9a",
-        "pants": "#30374a",
-        "accent": "#f2d17b",
-        "skin": "#d99f6d"
-      }
+      "colors": { "hair": "#2a2320", "shirt": "#c8483a", "pants": "#2f3550", "accent": "#f2d17b", "skin": "#d99f6d" }
     },
     {
-      "id": "mira",
+      "id": "biscuit",
       "groupId": 2,
       "role": "npc",
-      "colors": {
-        "hair": "#5a3927",
-        "shirt": "#7c4fa3",
-        "pants": "#394b59",
-        "accent": "#e7b8d8",
-        "skin": "#c8875f"
-      }
+      "colors": { "hair": "#3a2c1f", "shirt": "#e0a23a", "pants": "#3a4658", "accent": "#fff0c4", "skin": "#caa074" }
     },
     {
-      "id": "tovin",
+      "id": "charm",
       "groupId": 3,
       "role": "npc",
-      "colors": {
-        "hair": "#26332d",
-        "shirt": "#c45a3a",
-        "pants": "#374c38",
-        "accent": "#ffd166",
-        "skin": "#b77f55"
-      }
+      "colors": { "hair": "#caa24a", "shirt": "#f5d77a", "pants": "#caa24a", "accent": "#fff4cf", "skin": "#f5d77a" }
     },
     {
-      "id": "sela",
+      "id": "signalpet",
       "groupId": 4,
       "role": "npc",
-      "colors": {
-        "hair": "#2c2534",
-        "shirt": "#3b8c86",
-        "pants": "#4b3b57",
-        "accent": "#b8f2e6",
-        "skin": "#d19a75"
-      }
+      "colors": { "hair": "#2c2534", "shirt": "#6b6f8c", "pants": "#3a3550", "accent": "#aeb6e0", "skin": "#8b90ad" }
+    },
+    {
+      "id": "kid",
+      "groupId": 5,
+      "role": "npc",
+      "colors": { "hair": "#241d1a", "shirt": "#3b8c6f", "pants": "#37414b", "accent": "#bdeede", "skin": "#c8875f" }
     }
   ],
   "npcs": [
     {
-      "id": 1001,
-      "name": "Mira",
-      "sprite": "mira",
-      "position": { "x": 10, "y": 9 },
+      "id": 2001,
+      "name": "Biscuit",
+      "sprite": "biscuit",
+      "position": { "x": 4, "y": 2 },
       "facing": "down",
       "dialogue": [
-        "Welcome to Willowfen Commons. The grass is soft after the morning rain."
+        "Bosch! Wake up. Your phone minted something at 4am, and it is signed with your name.",
+        "The payload just says 'Swag is eternal.' You didn't write that. Somebody beat you to being you."
       ]
     },
     {
-      "id": 1002,
-      "name": "Tovin",
-      "sprite": "tovin",
-      "position": { "x": 12, "y": 6 },
+      "id": 2002,
+      "name": "Proof-Token Charm",
+      "sprite": "charm",
+      "position": { "x": 9, "y": 7 },
+      "facing": "down",
+      "dialogue": [
+        "You lift the warm Proof-Token Charm from the bowl by the door.",
+        "It is not money, a weapon, or permission. Just a small warm proof that the name leaving this house belongs to the one leaving it."
+      ]
+    },
+    {
+      "id": 2003,
+      "name": "Signal-Pet",
+      "sprite": "signalpet",
+      "position": { "x": 7, "y": 7 },
       "facing": "left",
       "dialogue": [
-        "I counted every stepping stone by the pond.",
-        "There are twelve, but I still start over when the wind moves the reeds."
+        "The signal-pet listens to the room like a radio under a blanket, sniffs the charm's warmth once, and shuffles aside.",
+        "The house has approved the person leaving. The town still has to be convinced."
       ]
     },
     {
-      "id": 1003,
-      "name": "Sela",
-      "sprite": "sela",
-      "position": { "x": 7, "y": 3 },
-      "facing": "right",
+      "id": 2004,
+      "name": "Sidewalk Kid",
+      "sprite": "kid",
+      "position": { "x": 6, "y": 10 },
+      "facing": "up",
       "dialogue": [
-        "The notice board is new today. That is how small towns keep secrets."
+        "He had your face and a cleaner story. Everybody repeated it before anyone asked if you were even here.",
+        "Go see Sal. His kiosk can make real proof before the gossip grows paperwork."
       ]
     }
   ]
