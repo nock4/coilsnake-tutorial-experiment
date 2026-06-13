@@ -286,6 +286,73 @@ const windowSegment = (
   args: number[] = []
 ): DialogueSegment => ({ kind: "window", op, args });
 
+const setFlagSegment = (flag: number, raw: string): DialogueSegment => ({ kind: "setFlag", flag, raw });
+
+const unsetFlagSegment = (flag: number, raw: string): DialogueSegment => ({ kind: "unsetFlag", flag, raw });
+
+const partySegment = (
+  op: Extract<DialogueSegment, { kind: "party" }>["op"],
+  char: number,
+  raw: string
+): DialogueSegment => ({ kind: "party", op, char, raw });
+
+const warpSegment = (dest: number, raw: string): DialogueSegment => ({ kind: "warp", dest, raw });
+
+const teleportSegment = (dest: number, style: number, raw: string): DialogueSegment => ({
+  kind: "teleport",
+  dest,
+  style,
+  raw
+});
+
+const anchorWarpSegment = (raw: string): DialogueSegment => ({ kind: "anchorWarp", raw });
+
+const battleSegment = (group: number, raw: string): DialogueSegment => ({ kind: "battle", group, raw });
+
+const giveSegment = (char: number, item: number, raw: string): DialogueSegment => ({ kind: "give", char, item, raw });
+
+const takeSegment = (char: number, item: number, raw: string): DialogueSegment => ({ kind: "take", char, item, raw });
+
+const moneySegment = (
+  op: Extract<DialogueSegment, { kind: "money" }>["op"],
+  amount: number,
+  raw: string
+): DialogueSegment => ({ kind: "money", op, amount, raw });
+
+const musicPlaySegment = (track: number, raw: string): DialogueSegment => ({ kind: "music", op: "play", track, raw });
+
+const musicSimpleSegment = (
+  op: Extract<DialogueSegment, { kind: "music" }>["op"] & ("stop" | "resume"),
+  raw: string
+): DialogueSegment => ({ kind: "music", op, raw });
+
+const soundSegment = (id: number, raw: string): DialogueSegment => ({ kind: "sound", id, raw });
+
+const musicEffectSegment = (id: number, raw: string): DialogueSegment => ({ kind: "musicEffect", id, raw });
+
+const partyStatSegment = (
+  op: Extract<DialogueSegment, { kind: "partyStat" }>["op"],
+  char: number,
+  amount: number,
+  raw: string
+): DialogueSegment => ({ kind: "partyStat", op, char, amount, raw });
+
+const inflictSegment = (char: number, status: number, raw: string): DialogueSegment => ({
+  kind: "inflict",
+  char,
+  status,
+  raw
+});
+
+const learnPsiSegment = (char: number, psi: number, raw: string): DialogueSegment => ({
+  kind: "learnPsi",
+  char,
+  psi,
+  raw
+});
+
+const eventSegment = (id: number, raw: string): DialogueSegment => ({ kind: "event", id, raw });
+
 function fixedCode(
   opcode: string,
   values: number[],
@@ -341,11 +408,52 @@ export const CCS_TEXT_CODE_REGISTRY: CcsTextCodeRegistryEntry[] = [
   fixedCode("1C 0D", [0x1C, 0x0D], () => substitutionSegment("user", [])),
   fixedCode("1C 0E", [0x1C, 0x0E], () => substitutionSegment("target", [])),
   prefixCode("1C 12", 3, [0x1C, 0x12], (bytes) => substitutionSegment("psi", [bytes[2]])),
+  prefixCode("19 05", 5, [0x19, 0x05], (bytes, raw) =>
+    inflictSegment(bytes[2], readLittleEndian(bytes.slice(3)), raw)
+  ),
+  prefixCode("1D 00", 4, [0x1D, 0x00], (bytes, raw) => giveSegment(bytes[2], bytes[3], raw)),
+  prefixCode("1D 01", 4, [0x1D, 0x01], (bytes, raw) => takeSegment(bytes[2], bytes[3], raw)),
+  prefixCode("1D 08", 4, [0x1D, 0x08], (bytes, raw) => moneySegment("give", readLittleEndian(bytes.slice(2)), raw)),
+  prefixCode("1D 09", 4, [0x1D, 0x09], (bytes, raw) => moneySegment("take", readLittleEndian(bytes.slice(2)), raw)),
+  prefixCode("1E 00", 4, [0x1E, 0x00], (bytes, raw) => partyStatSegment("heal_percent", bytes[2], bytes[3], raw)),
+  prefixCode("1E 01", 4, [0x1E, 0x01], (bytes, raw) => partyStatSegment("hurt_percent", bytes[2], bytes[3], raw)),
+  prefixCode("1E 02", 4, [0x1E, 0x02], (bytes, raw) => partyStatSegment("heal", bytes[2], bytes[3], raw)),
+  prefixCode("1E 03", 4, [0x1E, 0x03], (bytes, raw) => partyStatSegment("hurt", bytes[2], bytes[3], raw)),
+  prefixCode("1E 04", 4, [0x1E, 0x04], (bytes, raw) =>
+    partyStatSegment("recoverpp_percent", bytes[2], bytes[3], raw)
+  ),
+  prefixCode("1E 05", 4, [0x1E, 0x05], (bytes, raw) =>
+    partyStatSegment("consumepp_percent", bytes[2], bytes[3], raw)
+  ),
+  prefixCode("1E 06", 4, [0x1E, 0x06], (bytes, raw) => partyStatSegment("recoverpp", bytes[2], bytes[3], raw)),
+  prefixCode("1E 07", 4, [0x1E, 0x07], (bytes, raw) => partyStatSegment("consumepp", bytes[2], bytes[3], raw)),
+  prefixCode("1E 08", 4, [0x1E, 0x08], (bytes, raw) => partyStatSegment("change_level", bytes[2], bytes[3], raw)),
+  prefixCode("1E 09", 6, [0x1E, 0x09], (bytes, raw) =>
+    partyStatSegment("boost_exp", bytes[2], readLittleEndian(bytes.slice(3)), raw)
+  ),
+  prefixCode("1E 0A", 4, [0x1E, 0x0A], (bytes, raw) => partyStatSegment("boost_iq", bytes[2], bytes[3], raw)),
+  prefixCode("1E 0B", 4, [0x1E, 0x0B], (bytes, raw) => partyStatSegment("boost_guts", bytes[2], bytes[3], raw)),
+  prefixCode("1E 0C", 4, [0x1E, 0x0C], (bytes, raw) => partyStatSegment("boost_speed", bytes[2], bytes[3], raw)),
+  prefixCode("1E 0D", 4, [0x1E, 0x0D], (bytes, raw) => partyStatSegment("boost_vitality", bytes[2], bytes[3], raw)),
+  prefixCode("1E 0E", 4, [0x1E, 0x0E], (bytes, raw) => partyStatSegment("boost_luck", bytes[2], bytes[3], raw)),
+  prefixCode("1F 00 00", 4, [0x1F, 0x00, 0x00], (bytes, raw) => musicPlaySegment(bytes[3], raw)),
+  fixedCode("1F 01 02", [0x1F, 0x01, 0x02], (_bytes, raw) => musicSimpleSegment("stop", raw)),
+  prefixCode("1F 02", 3, [0x1F, 0x02], (bytes, raw) => soundSegment(bytes[2], raw)),
+  fixedCode("1F 03", [0x1F, 0x03], (_bytes, raw) => musicSimpleSegment("resume", raw)),
   prefixCode("1F 04", 3, [0x1F, 0x04], (bytes) => styleSegment("blips", [bytes[2]])),
+  prefixCode("1F 07", 3, [0x1F, 0x07], (bytes, raw) => musicEffectSegment(bytes[2], raw)),
+  prefixCode("1F 11", 3, [0x1F, 0x11], (bytes, raw) => partySegment("add", bytes[2], raw)),
+  prefixCode("1F 12", 3, [0x1F, 0x12], (bytes, raw) => partySegment("remove", bytes[2], raw)),
+  prefixCode("1F 20", 4, [0x1F, 0x20], (bytes, raw) => teleportSegment(bytes[2], bytes[3], raw)),
+  prefixCode("1F 21", 3, [0x1F, 0x21], (bytes, raw) => warpSegment(bytes[2], raw)),
+  prefixCode("1F 23", 4, [0x1F, 0x23], (bytes, raw) => battleSegment(readLittleEndian(bytes.slice(2)), raw)),
   fixedCode("1F 30", [0x1F, 0x30], () => styleSegment("font", [], "normal")),
   fixedCode("1F 31", [0x1F, 0x31], () => styleSegment("font", [], "saturn")),
-  prefixCode("04", 3, [0x04], (_bytes, raw) => controlSegment("set", raw)),
-  prefixCode("05", 3, [0x05], (_bytes, raw) => controlSegment("unset", raw)),
+  prefixCode("1F 41", 3, [0x1F, 0x41], (bytes, raw) => eventSegment(bytes[2], raw)),
+  fixedCode("1F 69", [0x1F, 0x69], (_bytes, raw) => anchorWarpSegment(raw)),
+  prefixCode("1F 71", 4, [0x1F, 0x71], (bytes, raw) => learnPsiSegment(bytes[2], bytes[3], raw)),
+  prefixCode("04", 3, [0x04], (bytes, raw) => setFlagSegment(readLittleEndian(bytes.slice(1)), raw)),
+  prefixCode("05", 3, [0x05], (bytes, raw) => unsetFlagSegment(readLittleEndian(bytes.slice(1)), raw)),
   prefixCode("07", 3, [0x07], (_bytes, raw) => controlSegment("isset", raw)),
   prefixCode("08", 5, [0x08], (_bytes, raw) => controlSegment("call", raw)),
   prefixCode("0A", 5, [0x0A], (_bytes, raw) => controlSegment("goto", raw)),
@@ -519,8 +627,74 @@ function segmentForMacro(raw: string): DialogueSegment | undefined {
       return substitutionSegment("target", []);
     case "psiname":
       return args ? substitutionSegment("psi", [args[0] ?? 0]) : controlSegment(name, raw);
+    case "give":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? giveSegment(args[0], args[1], raw)
+        : controlSegment(name, raw);
+    case "take":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? takeSegment(args[0], args[1], raw)
+        : controlSegment(name, raw);
+    case "givemoney":
+      return args && args[0] !== undefined ? moneySegment("give", args[0], raw) : controlSegment(name, raw);
+    case "takemoney":
+      return args && args[0] !== undefined ? moneySegment("take", args[0], raw) : controlSegment(name, raw);
+    case "inflict":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? inflictSegment(args[0], args[1], raw)
+        : controlSegment(name, raw);
+    case "heal_percent":
+    case "hurt_percent":
+    case "heal":
+    case "hurt":
+    case "recoverpp_percent":
+    case "consumepp_percent":
+    case "recoverpp":
+    case "consumepp":
+    case "change_level":
+    case "boost_exp":
+    case "boost_iq":
+    case "boost_guts":
+    case "boost_speed":
+    case "boost_vitality":
+    case "boost_luck":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? partyStatSegment(name as Extract<DialogueSegment, { kind: "partyStat" }>["op"], args[0], args[1], raw)
+        : controlSegment(name, raw);
+    case "sound":
+      return args && args[0] !== undefined ? soundSegment(args[0], raw) : controlSegment(name, raw);
+    case "music":
+      return args && args[0] !== undefined ? musicPlaySegment(args[0], raw) : controlSegment(name, raw);
+    case "music_stop":
+      return musicSimpleSegment("stop", raw);
+    case "music_resume":
+      return musicSimpleSegment("resume", raw);
+    case "music_effect":
+      return args && args[0] !== undefined ? musicEffectSegment(args[0], raw) : controlSegment(name, raw);
+    case "battle":
+      return args && args[0] !== undefined ? battleSegment(args[0], raw) : controlSegment(name, raw);
+    case "warp":
+      return args && args[0] !== undefined ? warpSegment(args[0], raw) : controlSegment(name, raw);
+    case "teleport":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? teleportSegment(args[0], args[1], raw)
+        : controlSegment(name, raw);
+    case "anchor_warp":
+      return anchorWarpSegment(raw);
+    case "party_add":
+      return args && args[0] !== undefined ? partySegment("add", args[0], raw) : controlSegment(name, raw);
+    case "party_remove":
+      return args && args[0] !== undefined ? partySegment("remove", args[0], raw) : controlSegment(name, raw);
+    case "event":
+      return args && args[0] !== undefined ? eventSegment(args[0], raw) : controlSegment(name, raw);
+    case "learnpsi":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? learnPsiSegment(args[0], args[1], raw)
+        : controlSegment(name, raw);
     case "set":
+      return args && args[0] !== undefined ? setFlagSegment(args[0], raw) : controlSegment(name, raw);
     case "unset":
+      return args && args[0] !== undefined ? unsetFlagSegment(args[0], raw) : controlSegment(name, raw);
     case "isset":
     case "call":
     case "goto":
@@ -1062,6 +1236,16 @@ function scriptCommandFromRaw(raw: string, sourceLocation: ScriptCommand["source
   if (inlineControl) {
     return inlineControl;
   }
+  const commandSegment = executableCommandSegmentFromRaw(raw);
+  if (commandSegment) {
+    return {
+      cmd: "control",
+      raw,
+      sourceLocation,
+      code: commandCodeFromSegment(raw, commandSegment),
+      segments: [commandSegment]
+    };
+  }
   const control = parseControlCommand(raw);
   if (control) {
     return {
@@ -1096,6 +1280,56 @@ function scriptInlineControlFromRaw(
   return undefined;
 }
 
+function executableCommandSegmentFromRaw(raw: string): DialogueSegment | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const segment = segmentForMacro(`{${trimmed}}`);
+  return segment && isExecutableCommandSegment(segment) ? segment : undefined;
+}
+
+function isExecutableCommandSegment(segment: DialogueSegment): boolean {
+  switch (segment.kind) {
+    case "pause":
+    case "prompt":
+    case "setFlag":
+    case "unsetFlag":
+    case "party":
+    case "warp":
+    case "teleport":
+    case "anchorWarp":
+    case "battle":
+    case "give":
+    case "take":
+    case "money":
+    case "music":
+    case "sound":
+    case "musicEffect":
+    case "partyStat":
+    case "inflict":
+    case "learnPsi":
+    case "event":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function commandCodeFromSegment(raw: string, segment: DialogueSegment): string {
+  const match = /^([A-Za-z_][\w.]*)/.exec(raw.trim());
+  if (match) {
+    return match[1].toLowerCase();
+  }
+  if (segment.kind === "setFlag") {
+    return "set";
+  }
+  if (segment.kind === "unsetFlag") {
+    return "unset";
+  }
+  return segment.kind;
+}
+
 function parseControlCommand(raw: string): { code: string; target?: string } | undefined {
   const match = raw.trim().match(/^([A-Za-z_][\w.]*)\s*(?:\((.*)\))?$/);
   if (!match) {
@@ -1117,7 +1351,8 @@ function parseFlowTarget(argsText: string | undefined): string | undefined {
 }
 
 function isStructuredCommandPart(raw: string): boolean {
-  return Boolean(parseInlineControlCommand(raw) || parseControlCommand(raw)) || isKnownRuntimeCommand(raw.trim().toLowerCase());
+  return Boolean(parseInlineControlCommand(raw) || executableCommandSegmentFromRaw(raw) || parseControlCommand(raw))
+    || isKnownRuntimeCommand(raw.trim().toLowerCase());
 }
 
 function parseInlineControlCommand(raw: string): boolean {

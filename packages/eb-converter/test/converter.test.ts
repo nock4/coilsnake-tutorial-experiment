@@ -7,6 +7,7 @@ import {
   buildDialoguePages,
   ManifestSchema,
   resolveScriptReference,
+  resolveScriptEvents,
   resolveScriptReferenceFlow,
   TutorialStatusSchema,
   type ScriptCollection
@@ -497,6 +498,32 @@ describe("CCScript text segments", () => {
     expect(tokenizeCcsString("[FE AA]")).toEqual([{ kind: "control", code: "unknown", raw: "[FE AA]" }]);
   });
 
+  it("types functional event byte codes without losing raw bytes", () => {
+    expect(tokenizeCcsString("[1D 00 02 09][1F 00 00 07][1F 21 03][1F 23 34 12]")).toEqual([
+      { kind: "give", char: 2, item: 9, raw: "[1D 00 02 09]" },
+      { kind: "music", op: "play", track: 7, raw: "[1F 00 00 07]" },
+      { kind: "warp", dest: 3, raw: "[1F 21 03]" },
+      { kind: "battle", group: 0x1234, raw: "[1F 23 34 12]" }
+    ]);
+  });
+
+  it("types functional event macros and top-level command parts", () => {
+    expect(tokenizeCcsString("{set(0x22)}{party_add(3)}{music_stop}{anchor_warp}")).toEqual([
+      { kind: "setFlag", flag: 0x22, raw: "{set(0x22)}" },
+      { kind: "party", op: "add", char: 3, raw: "{party_add(3)}" },
+      { kind: "music", op: "stop", raw: "{music_stop}" },
+      { kind: "anchorWarp", raw: "{anchor_warp}" }
+    ]);
+
+    const parsed = parseCcsFile("ccscript/example.ccs", "label:\ngive(1,2) music_resume warp(4)\n");
+    expect(parsed.commands.slice(1).map((command) => command.segments?.[0])).toEqual([
+      { kind: "give", char: 1, item: 2, raw: "{give(1,2)}" },
+      { kind: "music", op: "resume", raw: "{music_resume}" },
+      { kind: "warp", dest: 4, raw: "{warp(4)}" }
+    ]);
+    expect(parsed.warnings).toEqual([]);
+  });
+
   it("stops dialogue pages on embedded terminators", () => {
     const parsed = parseCcsFile("ccscript/example.ccs", 'label:\n"Alpha[13 02]Beta"\n"Gamma" end\n');
     const pages = buildDialoguePages(parsed.commands.slice(1));
@@ -544,12 +571,15 @@ describe("CCScript text segments", () => {
     for (const reference of ["robot.hello_world", "robot.greeter"]) {
       const legacy = resolveScriptReference(scriptCollection, reference);
       const flow = resolveScriptReferenceFlow(scriptCollection, reference);
+      const events = resolveScriptEvents(scriptCollection, reference);
 
       expect(flow?.truncated).toBe(false);
       expect(Buffer.compare(
         Buffer.from(JSON.stringify(buildDialoguePages(flow?.commands ?? []))),
         Buffer.from(JSON.stringify(buildDialoguePages(legacy?.commands ?? [])))
       )).toBe(0);
+      expect(events?.effects.at(-1)?.kind).toBe("terminator");
+      expect(events?.effects.every((effect) => effect.kind === "text" || effect.kind === "terminator")).toBe(true);
     }
   });
 });

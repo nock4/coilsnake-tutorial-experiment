@@ -10,6 +10,112 @@ export const SourceLocationSchema = z.object({
   column: z.number().int().positive()
 });
 
+const RawEffectMetadataSchema = z.object({
+  raw: z.string().optional()
+});
+
+const PartyStatOpSchema = z.enum([
+  "heal_percent",
+  "hurt_percent",
+  "heal",
+  "hurt",
+  "recoverpp_percent",
+  "consumepp_percent",
+  "recoverpp",
+  "consumepp",
+  "change_level",
+  "boost_exp",
+  "boost_iq",
+  "boost_guts",
+  "boost_speed",
+  "boost_vitality",
+  "boost_luck"
+]);
+
+const FunctionalEventSegmentSchema = z.union([
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("setFlag"),
+    flag: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("unsetFlag"),
+    flag: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("party"),
+    op: z.enum(["add", "remove"]),
+    char: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("warp"),
+    dest: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("teleport"),
+    dest: z.number().int().nonnegative(),
+    style: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("anchorWarp")
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("battle"),
+    group: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("give"),
+    char: z.number().int().nonnegative(),
+    item: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("take"),
+    char: z.number().int().nonnegative(),
+    item: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("money"),
+    op: z.enum(["give", "take"]),
+    amount: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("music"),
+    op: z.literal("play"),
+    track: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("music"),
+    op: z.enum(["stop", "resume"])
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("sound"),
+    id: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("musicEffect"),
+    id: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("partyStat"),
+    op: PartyStatOpSchema,
+    char: z.number().int().nonnegative(),
+    amount: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("inflict"),
+    char: z.number().int().nonnegative(),
+    status: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("learnPsi"),
+    char: z.number().int().nonnegative(),
+    psi: z.number().int().nonnegative()
+  }),
+  RawEffectMetadataSchema.extend({
+    kind: z.literal("event"),
+    id: z.number().int().nonnegative()
+  })
+]);
+
 export const DialogueSegmentSchema = z.union([
   z.object({
     kind: z.literal("text"),
@@ -58,7 +164,8 @@ export const DialogueSegmentSchema = z.union([
     code: z.string(),
     raw: z.string(),
     target: z.string().optional()
-  })
+  }),
+  FunctionalEventSegmentSchema
 ]);
 
 export const ValidationIssueSchema = z.object({
@@ -488,6 +595,7 @@ export type BattleData = z.infer<typeof BattleDataSchema>;
 export type BattleEnemy = z.infer<typeof BattleEnemySchema>;
 export type BattleGroup = z.infer<typeof BattleGroupSchema>;
 export type DialogueSegment = z.infer<typeof DialogueSegmentSchema>;
+export type EventEffect = z.infer<typeof EventEffectSchema>;
 export type ScriptCollection = z.infer<typeof ScriptCollectionSchema>;
 export type ScriptCommand = z.infer<typeof ScriptCommandSchema>;
 export type NpcReferenceCollection = z.infer<typeof NpcReferenceCollectionSchema>;
@@ -531,12 +639,91 @@ export type ResolvedScriptFlow = ResolvedScript & {
   jumps: number;
 };
 
+export type ResolvedScriptEvents = Omit<ResolvedScriptFlow, "commands"> & {
+  commands: ScriptCommand[];
+  effects: EventEffect[];
+};
+
+export type EventWait =
+  | { kind: "confirm"; effect: Extract<EventEffect, { kind: "text" | "prompt" }> }
+  | { kind: "pause"; frames: number; remainingFrames: number; effect: Extract<EventEffect, { kind: "pause" }> };
+
+export type EventExecutorAdvanceInput = {
+  confirm?: boolean;
+  frames?: number;
+};
+
+export type EventExecutorAdvanceResult =
+  | { done: false; effect: EventEffect; wait?: EventWait }
+  | { done: false; wait: EventWait }
+  | {
+    done: true;
+    truncated: boolean;
+    truncatedReason?: ResolvedScriptFlow["truncatedReason"];
+    commandsVisited: number;
+    jumps: number;
+  };
+
+export type EventExecutorHost = {
+  showText?(segments: readonly DialogueSegment[]): void;
+  wait?(wait: EventWait): void;
+  isSet?(flag: number): boolean;
+  setFlag?(flag: number): void;
+  unsetFlag?(flag: number): void;
+  give?(char: number, item: number): void;
+  take?(char: number, item: number): void;
+  money?(op: "give" | "take", amount: number): void;
+  party?(op: "add" | "remove", char: number): void;
+  warp?(dest: number): void;
+  teleport?(dest: number, style: number): void;
+  anchorWarp?(): void;
+  music?(effect: Extract<EventEffect, { kind: "music" }>): void;
+  sound?(id: number): void;
+  musicEffect?(id: number): void;
+  partyStat?(op: z.infer<typeof PartyStatOpSchema>, char: number, amount: number): void;
+  inflict?(char: number, status: number): void;
+  learnPsi?(char: number, psi: number): void;
+  event?(id: number): void;
+  startBattle?(group: number): void;
+  control?(effect: Extract<EventEffect, { kind: "control" }>): void;
+  terminator?(code: "end" | "eob"): void;
+};
+
+export type EventExecutorOptions = Omit<ResolveScriptReferenceFlowOptions, "flags"> & {
+  flags?: Pick<NumericFlagState, "isSet">;
+};
+
 export const DialoguePageSchema = z.object({
   text: z.string(),
   ended: z.boolean(),
   unknownCommands: z.array(ScriptCommandSchema),
   segments: z.array(DialogueSegmentSchema).default([])
 });
+
+export const EventEffectSchema = z.union([
+  z.object({
+    kind: z.literal("text"),
+    segments: z.array(DialogueSegmentSchema)
+  }),
+  z.object({
+    kind: z.literal("pause"),
+    frames: z.number().int().nonnegative()
+  }),
+  z.object({
+    kind: z.literal("prompt")
+  }),
+  FunctionalEventSegmentSchema,
+  z.object({
+    kind: z.literal("terminator"),
+    code: z.enum(["end", "eob"]),
+    raw: z.string().optional()
+  }),
+  z.object({
+    kind: z.literal("control"),
+    code: z.string().optional(),
+    raw: z.string()
+  })
+]);
 
 export type DialoguePage = z.input<typeof DialoguePageSchema>;
 
@@ -997,6 +1184,448 @@ export function resolveScriptReferenceFlow(
   };
 }
 
+export function resolveScriptEvents(
+  scripts: ScriptCollection,
+  reference: string,
+  host: EventExecutorHost = {},
+  options: EventExecutorOptions = {}
+): ResolvedScriptEvents | undefined {
+  return new EventExecutor(scripts, host, options).start(reference);
+}
+
+export class EventExecutor {
+  private flow?: ResolvedScriptEvents;
+  private index = 0;
+  private waiting?: EventWait;
+  private readonly dispatched: EventEffect[] = [];
+
+  constructor(
+    private readonly scripts: ScriptCollection,
+    private readonly host: EventExecutorHost = {},
+    private readonly options: EventExecutorOptions = {}
+  ) {}
+
+  start(reference: string): ResolvedScriptEvents | undefined {
+    const flow = resolveScriptReferenceFlow(this.scripts, reference, {
+      maxCommands: this.options.maxCommands,
+      maxJumps: this.options.maxJumps,
+      onConditionalJump: this.options.onConditionalJump,
+      flags: shadowFlagState(this.host, this.options.flags)
+    });
+    if (!flow) {
+      this.flow = undefined;
+      this.index = 0;
+      this.waiting = undefined;
+      this.dispatched.length = 0;
+      return undefined;
+    }
+
+    this.flow = {
+      ...flow,
+      effects: eventEffectsFromCommands(flow.commands)
+    };
+    this.index = 0;
+    this.waiting = undefined;
+    this.dispatched.length = 0;
+    return this.flow;
+  }
+
+  get effects(): readonly EventEffect[] {
+    return this.flow?.effects ?? [];
+  }
+
+  get dispatchedEffects(): readonly EventEffect[] {
+    return this.dispatched;
+  }
+
+  advance(input: EventExecutorAdvanceInput = {}): EventExecutorAdvanceResult {
+    if (!this.releaseWait(input)) {
+      return { done: false, wait: this.waiting! };
+    }
+
+    const flow = this.flow;
+    if (!flow || this.index >= flow.effects.length) {
+      return this.completeResult();
+    }
+
+    const effect = flow.effects[this.index];
+    this.index += 1;
+    this.dispatch(effect);
+    const wait = waitForEventEffect(effect);
+    if (wait) {
+      this.waiting = wait;
+      this.host.wait?.(wait);
+      return { done: false, effect, wait };
+    }
+    return { done: false, effect };
+  }
+
+  private releaseWait(input: EventExecutorAdvanceInput): boolean {
+    if (!this.waiting) {
+      return true;
+    }
+    if (this.waiting.kind === "confirm") {
+      if (!input.confirm) {
+        return false;
+      }
+      this.waiting = undefined;
+      return true;
+    }
+
+    const elapsedFrames = Math.max(0, input.frames ?? 0);
+    if (elapsedFrames <= 0) {
+      return false;
+    }
+    const remainingFrames = Math.max(0, this.waiting.remainingFrames - elapsedFrames);
+    if (remainingFrames > 0) {
+      this.waiting = {
+        ...this.waiting,
+        remainingFrames
+      };
+      return false;
+    }
+    this.waiting = undefined;
+    return true;
+  }
+
+  private completeResult(): EventExecutorAdvanceResult {
+    const flow = this.flow;
+    return {
+      done: true,
+      truncated: flow?.truncated ?? false,
+      ...(flow?.truncatedReason ? { truncatedReason: flow.truncatedReason } : {}),
+      commandsVisited: flow?.commandsVisited ?? 0,
+      jumps: flow?.jumps ?? 0
+    };
+  }
+
+  private dispatch(effect: EventEffect): void {
+    this.dispatched.push(effect);
+    switch (effect.kind) {
+      case "text":
+        this.host.showText?.(effect.segments);
+        break;
+      case "setFlag":
+        this.host.setFlag?.(effect.flag);
+        break;
+      case "unsetFlag":
+        this.host.unsetFlag?.(effect.flag);
+        break;
+      case "give":
+        this.host.give?.(effect.char, effect.item);
+        break;
+      case "take":
+        this.host.take?.(effect.char, effect.item);
+        break;
+      case "money":
+        this.host.money?.(effect.op, effect.amount);
+        break;
+      case "party":
+        this.host.party?.(effect.op, effect.char);
+        break;
+      case "warp":
+        this.host.warp?.(effect.dest);
+        break;
+      case "teleport":
+        this.host.teleport?.(effect.dest, effect.style);
+        break;
+      case "anchorWarp":
+        this.host.anchorWarp?.();
+        break;
+      case "music":
+        this.host.music?.(effect);
+        break;
+      case "sound":
+        this.host.sound?.(effect.id);
+        break;
+      case "musicEffect":
+        this.host.musicEffect?.(effect.id);
+        break;
+      case "partyStat":
+        this.host.partyStat?.(effect.op, effect.char, effect.amount);
+        break;
+      case "inflict":
+        this.host.inflict?.(effect.char, effect.status);
+        break;
+      case "learnPsi":
+        this.host.learnPsi?.(effect.char, effect.psi);
+        break;
+      case "event":
+        this.host.event?.(effect.id);
+        break;
+      case "battle":
+        this.host.startBattle?.(effect.group);
+        break;
+      case "control":
+        this.host.control?.(effect);
+        break;
+      case "terminator":
+        this.host.terminator?.(effect.code);
+        break;
+      case "pause":
+      case "prompt":
+        break;
+    }
+  }
+}
+
+function shadowFlagState(host: EventExecutorHost, initial?: Pick<NumericFlagState, "isSet">): NumericFlagState {
+  const overrides = new Map<number, boolean>();
+  return {
+    isSet: (flag) => overrides.has(flag)
+      ? overrides.get(flag) === true
+      : initial?.isSet(flag) ?? host.isSet?.(flag) ?? false,
+    setNum: (flag) => {
+      overrides.set(flag, true);
+    },
+    unsetNum: (flag) => {
+      overrides.set(flag, false);
+    }
+  };
+}
+
+function waitForEventEffect(effect: EventEffect): EventWait | undefined {
+  if (effect.kind === "text" || effect.kind === "prompt") {
+    return { kind: "confirm", effect };
+  }
+  if (effect.kind === "pause" && effect.frames > 0) {
+    return {
+      kind: "pause",
+      frames: effect.frames,
+      remainingFrames: effect.frames,
+      effect
+    };
+  }
+  return undefined;
+}
+
+function eventEffectsFromCommands(commands: ScriptCommand[]): EventEffect[] {
+  const effects: EventEffect[] = [];
+  let textSegments: DialogueSegment[] = [];
+  let lastTextCommand: ScriptCommand | undefined;
+
+  const flushText = (): boolean => {
+    if (textSegments.length === 0) {
+      return false;
+    }
+    effects.push({ kind: "text", segments: textSegments });
+    textSegments = [];
+    lastTextCommand = undefined;
+    return true;
+  };
+
+  const appendTextSegment = (command: ScriptCommand, segment: DialogueSegment): void => {
+    if (lastTextCommand && lastTextCommand !== command && textSegments.length > 0) {
+      textSegments.push({ kind: "break", break: "newline" });
+    }
+    textSegments.push(segment);
+    lastTextCommand = command;
+  };
+
+  const applySegment = (command: ScriptCommand, segment: DialogueSegment): boolean => {
+    if (segment.kind === "control" && segment.code === "next") {
+      flushText();
+      return true;
+    }
+    if (segment.kind === "control" && isTerminatorControl(segment.code)) {
+      flushText();
+      effects.push({ kind: "terminator", code: segment.code, raw: segment.raw });
+      return false;
+    }
+    if (segment.kind === "prompt") {
+      const hadText = flushText();
+      if (!hadText) {
+        effects.push({ kind: "prompt" });
+      }
+      return true;
+    }
+
+    const effect = eventEffectFromSegment(segment);
+    if (effect) {
+      flushText();
+      effects.push(effect);
+      return true;
+    }
+    appendTextSegment(command, segment);
+    return true;
+  };
+
+  for (const command of commands) {
+    if (command.cmd === "text") {
+      const sourceSegments = command.segments ?? [{ kind: "text" as const, value: command.value ?? command.raw }];
+      for (const segment of sourceSegments) {
+        if (!applySegment(command, segment)) {
+          return effects;
+        }
+      }
+      continue;
+    }
+
+    if (command.cmd === "next") {
+      flushText();
+      continue;
+    }
+    if (command.cmd === "end" || command.cmd === "eob") {
+      flushText();
+      effects.push({ kind: "terminator", code: command.cmd, raw: command.raw });
+      return effects;
+    }
+
+    const commandEffects = eventEffectsFromCommand(command);
+    if (commandEffects.length > 0) {
+      flushText();
+      effects.push(...commandEffects);
+      continue;
+    }
+
+    if (command.cmd === "unknown") {
+      flushText();
+      effects.push({ kind: "control", raw: command.raw });
+    }
+  }
+
+  flushText();
+  return effects;
+}
+
+function eventEffectsFromCommand(command: ScriptCommand): EventEffect[] {
+  if (command.segments?.length) {
+    return command.segments.map(eventEffectFromSegment).filter((effect): effect is EventEffect => Boolean(effect));
+  }
+
+  const code = command.cmd === "control" ? command.code : command.cmd;
+  if (!code || code === "next") {
+    return [];
+  }
+  if (code === "end" || code === "eob") {
+    return [{ kind: "terminator", code, raw: command.raw }];
+  }
+
+  const effect = eventEffectFromControlCode(code, command.raw);
+  if (effect) {
+    return [effect];
+  }
+  return command.cmd === "control" ? [{ kind: "control", code, raw: command.raw }] : [];
+}
+
+function eventEffectFromSegment(segment: DialogueSegment): EventEffect | undefined {
+  switch (segment.kind) {
+    case "pause":
+      return { kind: "pause", frames: segment.frames };
+    case "prompt":
+      return { kind: "prompt" };
+    case "setFlag":
+    case "unsetFlag":
+    case "party":
+    case "warp":
+    case "teleport":
+    case "anchorWarp":
+    case "battle":
+    case "give":
+    case "take":
+    case "money":
+    case "music":
+    case "sound":
+    case "musicEffect":
+    case "partyStat":
+    case "inflict":
+    case "learnPsi":
+    case "event":
+      return segment;
+    case "control":
+      if (segment.code === "end" || segment.code === "eob") {
+        return { kind: "terminator", code: segment.code, raw: segment.raw };
+      }
+      if (segment.code === "next") {
+        return undefined;
+      }
+      return eventEffectFromControlCode(segment.code, segment.raw) ?? {
+        kind: "control",
+        code: segment.code,
+        raw: segment.raw
+      };
+    case "text":
+    case "break":
+    case "substitution":
+    case "style":
+    case "window":
+      return undefined;
+  }
+}
+
+function eventEffectFromControlCode(code: string, raw: string): EventEffect | undefined {
+  const args = numericArgumentsFromRaw(raw);
+  switch (code) {
+    case "set": {
+      const flag = numericArgumentFromRaw(code, raw);
+      return flag === undefined ? undefined : { kind: "setFlag", flag, raw };
+    }
+    case "unset": {
+      const flag = numericArgumentFromRaw(code, raw);
+      return flag === undefined ? undefined : { kind: "unsetFlag", flag, raw };
+    }
+    case "party_add":
+      return args && args[0] !== undefined ? { kind: "party", op: "add", char: args[0], raw } : undefined;
+    case "party_remove":
+      return args && args[0] !== undefined ? { kind: "party", op: "remove", char: args[0], raw } : undefined;
+    case "warp":
+      return args && args[0] !== undefined ? { kind: "warp", dest: args[0], raw } : undefined;
+    case "teleport":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? { kind: "teleport", dest: args[0], style: args[1], raw }
+        : undefined;
+    case "anchor_warp":
+      return { kind: "anchorWarp", raw };
+    case "battle":
+      return args && args[0] !== undefined ? { kind: "battle", group: args[0], raw } : undefined;
+    case "give":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? { kind: "give", char: args[0], item: args[1], raw }
+        : undefined;
+    case "take":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? { kind: "take", char: args[0], item: args[1], raw }
+        : undefined;
+    case "givemoney":
+      return args && args[0] !== undefined ? { kind: "money", op: "give", amount: args[0], raw } : undefined;
+    case "takemoney":
+      return args && args[0] !== undefined ? { kind: "money", op: "take", amount: args[0], raw } : undefined;
+    case "music":
+      return args && args[0] !== undefined ? { kind: "music", op: "play", track: args[0], raw } : undefined;
+    case "music_stop":
+      return { kind: "music", op: "stop", raw };
+    case "music_resume":
+      return { kind: "music", op: "resume", raw };
+    case "sound":
+      return args && args[0] !== undefined ? { kind: "sound", id: args[0], raw } : undefined;
+    case "music_effect":
+      return args && args[0] !== undefined ? { kind: "musicEffect", id: args[0], raw } : undefined;
+    case "inflict":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? { kind: "inflict", char: args[0], status: args[1], raw }
+        : undefined;
+    case "learnpsi":
+      return args && args[0] !== undefined && args[1] !== undefined
+        ? { kind: "learnPsi", char: args[0], psi: args[1], raw }
+        : undefined;
+    case "event":
+      return args && args[0] !== undefined ? { kind: "event", id: args[0], raw } : undefined;
+  }
+
+  if (isPartyStatOp(code)) {
+    return args && args[0] !== undefined && args[1] !== undefined
+      ? { kind: "partyStat", op: code, char: args[0], amount: args[1], raw }
+      : undefined;
+  }
+  return undefined;
+}
+
+function isPartyStatOp(code: string): code is z.infer<typeof PartyStatOpSchema> {
+  return PARTY_STAT_OPS.has(code as z.infer<typeof PartyStatOpSchema>);
+}
+
+const PARTY_STAT_OPS = new Set<z.infer<typeof PartyStatOpSchema>>(PartyStatOpSchema.options);
+
 function resolveLabelPointer(scripts: ScriptCollection, reference: string): FlowPointer | undefined {
   const split = splitScriptReference(reference);
   if (!split) {
@@ -1131,6 +1760,12 @@ function flowControlFromSegment(
   flags?: NumericFlagState,
   lastFlagResult?: boolean
 ): FlowControl | undefined {
+  if (segment.kind === "setFlag") {
+    return { kind: "set", flag: segment.flag };
+  }
+  if (segment.kind === "unsetFlag") {
+    return { kind: "unset", flag: segment.flag };
+  }
   if (segment.kind !== "control") {
     return undefined;
   }
@@ -1158,7 +1793,7 @@ function isConditionalControl(code: string): boolean {
   return CONDITIONAL_CONTROL_CODES.has(code);
 }
 
-function isTerminatorControl(code: string): boolean {
+function isTerminatorControl(code: string): code is "end" | "eob" {
   return code === "end" || code === "eob";
 }
 
@@ -1240,6 +1875,20 @@ function numericArgumentFromRaw(code: string, raw: string): number | undefined {
 function booleanArgumentFromRaw(code: string, raw: string): boolean | undefined {
   const value = numericArgumentFromRaw(code, raw);
   return value === undefined ? undefined : value !== 0;
+}
+
+function numericArgumentsFromRaw(raw: string): number[] | undefined {
+  const stripped = raw.trim().replace(/^\{|\}$/g, "");
+  const match = /^[A-Za-z_][\w.]*\s*(?:\((.*)\))?$/.exec(stripped);
+  if (!match) {
+    return undefined;
+  }
+  const argsText = match[1];
+  if (!argsText?.trim()) {
+    return [];
+  }
+  const parsed = argsText.split(",").map((item) => parseNumericLiteral(item.trim()));
+  return parsed.every((item): item is number => item !== undefined) ? parsed : undefined;
 }
 
 function rawBytes(raw: string): number[] | undefined {
