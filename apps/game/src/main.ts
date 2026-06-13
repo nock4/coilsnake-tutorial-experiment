@@ -5,6 +5,7 @@ import { ChunkedWorldScene } from "./chunkedWorldScene";
 import { WorldScene } from "./worldScene";
 import { UiScene } from "./uiScene";
 import { FallbackScene } from "./fallbackScene";
+import { BattleScene } from "./battleScene";
 import "./style.css";
 
 const MONO = "Menlo, Consolas, monospace";
@@ -34,6 +35,11 @@ class BootScene extends Phaser.Scene {
       return;
     }
     const data: GameData = await loadGameData(manifest);
+    const battleGroupId = battleGroupIdFromSearch(globalThis.location?.search);
+    if (battleGroupId !== undefined && data.battle) {
+      this.scene.start("battle", { battleData: data.battle, groupId: battleGroupId });
+      return;
+    }
     if (data.world?.available && "mode" in data.world && data.world.mode === "full") {
       this.scene.start("chunked-world", { gameData: data });
       return;
@@ -79,6 +85,15 @@ class BootScene extends Phaser.Scene {
   }
 }
 
+function battleGroupIdFromSearch(search: string | undefined): number | undefined {
+  const value = new URLSearchParams(search ?? "").get("battle");
+  if (value === null || value.trim() === "") {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
 new Phaser.Game({
   type: Phaser.CANVAS,
   parent: "app",
@@ -86,7 +101,7 @@ new Phaser.Game({
   height: 448,
   backgroundColor: "#000000",
   pixelArt: true,
-  scene: [BootScene, WorldScene, ChunkedWorldScene, UiScene, FallbackScene],
+  scene: [BootScene, WorldScene, ChunkedWorldScene, UiScene, FallbackScene, BattleScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH

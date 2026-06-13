@@ -9,7 +9,26 @@ import {
   type RevealState
 } from "./dialogueRenderer";
 
-export type SceneMode = "world" | "fallback" | "error";
+export type SceneMode = "world" | "fallback" | "error" | "battle";
+export type BattlePhase = "menu" | "enemy-rolling" | "player-rolling" | "win" | "lose" | "flee";
+
+export type BattleDebug = {
+  mode: "battle";
+  phase: BattlePhase;
+  menuIndex: number;
+  player: {
+    name: string;
+    hpDisplayed: number;
+    hpTarget: number;
+    isRolling: boolean;
+  };
+  enemy: {
+    hpDisplayed: number;
+    hpTarget: number;
+    isRolling: boolean;
+  };
+  outcome: "ongoing" | "win" | "lose";
+};
 
 export type DebugNpc = {
   id: number;
@@ -23,8 +42,8 @@ export type DebugNpc = {
   paused: boolean;
 };
 
-export type FirstSceneDebug = {
-  mode: SceneMode;
+export type OverworldDebug = {
+  mode: Exclude<SceneMode, "battle">;
   dialogueOpen: boolean;
   dialogueText: string;
   dialoguePageIndex: number;
@@ -74,8 +93,15 @@ export type FirstSceneDebug = {
   error?: { title: string; message: string };
 };
 
+export type FirstSceneDebug = OverworldDebug | BattleDebug;
+
 export function publishDebug(state: FirstSceneDebug): void {
   (globalThis as Record<string, unknown>).__firstSceneDebug = state;
+}
+
+export function publishBattleDebug(state: BattleDebug): void {
+  (globalThis as Record<string, unknown>).__battleDebug = state;
+  publishDebug(state);
 }
 
 /** Dialogue runtime shared between the world scene and the UI overlay. */

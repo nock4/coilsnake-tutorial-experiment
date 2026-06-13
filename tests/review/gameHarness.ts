@@ -1,7 +1,9 @@
 import { expect, type Page } from "@playwright/test";
 
 export type FirstSceneDebug = {
-  mode: "world" | "fallback" | "error";
+  mode: "world" | "fallback" | "error" | "battle";
+  phase?: "menu" | "enemy-rolling" | "player-rolling" | "win" | "lose" | "flee";
+  menuIndex?: number;
   dialogueOpen: boolean;
   dialogueText: string;
   dialoguePageIndex: number;
@@ -9,7 +11,20 @@ export type FirstSceneDebug = {
   revealComplete?: boolean;
   revealedText?: string;
   targetReference: string;
-  player?: { x: number; y: number };
+  player?: {
+    x: number;
+    y: number;
+    name?: string;
+    hpDisplayed?: number;
+    hpTarget?: number;
+    isRolling?: boolean;
+  };
+  enemy?: {
+    hpDisplayed: number;
+    hpTarget: number;
+    isRolling: boolean;
+  };
+  outcome?: "ongoing" | "win" | "lose";
   npc?: { x: number; y: number };
   npcs?: Array<{
     id: number;
