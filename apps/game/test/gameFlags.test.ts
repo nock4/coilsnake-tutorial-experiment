@@ -20,6 +20,30 @@ describe("GameFlags", () => {
     expect(flags.has("npc:745:talked")).toBe(false);
     expect(flags.list()).toEqual([]);
   });
+
+  it("sets, unsets, lists, and clears numeric event flags", () => {
+    const flags = new GameFlags();
+
+    expect(flags.isSet(7)).toBe(false);
+    expect(flags.listNums()).toEqual([]);
+
+    flags.setNum(7);
+    flags.setNum(3);
+    flags.setNum(7);
+
+    expect(flags.isSet(7)).toBe(true);
+    expect(flags.isSet(3)).toBe(true);
+    expect(flags.isSet(4)).toBe(false);
+    expect(flags.listNums()).toEqual([3, 7]);
+
+    flags.unsetNum(7);
+    expect(flags.isSet(7)).toBe(false);
+    expect(flags.listNums()).toEqual([3]);
+
+    flags.clear();
+    expect(flags.list()).toEqual([]);
+    expect(flags.listNums()).toEqual([]);
+  });
 });
 
 describe("talkedFlag", () => {

@@ -2,6 +2,7 @@ import { mkdir, readFile, readdir, writeFile, copyFile } from "node:fs/promises"
 import { existsSync } from "node:fs";
 import path from "node:path";
 import {
+  isNpcVisibleAtAllClear,
   SCHEMA_VERSION,
   SpriteSheetCollectionSchema,
   WorldChunkedSchema,
@@ -361,6 +362,11 @@ function parseOptionalInteger(value: string | undefined): number {
   return parseYamlInteger(value);
 }
 
+function parseOptionalEventFlag(value: string | undefined): number | undefined {
+  const parsed = parseOptionalInteger(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
 function sectorInfoFromEntry(entry: Record<string, string> | undefined): SectorInfo | undefined {
   if (!entry) {
     return undefined;
@@ -669,13 +675,14 @@ export async function buildWorldArtifacts(options: {
     }
     const config = npcConfig.get(placement.npcId);
     const spriteGroup = config ? parseOptionalInteger(config.Sprite) : Number.NaN;
+    const eventFlag = parseOptionalEventFlag(config?.["Event Flag"]);
     const textPointer = config?.["Text Pointer 1"];
     const textPointer2 = config?.["Text Pointer 2"];
     const showSprite = config?.["Show Sprite"];
-    const isTutorialNpc = placement.npcId === TUTORIAL_NPC_ID;
     npcs.push({
       npcId: placement.npcId,
       ...(Number.isNaN(spriteGroup) ? {} : { spriteGroup }),
+      ...(eventFlag === undefined ? {} : { eventFlag }),
       ...(config?.Direction ? { direction: config.Direction } : {}),
       ...(config?.Type ? { type: config.Type } : {}),
       ...(config?.Movement ? { movement: config.Movement } : {}),
@@ -683,7 +690,7 @@ export async function buildWorldArtifacts(options: {
       ...(textPointer ? { textPointer } : {}),
       ...(textPointer2 ? { textPointer2 } : {}),
       interactable: isCcsReference(textPointer),
-      visible: isTutorialNpc || showSprite === "always",
+      visible: isNpcVisibleAtAllClear(showSprite, eventFlag),
       worldPixel: world,
       regionPixel: { x: regionX, y: regionY },
       sourceLocation: { file: "map_sprites.yml", line: placement.line, column: 1 }
@@ -894,12 +901,14 @@ async function buildFullWorldArtifacts(options: {
     const world = placementToWorldPixel(placement);
     const config = npcConfig.get(placement.npcId);
     const spriteGroup = config ? parseOptionalInteger(config.Sprite) : Number.NaN;
+    const eventFlag = parseOptionalEventFlag(config?.["Event Flag"]);
     const textPointer = config?.["Text Pointer 1"];
     const textPointer2 = config?.["Text Pointer 2"];
     const showSprite = config?.["Show Sprite"];
     return {
       npcId: placement.npcId,
       ...(Number.isNaN(spriteGroup) ? {} : { spriteGroup }),
+      ...(eventFlag === undefined ? {} : { eventFlag }),
       ...(config?.Direction ? { direction: config.Direction } : {}),
       ...(config?.Type ? { type: config.Type } : {}),
       ...(config?.Movement ? { movement: config.Movement } : {}),
@@ -907,7 +916,7 @@ async function buildFullWorldArtifacts(options: {
       ...(textPointer ? { textPointer } : {}),
       ...(textPointer2 ? { textPointer2 } : {}),
       interactable: isCcsReference(textPointer),
-      visible: showSprite === "always",
+      visible: isNpcVisibleAtAllClear(showSprite, eventFlag),
       worldPixel: world,
       sourceLocation: { file: "map_sprites.yml", line: placement.line, column: 1 }
     };

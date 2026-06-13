@@ -59,6 +59,7 @@ export type FirstSceneDebug = {
   resolveStatus: string;
   dialogueCounters?: { opens: number; advances: number; closes: number };
   flags?: string[];
+  flagsNumCount?: number;
   world?: {
     available: boolean;
     originTile?: { x: number; y: number };

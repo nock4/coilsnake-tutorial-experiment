@@ -51,6 +51,7 @@ export type FirstSceneDebug = {
   };
   resolveStatus: string;
   flags?: string[];
+  flagsNumCount?: number;
   world?: {
     available: boolean;
     originTile?: { x: number; y: number };

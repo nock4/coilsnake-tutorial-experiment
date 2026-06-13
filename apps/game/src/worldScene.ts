@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import type { SpriteSheet, WorldNpc, WorldRegion } from "@eb/schemas";
+import { isNpcVisibleForEventFlags, type SpriteSheet, type WorldNpc, type WorldRegion } from "@eb/schemas";
 import {
   buildDialogueForReference,
   buildMetadataLines,
@@ -129,17 +129,10 @@ export class WorldScene extends Phaser.Scene {
     this.targetReference = chooseReference(this.data_);
 
     for (const npc of world.npcs) {
-      if (!npc.visible) {
+      if (!this.isNpcVisible(npc)) {
         continue;
       }
-      const frames = this.framesForGroup(npc.spriteGroup);
-      const facing = toFacing(npc.direction);
-      this.npcRuntimes.push({
-        data: npc,
-        state: createNpcState(npc.regionPixel.x, npc.regionPixel.y, facing, behaviorForNpc(npc.npcId), frames),
-        frames,
-        sprite: this.spawnActor(npc.regionPixel.x, npc.regionPixel.y, npc.spriteGroup, npc.direction)
-      });
+      this.npcRuntimes.push(this.createNpcRuntime(npc));
     }
 
     const spawn = world.player?.spawnRegionPixel ?? { x: 64, y: 64 };
@@ -181,6 +174,41 @@ export class WorldScene extends Phaser.Scene {
       };
     }
     return CANONICAL_DIRECTION_FRAMES;
+  }
+
+  private isNpcVisible(npc: Pick<WorldNpc, "showSprite" | "eventFlag">): boolean {
+    return isNpcVisibleForEventFlags(npc.showSprite, npc.eventFlag, this.gameFlags);
+  }
+
+  private createNpcRuntime(npc: WorldNpc): NpcRuntime {
+    const frames = this.framesForGroup(npc.spriteGroup);
+    const facing = toFacing(npc.direction);
+    return {
+      data: npc,
+      state: createNpcState(npc.regionPixel.x, npc.regionPixel.y, facing, behaviorForNpc(npc.npcId), frames),
+      frames,
+      sprite: this.spawnActor(npc.regionPixel.x, npc.regionPixel.y, npc.spriteGroup, npc.direction)
+    };
+  }
+
+  /**
+   * Dialogue scripts may toggle event flags; affected NPCs can pop in/out when
+   * the dialogue closes.
+   */
+  private refreshNpcVisibility(): void {
+    for (const runtime of [...this.npcRuntimes]) {
+      if (this.isNpcVisible(runtime.data)) {
+        continue;
+      }
+      runtime.sprite?.destroy();
+      this.npcRuntimes = this.npcRuntimes.filter((item) => item !== runtime);
+    }
+    for (const npc of this.world_.npcs) {
+      if (!this.isNpcVisible(npc) || this.npcRuntimes.some((runtime) => runtime.data === npc)) {
+        continue;
+      }
+      this.npcRuntimes.push(this.createNpcRuntime(npc));
+    }
   }
 
   private spawnActor(
@@ -377,11 +405,7 @@ export class WorldScene extends Phaser.Scene {
     }
     this.dialogue.advance();
     if (!this.dialogue.open) {
-      // Advancing past the last page closed the dialogue: release the lock
-      // here (not in the next update tick) so the published state never shows
-      // dialogueOpen=false with inputLocked=true.
-      unlockPlayer(this.playerState);
-      this.restoreActiveNpc();
+      this.afterDialogueClosed();
     }
     this.publish();
   }
@@ -403,7 +427,7 @@ export class WorldScene extends Phaser.Scene {
     for (const event of events) {
       switch (event.kind) {
         case "dialogue":
-          this.dialogue.start(buildDialogueForReference(this.data_.scripts, event.reference));
+          this.dialogue.start(buildDialogueForReference(this.data_.scripts, event.reference, this.gameFlags));
           break;
         case "setFlag":
           this.gameFlags.set(event.flag);
@@ -432,6 +456,14 @@ export class WorldScene extends Phaser.Scene {
     this.activeNpcDialogue = undefined;
   }
 
+  private afterDialogueClosed(): void {
+    // Release the lock before publish so debug never shows closed dialogue with locked input.
+    unlockPlayer(this.playerState);
+    this.restoreActiveNpc();
+    this.refreshNpcVisibility();
+    this.updatePrompt();
+  }
+
   private setNpcIdleFacing(npc: NpcRuntime, facing: Facing): void {
     npc.state.player.facing = facing;
     npc.state.player.moving = false;
@@ -448,9 +480,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     this.dialogue.close();
-    unlockPlayer(this.playerState);
-    this.restoreActiveNpc();
-    this.updatePrompt();
+    this.afterDialogueClosed();
     this.publish();
   }
 
@@ -485,7 +515,7 @@ export class WorldScene extends Phaser.Scene {
         x: runtime?.state.player.x ?? npc.regionPixel.x,
         y: runtime?.state.player.y ?? npc.regionPixel.y,
         interactable: npc.interactable,
-        visible: npc.visible,
+        visible: this.isNpcVisible(npc),
         facing: runtime?.state.player.facing ?? toFacing(npc.direction),
         moving: runtime?.state.player.moving ?? false,
         behaviorKind: runtime?.state.behavior.kind ?? "static",
@@ -522,13 +552,14 @@ export class WorldScene extends Phaser.Scene {
       resolveStatus: resolveStatus(this.data_),
       dialogueCounters: { opens: this.dialogue.opens, advances: this.dialogue.advances, closes: this.dialogue.closes },
       flags: this.gameFlags.list(),
+      flagsNumCount: this.gameFlags.listNums().length,
       world: {
         available: world.available,
         originTile: world.region?.originTile,
         widthPixels: world.region?.widthPixels,
         heightPixels: world.region?.heightPixels,
         npcCount: world.counts.npcs,
-        visibleNpcCount: world.counts.visibleNpcs,
+        visibleNpcCount: world.npcs.filter((npc) => this.isNpcVisible(npc)).length,
         assetsLoaded: this.assetsLoaded,
         npc744WorldPixel: world.npcs.find((npc) => npc.npcId === 744)?.worldPixel,
         playerSpawn: world.player?.spawnRegionPixel

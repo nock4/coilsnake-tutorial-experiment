@@ -11,8 +11,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { convertProject } from "../packages/eb-converter/src/index";
-import { parseMapDoors, parseMapSprites, parseMapTiles } from "../packages/eb-converter/src/coilsnakeYaml";
-import type { WorldChunked, WorldDoor } from "../packages/eb-schemas/src/index";
+import { parseIntKeyedYaml, parseMapDoors, parseMapSprites, parseMapTiles, parseYamlInteger } from "../packages/eb-converter/src/coilsnakeYaml";
+import { isNpcVisibleAtAllClear, type WorldChunked, type WorldDoor } from "../packages/eb-schemas/src/index";
 
 type Status = "PASS" | "FAIL" | "INFO";
 
@@ -73,18 +73,27 @@ async function main(): Promise<void> {
 
 async function readSourceFixture(): Promise<{
   npcCount: number;
+  visibleAtStart: number;
   doorTypes: Record<string, number>;
   mapWidthTiles: number;
   mapHeightTiles: number;
 }> {
-  const [mapSpritesSource, mapDoorsSource, mapTilesSource] = await Promise.all([
+  const [mapSpritesSource, mapDoorsSource, mapTilesSource, npcConfigSource] = await Promise.all([
     readFile(path.join(SOURCE_PROJECT, "map_sprites.yml"), "utf8"),
     readFile(path.join(SOURCE_PROJECT, "map_doors.yml"), "utf8"),
-    readFile(path.join(SOURCE_PROJECT, "map_tiles.map"), "utf8")
+    readFile(path.join(SOURCE_PROJECT, "map_tiles.map"), "utf8"),
+    readFile(path.join(SOURCE_PROJECT, "npc_config_table.yml"), "utf8")
   ]);
+  const placements = parseMapSprites(mapSpritesSource);
+  const npcConfig = parseIntKeyedYaml(npcConfigSource);
   const mapRows = parseMapTiles(mapTilesSource);
   return {
-    npcCount: parseMapSprites(mapSpritesSource).length,
+    npcCount: placements.length,
+    visibleAtStart: placements.filter((placement) => {
+      const config = npcConfig.get(placement.npcId);
+      const eventFlag = parseOptionalEventFlag(config?.["Event Flag"]);
+      return isNpcVisibleAtAllClear(config?.["Show Sprite"], eventFlag);
+    }).length,
     doorTypes: countDoorTypes(parseMapDoors(mapDoorsSource)),
     mapWidthTiles: mapRows[0]?.length ?? 0,
     mapHeightTiles: mapRows.length
@@ -110,8 +119,8 @@ function buildRows(
   rows.push({
     check: "NPC placements",
     value: `${world.counts.visibleNpcs} visible / ${world.counts.npcs} total`,
-    expected: `${source.npcCount} source NPC IDs`,
-    status: world.counts.npcs === source.npcCount ? "PASS" : "FAIL"
+    expected: `${source.visibleAtStart} visible at all-clear / ${source.npcCount} source NPC IDs`,
+    status: world.counts.npcs === source.npcCount && world.counts.visibleNpcs === source.visibleAtStart ? "PASS" : "FAIL"
   });
 
   for (const type of sortedKeys({ ...source.doorTypes, ...generatedDoorTypes })) {
@@ -172,6 +181,11 @@ function countDoorTypes(doors: Array<Pick<WorldDoor, "type">> | Array<{ type: st
 
 function sortedKeys(record: Record<string, unknown>): string[] {
   return Object.keys(record).sort((a, b) => a.localeCompare(b));
+}
+
+function parseOptionalEventFlag(value: string | undefined): number | undefined {
+  const parsed = parseYamlInteger(value);
+  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 function printRows(rows: Row[]): void {

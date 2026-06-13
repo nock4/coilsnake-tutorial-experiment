@@ -206,6 +206,7 @@ function applyNpcConfigHack(file: TextFile): { changed: boolean; after: string }
   for (const [npcId, fields] of [
     [745, {
       Direction: "right",
+      "Event Flag": "0",
       Movement: "0",
       "Show Sprite": "always",
       Sprite: "2",
@@ -214,6 +215,7 @@ function applyNpcConfigHack(file: TextFile): { changed: boolean; after: string }
     }],
     [746, {
       Direction: "left",
+      "Event Flag": "0",
       Movement: "0",
       "Show Sprite": "always",
       Sprite: "4",

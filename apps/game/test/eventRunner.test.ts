@@ -32,6 +32,51 @@ describe("interactionEvents", () => {
     ]);
   });
 
+  it("uses textPointer2 when the NPC event flag is set", () => {
+    const flags = new GameFlags();
+    flags.setNum(0x22);
+
+    expect(interactionEvents({
+      npcId: 745,
+      eventFlag: 0x22,
+      textPointer: "robot.greeter",
+      textPointer2: "robot.greeter_again"
+    }, FALLBACK_REFERENCE, flags)).toEqual([
+      { kind: "dialogue", reference: "robot.greeter_again" },
+      { kind: "setFlag", flag: "npc:745:talked" }
+    ]);
+  });
+
+  it("uses textPointer1 when the NPC event flag is unset", () => {
+    const flags = new GameFlags();
+    flags.set(talkedFlag(745));
+
+    expect(interactionEvents({
+      npcId: 745,
+      eventFlag: 0x22,
+      textPointer: "robot.greeter",
+      textPointer2: "robot.greeter_again"
+    }, FALLBACK_REFERENCE, flags)).toEqual([
+      { kind: "dialogue", reference: "robot.greeter" },
+      { kind: "setFlag", flag: "npc:745:talked" }
+    ]);
+  });
+
+  it("keeps the talked fallback when the NPC event flag is zero", () => {
+    const flags = new GameFlags();
+    flags.set(talkedFlag(745));
+
+    expect(interactionEvents({
+      npcId: 745,
+      eventFlag: 0,
+      textPointer: "robot.greeter",
+      textPointer2: "robot.greeter_again"
+    }, FALLBACK_REFERENCE, flags)).toEqual([
+      { kind: "dialogue", reference: "robot.greeter_again" },
+      { kind: "setFlag", flag: "npc:745:talked" }
+    ]);
+  });
+
   it("keeps textPointer on repeat interactions when textPointer2 is missing", () => {
     const flags = new GameFlags();
     flags.set(talkedFlag(745));

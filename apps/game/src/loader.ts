@@ -12,6 +12,7 @@ import {
   WorldArtifactSchema,
   type DialoguePage,
   type Manifest,
+  type NumericFlagState,
   type NpcReferenceCollection,
   type ScriptCollection,
   type SpriteGroupCollection,
@@ -72,11 +73,15 @@ export function chooseReference(data: GameData): string {
   return data.npcs?.references[0]?.reference ?? TARGET_REFERENCE;
 }
 
-export function buildDialogueForReference(scripts: ScriptCollection | undefined, reference: string): DialoguePage[] {
+export function buildDialogueForReference(
+  scripts: ScriptCollection | undefined,
+  reference: string,
+  flags?: NumericFlagState
+): DialoguePage[] {
   if (!scripts) {
     return [{ text: "Generated scripts.json could not be loaded.", ended: true, unknownCommands: [] }];
   }
-  const resolved = resolveScriptReferenceFlow(scripts, reference);
+  const resolved = resolveScriptReferenceFlow(scripts, reference, flags ? { flags } : {});
   if (!resolved) {
     return [{ text: "No imported script text was found.", ended: true, unknownCommands: [] }];
   }

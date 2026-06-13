@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import type { SpriteSheet, WorldChunked, WorldChunkedNpc } from "@eb/schemas";
+import { isNpcVisibleForEventFlags, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
 import { resolveDoorTrigger, type DoorTriggerState } from "./doorTriggers";
 import {
   buildDialogueForReference,
@@ -250,9 +250,6 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private indexNpcPlacements(): void {
     this.npcPlacementsByChunk.clear();
     this.world_.npcs.forEach((npc, index) => {
-      if (!npc.visible) {
-        return;
-      }
       const placement: NpcPlacement = {
         key: `${npc.npcId}:${index}:${npc.worldPixel.x}:${npc.worldPixel.y}`,
         data: npc,
@@ -276,6 +273,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.currentChunk = nextChunk;
     this.requestActiveChunks(nextChunk);
     this.unloadChunksOutsideRetain(nextChunk);
+    this.despawnHiddenNpcs();
     this.spawnNpcsForActiveChunks(nextChunk);
     this.despawnNpcsOutsideRetain(nextChunk);
   }
@@ -371,7 +369,11 @@ export class ChunkedWorldScene extends Phaser.Scene {
     let queued = false;
     for (const coord of chunkRing(center, ACTIVE_CHUNK_RADIUS, this.grid())) {
       for (const placement of this.npcPlacementsByChunk.get(chunkKey(coord)) ?? []) {
-        if (this.npcRuntimes.has(placement.key) || !shouldSpawnForChunk(placement.chunk, center)) {
+        if (
+          this.npcRuntimes.has(placement.key) ||
+          !this.isNpcVisible(placement.data) ||
+          !shouldSpawnForChunk(placement.chunk, center)
+        ) {
           continue;
         }
         queued = this.requestNpcSheet(placement.data.spriteGroup) || queued;
@@ -380,6 +382,21 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     if (queued && !this.load.isLoading()) {
       this.load.start();
+    }
+  }
+
+  private despawnHiddenNpcs(): void {
+    for (const [key, runtime] of this.npcRuntimes) {
+      if (this.isNpcVisible(runtime.data)) {
+        continue;
+      }
+      runtime.sprite?.destroy();
+      this.npcRuntimes.delete(key);
+      if (this.activeNpcDialogue?.key === key) {
+        this.dialogue.close();
+        unlockPlayer(this.playerState);
+        this.activeNpcDialogue = undefined;
+      }
     }
   }
 
@@ -492,6 +509,10 @@ export class ChunkedWorldScene extends Phaser.Scene {
       };
     }
     return CANONICAL_DIRECTION_FRAMES;
+  }
+
+  private isNpcVisible(npc: Pick<WorldChunkedNpc, "showSprite" | "eventFlag">): boolean {
+    return isNpcVisibleForEventFlags(npc.showSprite, npc.eventFlag, this.gameFlags);
   }
 
   private spawnActor(
@@ -656,8 +677,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     this.dialogue.advance();
     if (!this.dialogue.open) {
-      unlockPlayer(this.playerState);
-      this.restoreActiveNpc();
+      this.afterDialogueClosed();
     }
     this.publish();
   }
@@ -679,7 +699,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     for (const event of events) {
       switch (event.kind) {
         case "dialogue":
-          this.dialogue.start(buildDialogueForReference(this.data_.scripts, event.reference));
+          this.dialogue.start(buildDialogueForReference(this.data_.scripts, event.reference, this.gameFlags));
           break;
         case "setFlag":
           this.gameFlags.set(event.flag);
@@ -708,6 +728,13 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.activeNpcDialogue = undefined;
   }
 
+  private afterDialogueClosed(): void {
+    unlockPlayer(this.playerState);
+    this.restoreActiveNpc();
+    this.refreshStreaming(true);
+    this.updatePrompt();
+  }
+
   private setNpcIdleFacing(npc: NpcRuntime, facing: Facing): void {
     npc.state.player.facing = facing;
     npc.state.player.moving = false;
@@ -724,9 +751,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return;
     }
     this.dialogue.close();
-    unlockPlayer(this.playerState);
-    this.restoreActiveNpc();
-    this.updatePrompt();
+    this.afterDialogueClosed();
     this.publish();
   }
 
@@ -789,7 +814,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       x: npc.state.player.x,
       y: npc.state.player.y,
       interactable: npc.data.interactable,
-      visible: npc.data.visible,
+      visible: this.isNpcVisible(npc.data),
       facing: npc.state.player.facing,
       moving: npc.state.player.moving,
       behaviorKind: npc.state.behavior.kind,
@@ -829,12 +854,13 @@ export class ChunkedWorldScene extends Phaser.Scene {
       resolveStatus: resolveStatus(this.data_),
       dialogueCounters: { opens: this.dialogue.opens, advances: this.dialogue.advances, closes: this.dialogue.closes },
       flags: this.gameFlags.list(),
+      flagsNumCount: this.gameFlags.listNums().length,
       world: {
         available: world.available,
         widthPixels: world.mapWidthTiles * world.tileSize,
         heightPixels: world.mapHeightTiles * world.tileSize,
         npcCount: world.counts.npcs,
-        visibleNpcCount: world.counts.visibleNpcs,
+        visibleNpcCount: world.npcs.filter((npc) => this.isNpcVisible(npc)).length,
         assetsLoaded: this.assetsLoaded,
         npc744WorldPixel: world.npcs.find((npc) => npc.npcId === 744)?.worldPixel,
         playerSpawn: world.player.spawnWorldPixel

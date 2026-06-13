@@ -180,6 +180,7 @@ const PixelSchema = z.object({ x: z.number().int().nonnegative(), y: z.number().
 export const WorldNpcSchema = z.object({
   npcId: z.number().int().nonnegative(),
   spriteGroup: z.number().int().nonnegative().optional(),
+  eventFlag: z.number().int().nonnegative().optional(),
   direction: z.string().optional(),
   type: z.string().optional(),
   movement: z.string().optional(),
@@ -426,9 +427,24 @@ export type ResolvedScript = {
   commands: ScriptCommand[];
 };
 
+export type NumericFlagState = {
+  isSet(flag: number): boolean;
+  setNum?(flag: number): void;
+  unsetNum?(flag: number): void;
+};
+
+export type ConditionalJumpEvent = {
+  control: "call" | "goto";
+  target?: string;
+  condition: boolean;
+  action: "taken" | "fallthrough";
+};
+
 export type ResolveScriptReferenceFlowOptions = {
   maxCommands?: number;
   maxJumps?: number;
+  flags?: NumericFlagState;
+  onConditionalJump?: (event: ConditionalJumpEvent) => void;
 };
 
 export type ResolvedScriptFlow = ResolvedScript & {
@@ -497,7 +513,8 @@ type FlowFrame = FlowPointer;
 
 type FlowControl =
   | { kind: "call" | "goto"; target?: string }
-  | { kind: "conditional" };
+  | { kind: "conditional"; condition: boolean; result?: boolean }
+  | { kind: "set" | "unset"; flag?: number };
 
 type FlowAction =
   | { kind: "next" }
@@ -520,7 +537,8 @@ export function resolveScriptReferenceFlow(
   const callStack: FlowFrame[] = [];
   const activeLabels = new Set<string>([start.labelKey]);
   let current: FlowPointer = start;
-  let pendingConditional = false;
+  let pendingCondition: boolean | undefined;
+  let lastFlagResult: boolean | undefined;
   let commandsVisited = 0;
   let jumps = 0;
   let truncated = false;
@@ -539,14 +557,23 @@ export function resolveScriptReferenceFlow(
       return { kind: "stop" };
     }
     current = frame;
-    pendingConditional = false;
+    pendingCondition = undefined;
     return { kind: "jumped" };
   };
 
   const followControl = (control: Extract<FlowControl, { kind: "call" | "goto" }>): FlowAction => {
-    if (pendingConditional) {
-      pendingConditional = false;
-      return { kind: "next" };
+    if (pendingCondition !== undefined) {
+      const condition = pendingCondition;
+      pendingCondition = undefined;
+      options.onConditionalJump?.({
+        control: control.kind,
+        ...(control.target ? { target: control.target } : {}),
+        condition,
+        action: condition ? "taken" : "fallthrough"
+      });
+      if (!condition) {
+        return { kind: "next" };
+      }
     }
     if (!control.target) {
       return markTruncated("missing_target");
@@ -576,8 +603,19 @@ export function resolveScriptReferenceFlow(
 
     activeLabels.add(target.labelKey);
     current = target;
-    pendingConditional = false;
+    pendingCondition = undefined;
     return { kind: "jumped" };
+  };
+
+  const applyFlagSideEffect = (control: Extract<FlowControl, { kind: "set" | "unset" }>): void => {
+    if (control.flag === undefined) {
+      return;
+    }
+    if (control.kind === "set") {
+      options.flags?.setNum?.(control.flag);
+    } else {
+      options.flags?.unsetNum?.(control.flag);
+    }
   };
 
   const collectTextCommand = (command: ScriptCommand, segments: DialogueSegment[]) => {
@@ -604,9 +642,12 @@ export function resolveScriptReferenceFlow(
         return { kind: "stop" };
       }
 
-      const flow = flowControlFromSegment(segment);
+      const flow = flowControlFromSegment(segment, options.flags, lastFlagResult);
       if (flow?.kind === "conditional") {
-        pendingConditional = true;
+        pendingCondition = flow.condition;
+        if (flow.result !== undefined) {
+          lastFlagResult = flow.result;
+        }
         continue;
       }
       if (flow?.kind === "call" || flow?.kind === "goto") {
@@ -617,9 +658,15 @@ export function resolveScriptReferenceFlow(
         }
         return action;
       }
+      if (flow?.kind === "set" || flow?.kind === "unset") {
+        applyFlagSideEffect(flow);
+        collectedSegments.push(segment);
+        pendingCondition = undefined;
+        continue;
+      }
 
       collectedSegments.push(segment);
-      pendingConditional = false;
+      pendingCondition = undefined;
     }
 
     collectTextCommand(command, collectedSegments);
@@ -668,9 +715,12 @@ export function resolveScriptReferenceFlow(
       continue;
     }
 
-    const flow = flowControlFromCommand(command);
+    const flow = flowControlFromCommand(command, options.flags, lastFlagResult);
     if (flow?.kind === "conditional") {
-      pendingConditional = true;
+      pendingCondition = flow.condition;
+      if (flow.result !== undefined) {
+        lastFlagResult = flow.result;
+      }
       current = { ...current, index: current.index + 1 };
       continue;
     }
@@ -682,6 +732,13 @@ export function resolveScriptReferenceFlow(
       if (action.kind === "next") {
         current = { ...current, index: current.index + 1 };
       }
+      continue;
+    }
+    if (flow?.kind === "set" || flow?.kind === "unset") {
+      applyFlagSideEffect(flow);
+      commands.push(command);
+      pendingCondition = undefined;
+      current = { ...current, index: current.index + 1 };
       continue;
     }
 
@@ -698,7 +755,7 @@ export function resolveScriptReferenceFlow(
     }
 
     commands.push(command);
-    pendingConditional = false;
+    pendingCondition = undefined;
     current = { ...current, index: current.index + 1 };
   }
 
@@ -782,13 +839,43 @@ function labelKey(file: ScriptFile, label: string): string {
   return `${scriptFileStemForPath(file.path)}.${label}`;
 }
 
-function flowControlFromCommand(command: ScriptCommand): FlowControl | undefined {
+export function isNpcVisibleForEventFlags(
+  showSprite: string | undefined,
+  eventFlag: number | undefined,
+  flags: Pick<NumericFlagState, "isSet">
+): boolean {
+  const isSet = eventFlag !== undefined ? flags.isSet(eventFlag) : false;
+  switch (showSprite) {
+    case "always":
+      return true;
+    case "when event flag unset":
+      return !isSet;
+    case "when event flag set":
+      return isSet;
+    default:
+      return false;
+  }
+}
+
+/** New-game runtime starts with all numeric EarthBound event flags clear. */
+export function isNpcVisibleAtAllClear(showSprite: string | undefined, eventFlag: number | undefined): boolean {
+  return isNpcVisibleForEventFlags(showSprite, eventFlag, { isSet: () => false });
+}
+
+function flowControlFromCommand(
+  command: ScriptCommand,
+  flags?: NumericFlagState,
+  lastFlagResult?: boolean
+): FlowControl | undefined {
   const code = command.cmd === "control" ? command.code : command.cmd;
   if (!code) {
     return undefined;
   }
+  if (code === "set" || code === "unset") {
+    return { kind: code, flag: numericArgumentFromRaw(code, command.raw) };
+  }
   if (isConditionalControl(code)) {
-    return { kind: "conditional" };
+    return evaluateConditionalControl(code, command.raw, flags, lastFlagResult);
   }
   if (code === "call" || code === "goto") {
     return { kind: code, target: command.target };
@@ -796,12 +883,19 @@ function flowControlFromCommand(command: ScriptCommand): FlowControl | undefined
   return undefined;
 }
 
-function flowControlFromSegment(segment: DialogueSegment): FlowControl | undefined {
+function flowControlFromSegment(
+  segment: DialogueSegment,
+  flags?: NumericFlagState,
+  lastFlagResult?: boolean
+): FlowControl | undefined {
   if (segment.kind !== "control") {
     return undefined;
   }
+  if (segment.code === "set" || segment.code === "unset") {
+    return { kind: segment.code, flag: numericArgumentFromRaw(segment.code, segment.raw) };
+  }
   if (isConditionalControl(segment.code)) {
-    return { kind: "conditional" };
+    return evaluateConditionalControl(segment.code, segment.raw, flags, lastFlagResult);
   }
   if (segment.code === "call" || segment.code === "goto") {
     return { kind: segment.code, target: segment.target };
@@ -815,6 +909,74 @@ function isConditionalControl(code: string): boolean {
 
 function isTerminatorControl(code: string): boolean {
   return code === "end" || code === "eob";
+}
+
+function evaluateConditionalControl(
+  code: string,
+  raw: string,
+  flags?: NumericFlagState,
+  lastFlagResult?: boolean
+): Extract<FlowControl, { kind: "conditional" }> {
+  if (code === "isset") {
+    const flag = numericArgumentFromRaw(code, raw);
+    if (flag === undefined || !flags) {
+      return { kind: "conditional", condition: false };
+    }
+    const result = flags.isSet(flag);
+    return { kind: "conditional", condition: result, result };
+  }
+  if (code === "result_is" || code === "result_not") {
+    const expected = booleanArgumentFromRaw(code, raw) ?? true;
+    const condition = lastFlagResult === undefined
+      ? false
+      : code === "result_is"
+        ? lastFlagResult === expected
+        : lastFlagResult !== expected;
+    return { kind: "conditional", condition };
+  }
+  return { kind: "conditional", condition: false };
+}
+
+function numericArgumentFromRaw(code: string, raw: string): number | undefined {
+  const bytes = rawBytes(raw);
+  if (bytes) {
+    if ((code === "set" || code === "unset" || code === "isset") && bytes.length >= 3) {
+      return bytes[1] + bytes[2] * 256;
+    }
+    if ((code === "result_is" || code === "result_not") && bytes.length >= 2) {
+      return bytes[1];
+    }
+  }
+
+  const stripped = raw.trim().replace(/^\{|\}$/g, "");
+  const match = /^[A-Za-z_][\w.]*\s*\(([^),]*)/.exec(stripped);
+  if (!match) {
+    return undefined;
+  }
+  return parseNumericLiteral(match[1].trim());
+}
+
+function booleanArgumentFromRaw(code: string, raw: string): boolean | undefined {
+  const value = numericArgumentFromRaw(code, raw);
+  return value === undefined ? undefined : value !== 0;
+}
+
+function rawBytes(raw: string): number[] | undefined {
+  const match = /^\[([0-9a-f]{2}(?:\s+[0-9a-f]{2})*)\]$/i.exec(raw.trim());
+  if (!match) {
+    return undefined;
+  }
+  return match[1].split(/\s+/).map((part) => Number.parseInt(part, 16));
+}
+
+function parseNumericLiteral(value: string): number | undefined {
+  if (/^0x[0-9a-f]+$/i.test(value)) {
+    return Number.parseInt(value.slice(2), 16);
+  }
+  if (/^\d+$/.test(value)) {
+    return Number.parseInt(value, 10);
+  }
+  return undefined;
 }
 
 const CONDITIONAL_CONTROL_CODES = new Set([

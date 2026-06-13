@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDialoguePages,
+  isNpcVisibleForEventFlags,
   resolveScriptReference,
   resolveScriptReferenceFlow,
+  type NumericFlagState,
   type ScriptCollection,
   type ScriptCommand
 } from "../src/index";
@@ -36,6 +38,34 @@ function control(file: string, code: string, line: number, target?: string): Scr
     raw: target ? `${code}(${target})` : `${code}()`,
     sourceLocation: location(file, line),
     ...(target ? { target } : {})
+  };
+}
+
+function flagControl(file: string, code: "set" | "unset" | "isset", flag: number, line: number): ScriptCommand {
+  return {
+    cmd: "control",
+    code,
+    raw: `${code}(${flag})`,
+    sourceLocation: location(file, line)
+  };
+}
+
+function resultControl(file: string, code: "result_is" | "result_not", value: number, line: number): ScriptCommand {
+  return {
+    cmd: "control",
+    code,
+    raw: `${code}(${value})`,
+    sourceLocation: location(file, line)
+  };
+}
+
+function flagState(initial: number[] = []): NumericFlagState & { listNums(): number[] } {
+  const values = new Set(initial);
+  return {
+    isSet: (flag) => values.has(flag),
+    setNum: (flag) => values.add(flag),
+    unsetNum: (flag) => values.delete(flag),
+    listNums: () => [...values].sort((a, b) => a - b)
   };
 }
 
@@ -168,6 +198,104 @@ describe("resolveScriptReferenceFlow", () => {
     expect(buildDialoguePages(flow?.commands ?? []).map((page) => page.text)).toEqual(["Default synthetic path."]);
   });
 
+  it("takes an isset-gated jump when the numeric flag is set", () => {
+    const file = "ccscript/alpha.ccs";
+    const flags = flagState([7]);
+    const flow = resolveScriptReferenceFlow(scripts({
+      [file]: [
+        label(file, "start", 1),
+        flagControl(file, "isset", 7, 2),
+        control(file, "goto", 3, "alternate"),
+        text(file, "Default synthetic path.", 4),
+        runtimeCommand(file, "end", 5),
+        label(file, "alternate", 6),
+        text(file, "Alternate synthetic path.", 7),
+        runtimeCommand(file, "end", 8)
+      ]
+    }), "alpha.start", { flags });
+
+    expect(flow?.truncated).toBe(false);
+    expect(buildDialoguePages(flow?.commands ?? []).map((page) => page.text)).toEqual(["Alternate synthetic path."]);
+  });
+
+  it("falls through an isset-gated jump when the numeric flag is clear", () => {
+    const file = "ccscript/alpha.ccs";
+    const flow = resolveScriptReferenceFlow(scripts({
+      [file]: [
+        label(file, "start", 1),
+        flagControl(file, "isset", 7, 2),
+        control(file, "goto", 3, "alternate"),
+        text(file, "Default synthetic path.", 4),
+        runtimeCommand(file, "end", 5),
+        label(file, "alternate", 6),
+        text(file, "Alternate synthetic path.", 7),
+        runtimeCommand(file, "end", 8)
+      ]
+    }), "alpha.start", { flags: flagState() });
+
+    expect(flow?.truncated).toBe(false);
+    expect(buildDialoguePages(flow?.commands ?? []).map((page) => page.text)).toEqual(["Default synthetic path."]);
+  });
+
+  it("applies set and unset side effects while walking the resolved path", () => {
+    const file = "ccscript/alpha.ccs";
+    const flags = flagState([3]);
+    const flow = resolveScriptReferenceFlow(scripts({
+      [file]: [
+        label(file, "start", 1),
+        flagControl(file, "set", 2, 2),
+        flagControl(file, "unset", 3, 3),
+        text(file, "Synthetic side-effect path.", 4),
+        runtimeCommand(file, "end", 5)
+      ]
+    }), "alpha.start", { flags });
+
+    expect(flow?.truncated).toBe(false);
+    expect(flags.listNums()).toEqual([2]);
+  });
+
+  it("lets a flag mutation flip a later conditional path", () => {
+    const file = "ccscript/alpha.ccs";
+    const flags = flagState();
+    const flow = resolveScriptReferenceFlow(scripts({
+      [file]: [
+        label(file, "start", 1),
+        flagControl(file, "set", 9, 2),
+        flagControl(file, "isset", 9, 3),
+        control(file, "goto", 4, "after_set"),
+        text(file, "Default synthetic path.", 5),
+        runtimeCommand(file, "end", 6),
+        label(file, "after_set", 7),
+        text(file, "Set synthetic path.", 8),
+        runtimeCommand(file, "end", 9)
+      ]
+    }), "alpha.start", { flags });
+
+    expect(flow?.truncated).toBe(false);
+    expect(buildDialoguePages(flow?.commands ?? []).map((page) => page.text)).toEqual(["Set synthetic path."]);
+    expect(flags.listNums()).toEqual([9]);
+  });
+
+  it("supports result tests derived from an isset check", () => {
+    const file = "ccscript/alpha.ccs";
+    const flow = resolveScriptReferenceFlow(scripts({
+      [file]: [
+        label(file, "start", 1),
+        flagControl(file, "isset", 12, 2),
+        resultControl(file, "result_not", 1, 3),
+        control(file, "goto", 4, "clear_path"),
+        text(file, "Set synthetic path.", 5),
+        runtimeCommand(file, "end", 6),
+        label(file, "clear_path", 7),
+        text(file, "Clear synthetic path.", 8),
+        runtimeCommand(file, "end", 9)
+      ]
+    }), "alpha.start", { flags: flagState() });
+
+    expect(flow?.truncated).toBe(false);
+    expect(buildDialoguePages(flow?.commands ?? []).map((page) => page.text)).toEqual(["Clear synthetic path."]);
+  });
+
   it("detects cycles and truncates safely", () => {
     const file = "ccscript/alpha.ccs";
     const flow = resolveScriptReferenceFlow(scripts({
@@ -214,5 +342,19 @@ describe("resolveScriptReferenceFlow", () => {
       text: "Before synthetic terminator.",
       ended: true
     });
+  });
+});
+
+describe("NPC event-flag visibility", () => {
+  it("implements the three Show Sprite rules against a numeric flag state", () => {
+    const clear = flagState();
+    const set = flagState([5]);
+
+    expect(isNpcVisibleForEventFlags("always", 5, clear)).toBe(true);
+    expect(isNpcVisibleForEventFlags("always", 5, set)).toBe(true);
+    expect(isNpcVisibleForEventFlags("when event flag unset", 5, clear)).toBe(true);
+    expect(isNpcVisibleForEventFlags("when event flag unset", 5, set)).toBe(false);
+    expect(isNpcVisibleForEventFlags("when event flag set", 5, clear)).toBe(false);
+    expect(isNpcVisibleForEventFlags("when event flag set", 5, set)).toBe(true);
   });
 });

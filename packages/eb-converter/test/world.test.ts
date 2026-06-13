@@ -315,6 +315,7 @@ describe("world artifact build (synthetic project)", () => {
     await writeFile(path.join(project, "npc_config_table.yml"), [
       "100:",
       "  Direction: down",
+      "  Event Flag: 0x2",
       "  Show Sprite: when event flag set",
       "  Sprite: 7",
       "  Text Pointer 1: $0",
@@ -426,13 +427,15 @@ describe("world artifact build (synthetic project)", () => {
     await writeFile(path.join(project, "npc_config_table.yml"), [
       "100:",
       "  Direction: left",
+      "  Event Flag: 0x2",
       "  Show Sprite: when event flag set",
       "  Sprite: 7",
       "  Text Pointer 1: $0",
       "  Type: person",
       "101:",
       "  Direction: up",
-      "  Show Sprite: always",
+      "  Event Flag: 0x3",
+      "  Show Sprite: when event flag unset",
       "  Sprite: 6",
       "  Text Pointer 1: robot.follow_up",
       "  Type: person",
@@ -490,6 +493,7 @@ describe("world artifact build (synthetic project)", () => {
 
       const npc744 = world.npcs.find((npc) => npc.npcId === 744);
       expect(npc744).toMatchObject({
+        eventFlag: 0,
         interactable: true,
         visible: true,
         textPointer: "robot.hello_world",
@@ -500,7 +504,12 @@ describe("world artifact build (synthetic project)", () => {
         sheet: "assets/sprites/005.png"
       });
       const npc100 = world.npcs.find((npc) => npc.npcId === 100);
-      expect(npc100).toMatchObject({ interactable: false, visible: false });
+      expect(npc100).toMatchObject({
+        eventFlag: 2,
+        showSprite: "when event flag set",
+        interactable: false,
+        visible: false
+      });
 
       expect(world.player).toMatchObject({ spriteGroup: 1, sheet: "assets/sprites/001.png" });
       expect(world.player?.spawnRegionPixel).toEqual({ x: 576, y: 640 });
@@ -597,9 +606,22 @@ describe("world artifact build (synthetic project)", () => {
       expect(world.npcs).toHaveLength(3);
       expect(world.counts.visibleNpcs).toBe(2);
       const hidden = world.npcs.find((npc) => npc.npcId === 100);
-      expect(hidden).toMatchObject({ visible: false, interactable: false, spriteGroup: 7, worldPixel: { x: 544, y: 96 } });
+      expect(hidden).toMatchObject({
+        eventFlag: 2,
+        showSprite: "when event flag set",
+        visible: false,
+        interactable: false,
+        spriteGroup: 7,
+        worldPixel: { x: 544, y: 96 }
+      });
       expect(hidden?.sheet).toBeUndefined();
+      expect(world.npcs.find((npc) => npc.npcId === 101)).toMatchObject({
+        eventFlag: 3,
+        showSprite: "when event flag unset",
+        visible: true
+      });
       expect(world.npcs.find((npc) => npc.npcId === 744)).toMatchObject({
+        eventFlag: 0,
         visible: true,
         interactable: true,
         spriteGroup: 5,
