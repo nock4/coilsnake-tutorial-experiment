@@ -12,10 +12,10 @@ const GREETER_NPC_ID = 745;
 const ROBOT_NPC_ID = 744;
 const GREETER_TALKED_FLAG = "npc:745:talked";
 const ROBOT_TALKED_FLAG = "npc:744:talked";
-const GREETER_PAGE_1 = "@Beep boop. I greet, therefore I am.";
-const GREETER_PAGE_2 = "@New parts arrive tomorrow. Come back then.";
-const GREETER_REPEAT = "@Told you already. Parts. Tomorrow.";
-const ROBOT_HELLO = "@Hello World!";
+const GREETER_PAGE_1 = "Beep boop. I greet, therefore I am.";
+const GREETER_PAGE_2 = "New parts arrive tomorrow. Come back then.";
+const GREETER_REPEAT = "Told you already. Parts. Tomorrow.";
+const ROBOT_HELLO = "Hello World!";
 const ADVANCE_DELAY_MS = 225;
 const REOPEN_DELAY_MS = 275;
 

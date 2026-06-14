@@ -102,7 +102,7 @@ test("interaction requires facing the NPC, not just standing near it", async ({ 
   expect((await readRequiredDebug(page)).canInteract).toBe(true);
   await page.keyboard.press("Space");
   const openState = await waitForDebug(page, (state) => state.dialogueOpen);
-  expect(openState.dialogueText).toBe("@Hello World!");
+  expect(openState.dialogueText).toBe("Hello World!");
 
   // Close, then verify the NPC stays interactable for a follow-up talk.
   await page.keyboard.press("Escape");

@@ -85,7 +85,7 @@ test("invalid world.json falls back to the placeholder field with working dialog
     message: "fallback scene should still play imported dialogue"
   }).toMatchObject({
     dialogueOpen: true,
-    dialogueText: "@Hello World!"
+    dialogueText: "Hello World!"
   });
 
   assertNoRuntimeIssues(issues);

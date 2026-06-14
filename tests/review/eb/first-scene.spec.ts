@@ -34,7 +34,7 @@ test("world scene renders imported map and plays imported dialogue", async ({ pa
     message: "interacting with the robot should open imported dialogue"
   }).toMatchObject({
     dialogueOpen: true,
-    dialogueText: "@Hello World!",
+    dialogueText: "Hello World!",
     targetReference: "robot.hello_world"
   });
 
@@ -75,7 +75,7 @@ test("dialogue advances, closes, and prevents movement while open", async ({ pag
   await page.keyboard.press("Space");
 
   const openState = await waitForDebug(page, (state) => state.dialogueOpen);
-  expect(openState.dialogueText).toBe("@Hello World!");
+  expect(openState.dialogueText).toBe("Hello World!");
   expect(openState.dialoguePageCount).toBe(1);
 
   await page.keyboard.down("ArrowLeft");

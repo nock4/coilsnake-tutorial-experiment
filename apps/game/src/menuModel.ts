@@ -233,9 +233,9 @@ const MAIN_COMMANDS: Array<Omit<MenuItem, "enabled">> = [
   { id: "talk", label: "Talk", childScreenId: "talk" },
   { id: "goods", label: "Goods", childScreenId: "goods" },
   { id: "psi", label: "PSI", childScreenId: "psi" },
-  { id: STATUS_MENU_ID, label: "Status", childScreenId: STATUS_MENU_ID },
   { id: "equip", label: "Equip", childScreenId: "equip" },
   { id: "check", label: "Check", childScreenId: "check" },
+  { id: STATUS_MENU_ID, label: "Status", childScreenId: STATUS_MENU_ID },
   { id: ATM_MENU_ID, label: "ATM", childScreenId: ATM_MENU_ID },
   { id: SAVE_MENU_ACTION_ID, label: "Save", actionId: SAVE_MENU_ACTION_ID }
 ];

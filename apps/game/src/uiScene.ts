@@ -13,6 +13,7 @@ import {
   drawWindowFrame,
   prepareWindowFrames,
   queueWindowFrameAssets,
+  windowFrameName,
   type PreparedWindowFrames
 } from "./windowFrame";
 
@@ -37,6 +38,8 @@ export class UiScene extends Phaser.Scene {
   private dialogueWindow?: Phaser.GameObjects.Container;
   private dialogueText?: GameText;
   private footerText?: GameText;
+  private moreArrow?: Phaser.GameObjects.Image;
+  private moreArrowTween?: Phaser.Tweens.Tween;
   private promptText?: Phaser.GameObjects.Text;
   private panelGraphics?: Phaser.GameObjects.Graphics;
   private panelText?: Phaser.GameObjects.Text;
@@ -120,6 +123,7 @@ export class UiScene extends Phaser.Scene {
 
     const open = world.dialogue.open;
     const text = open ? world.dialogue.revealedText : "";
+    const showAdvanceIndicator = open && world.dialogue.revealComplete;
     const footer = open
       ? (!world.dialogue.revealComplete
           ? "Space/Enter: finish"
@@ -128,19 +132,19 @@ export class UiScene extends Phaser.Scene {
     const panelVisible = world.debugPanelVisible;
     const runtimeLines = panelVisible ? world.runtimeLines() : [];
     const menuScreens = world.menuRenderStack();
-    const signature = `${open}|${text}|${footer}|${world.dialogue.revealComplete}|${world.prompt}|${panelVisible}|${runtimeLines.join("/")}|${JSON.stringify(menuScreens)}`;
+    const signature = `${open}|${text}|${footer}|${showAdvanceIndicator}|${world.prompt}|${panelVisible}|${runtimeLines.join("/")}|${JSON.stringify(menuScreens)}`;
     if (signature === this.lastSignature) {
       return;
     }
     this.lastSignature = signature;
 
     this.promptText?.setText(world.prompt);
-    this.drawDialogue(open, text, footer);
+    this.drawDialogue(open, text, footer, showAdvanceIndicator);
     this.drawPanel(panelVisible ? [...world.statusLines(), "", ...world.metadataLines(), "", ...runtimeLines] : []);
     this.drawMenu(menuScreens);
   }
 
-  private drawDialogue(open: boolean, text: string, footer: string): void {
+  private drawDialogue(open: boolean, text: string, footer: string, showAdvanceIndicator: boolean): void {
     const graphics = this.boxGraphics;
     if (!graphics || !this.dialogueText || !this.footerText) {
       return;
@@ -148,6 +152,7 @@ export class UiScene extends Phaser.Scene {
     graphics.clear();
     this.dialogueWindow?.destroy(true);
     this.dialogueWindow = undefined;
+    this.clearMoreArrow();
     if (!open) {
       this.dialogueText.setText("");
       this.footerText.setText("");
@@ -164,8 +169,49 @@ export class UiScene extends Phaser.Scene {
 
     this.dialogueText.setPosition(x + DIALOGUE_HORIZONTAL_PADDING, y + 18);
     this.dialogueText.setText(text);
-    this.footerText.setPosition(x + boxWidth - 188, y + boxHeight - 38);
-    this.footerText.setText(footer);
+    const arrowShown = showAdvanceIndicator && this.drawMoreArrow(x, y, boxWidth, boxHeight);
+    if (arrowShown) {
+      this.footerText.setText("");
+    } else {
+      this.footerText.setPosition(x + boxWidth - 188, y + boxHeight - 38);
+      this.footerText.setText(footer);
+    }
+  }
+
+  private drawMoreArrow(x: number, y: number, boxWidth: number, boxHeight: number): boolean {
+    if (!this.windowFrames || !this.textures.exists(this.windowFrames.textureKey)) {
+      return false;
+    }
+    const frameName = windowFrameName("moreArrow");
+    if (!this.textures.get(this.windowFrames.textureKey).has(frameName)) {
+      return false;
+    }
+    const arrowWidth = this.windowFrames.flavor.moreArrow.w * UI_TEXT_SCALE;
+    const arrowHeight = this.windowFrames.flavor.moreArrow.h * UI_TEXT_SCALE;
+    const arrowX = Math.round(x + boxWidth - DIALOGUE_HORIZONTAL_PADDING - arrowWidth);
+    const arrowY = Math.round(y + boxHeight - 26 - arrowHeight);
+    const arrow = this.add.image(arrowX, arrowY, this.windowFrames.textureKey, frameName)
+      .setOrigin(0, 0)
+      .setScale(UI_TEXT_SCALE)
+      .setDepth(12);
+    this.moreArrow = arrow;
+    this.moreArrowTween = this.tweens.add({
+      targets: arrow,
+      y: arrowY + 2,
+      duration: 360,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.easeInOut"
+    });
+    return true;
+  }
+
+  private clearMoreArrow(): void {
+    this.moreArrowTween?.stop();
+    this.moreArrowTween?.remove();
+    this.moreArrowTween = undefined;
+    this.moreArrow?.destroy();
+    this.moreArrow = undefined;
   }
 
   private drawPanel(lines: string[]): void {

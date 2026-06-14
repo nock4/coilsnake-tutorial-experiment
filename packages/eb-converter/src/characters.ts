@@ -27,7 +27,6 @@ const STAT_FIELDS = [
 ] as const;
 
 const REQUIRED_CHARACTER_INPUTS = [
-  "initial_stats.yml",
   "stats_growth_vars.yml",
   "exp_table.yml",
   "playable_char_gfx_table.yml",
@@ -45,6 +44,7 @@ type InitialStatsEntry = {
   experience: number;
   money: number;
   items: number[];
+  stats?: CalculatedStats;
 };
 
 type GrowthStats = {
@@ -74,23 +74,65 @@ type ExpThreshold = {
   experience: number;
 };
 
+type MutableInitialStatsEntry = Omit<InitialStatsEntry, "stats"> & {
+  statValues: Partial<CalculatedStats>;
+};
+
+type InitialStatField = keyof CalculatedStats;
+
+const INITIAL_STAT_FIELDS: Record<string, InitialStatField> = {
+  HP: "maxHp",
+  "Max HP": "maxHp",
+  MaxHp: "maxHp",
+  maxHp: "maxHp",
+  PP: "maxPp",
+  "Max PP": "maxPp",
+  MaxPp: "maxPp",
+  maxPp: "maxPp",
+  Offense: "offense",
+  offense: "offense",
+  Defense: "defense",
+  defense: "defense",
+  Speed: "speed",
+  speed: "speed",
+  Guts: "guts",
+  guts: "guts",
+  Vitality: "vitality",
+  vitality: "vitality",
+  IQ: "iq",
+  iq: "iq",
+  Luck: "luck",
+  luck: "luck"
+};
+
 export async function buildCharacterData(options: CharacterBuildOptions): Promise<CharacterCollection> {
   assertCharacterInputs(options.projectAbs);
 
   const warnings: ValidationIssue[] = [];
-  const initialStats = parseInitialStats(await readFile(path.join(options.projectAbs, "initial_stats.yml"), "utf8"));
+  const initialStatsPath = path.join(options.projectAbs, "initial_stats.yml");
+  const initialStats = existsSync(initialStatsPath)
+    ? parseInitialStats(await readFile(initialStatsPath, "utf8"))
+    : undefined;
+  if (!initialStats) {
+    warnings.push(issue(
+      "warning",
+      "character_initial_stats_missing",
+      "initial_stats.yml is missing; generated characters use neutral level-1 starting state and empty inventory.",
+      "initial_stats.yml"
+    ));
+  }
   const growthVars = parseIntKeyedYaml(await readFile(path.join(options.projectAbs, "stats_growth_vars.yml"), "utf8"));
   const expTable = parseIntKeyedYaml(await readFile(path.join(options.projectAbs, "exp_table.yml"), "utf8"));
   const gfxTable = parseIntKeyedYaml(await readFile(path.join(options.projectAbs, "playable_char_gfx_table.yml"), "utf8"));
   const names = await readCharacterNames(options.projectAbs, warnings);
 
-  const characterIds = [...initialStats.keys()]
+  const characterIds = [...(initialStats?.keys() ?? growthVars.keys())]
     .filter((id) => growthVars.has(id) && gfxTable.has(id))
     .sort((a, b) => a - b)
     .slice(0, MAX_PLAYABLE_CHARACTERS);
 
   const characters = characterIds.map((id) => {
-    const initial = requireMapEntry(initialStats, id, "initial_stats.yml");
+    const initial = initialStats?.get(id) ?? defaultInitialStatsEntry();
     const growth = readGrowthStats(requireMapEntry(growthVars, id, "stats_growth_vars.yml"), id);
     const levelFromExperience = levelForExperience(expTable.get(id), initial.experience);
     if (levelFromExperience !== undefined && levelFromExperience !== initial.level) {
@@ -101,7 +143,8 @@ export async function buildCharacterData(options: CharacterBuildOptions): Promis
         "initial_stats.yml"
       ));
     }
-    const calculated = calculateStats(growth, initial.level);
+    const calculated = initial.stats
+      ?? (initialStats ? calculateStatsFromProjectData(growth, initial.level) : calculateStats(growth, initial.level));
     const name = names.get(id);
     if (!name) {
       warnings.push(issue(
@@ -137,8 +180,8 @@ export async function buildCharacterData(options: CharacterBuildOptions): Promis
     schemaVersion: SCHEMA_VERSION,
     sourceProjectPath: options.displayPath,
     derivation: {
-      source: "initial_stats.yml provides Level, Experience Points, Money, and Items Possessed; stats_growth_vars.yml provides stat growth variables; exp_table.yml provides cumulative EXP thresholds and checks Experience Points against Level; naming_skip.yml supplies runtime names when present.",
-      baseStats: "Level 1 starts at HP 30, PP 10, and 2 for offense, defense, speed, guts, vitality, IQ, and luck.",
+      source: "initial_stats.yml provides Level, Experience Points, Money, Items Possessed, and explicit starting stats when exported; stats_growth_vars.yml provides per-character stat variables when initial_stats.yml omits explicit stats; exp_table.yml provides cumulative EXP thresholds and checks Experience Points against Level; naming_skip.yml supplies runtime names when present.",
+      baseStats: "When explicit starting stats are unavailable but initial_stats.yml is present, per-character growth variables seed HP, PP, and base stats so runtime characters do not use uniform neutral placeholders. If initial_stats.yml is absent, generation falls back to the neutral level-1 starting state.",
       statFormula: "For each level 2..Level, mirrors CoilSnake damage_calc target-stat formula using deterministic midpoint rolls: r=5 for Vitality/IQ through level 10, r=8.5 on levels divisible by 4, otherwise r=4.5; each stat gain is truncated.",
       hpPpFormula: "After each level, HP targets 15 * Vitality and PP targets 5 * IQ; when the target increase is less than 2, deterministic midpoint increments of HP +2 and PP +1 are used.",
       uncertainty: "EarthBound's ROM level-up stat rolls are random; generated stats are deterministic midpoint estimates suitable for menu and battle model bootstrapping, not exact save-state values."
@@ -163,14 +206,14 @@ function assertCharacterInputs(projectAbs: string): void {
 }
 
 function parseInitialStats(source: string): Map<number, InitialStatsEntry> {
-  const entries = new Map<number, InitialStatsEntry>();
-  let current: InitialStatsEntry | undefined;
+  const entries = new Map<number, MutableInitialStatsEntry>();
+  let current: MutableInitialStatsEntry | undefined;
   let collectingItems = false;
 
   for (const line of source.split(/\r?\n/)) {
     const blockMatch = /^(0x[0-9a-fA-F]+|\d+):\s*$/.exec(line);
     if (blockMatch) {
-      current = { level: Number.NaN, experience: Number.NaN, money: Number.NaN, items: [] };
+      current = { level: Number.NaN, experience: Number.NaN, money: Number.NaN, items: [], statValues: {} };
       entries.set(parseYamlInteger(blockMatch[1]), current);
       collectingItems = false;
       continue;
@@ -190,6 +233,11 @@ function parseInitialStats(source: string): Map<number, InitialStatsEntry> {
         current.experience = requiredInteger(value, "initial_stats.yml Experience Points");
       } else if (key === "Money") {
         current.money = requiredInteger(value, "initial_stats.yml Money");
+      } else {
+        const statField = INITIAL_STAT_FIELDS[key];
+        if (statField) {
+          current.statValues[statField] = requiredInteger(value, `initial_stats.yml ${key}`);
+        }
       }
       continue;
     }
@@ -200,12 +248,21 @@ function parseInitialStats(source: string): Map<number, InitialStatsEntry> {
     }
   }
 
+  const parsed = new Map<number, InitialStatsEntry>();
   for (const [id, entry] of entries) {
     if ([entry.level, entry.experience, entry.money].some((value) => !Number.isFinite(value))) {
       throw new Error(`Invalid or missing initial_stats.yml numeric fields for character ${id}.`);
     }
+    const stats = completeInitialStats(entry.statValues);
+    parsed.set(id, {
+      level: entry.level,
+      experience: entry.experience,
+      money: entry.money,
+      items: entry.items,
+      ...(stats ? { stats } : {})
+    });
   }
-  return entries;
+  return parsed;
 }
 
 async function readCharacterNames(projectAbs: string, warnings: ValidationIssue[]): Promise<Map<number, string>> {
@@ -268,7 +325,25 @@ function growthToRuntime(growth: GrowthStats): {
 }
 
 function calculateStats(growth: GrowthStats, endLevel: number): CalculatedStats {
-  const stats = {
+  return calculateStatsFromBase(neutralBaseStats(), growth, endLevel);
+}
+
+function calculateStatsFromProjectData(growth: GrowthStats, endLevel: number): CalculatedStats {
+  return calculateStatsFromBase({
+    maxHp: Math.max(1, growth.Vitality) * 15,
+    maxPp: Math.max(0, growth.IQ) * 5,
+    offense: Math.max(1, growth.Offense),
+    defense: Math.max(1, growth.Defense),
+    speed: Math.max(1, growth.Speed),
+    guts: Math.max(1, growth.Guts),
+    vitality: Math.max(1, growth.Vitality),
+    iq: Math.max(0, growth.IQ),
+    luck: Math.max(1, growth.Luck)
+  }, growth, endLevel);
+}
+
+function neutralBaseStats(): CalculatedStats {
+  return {
     maxHp: 30,
     maxPp: 10,
     offense: 2,
@@ -278,6 +353,12 @@ function calculateStats(growth: GrowthStats, endLevel: number): CalculatedStats 
     vitality: 2,
     iq: 2,
     luck: 2
+  };
+}
+
+function calculateStatsFromBase(base: CalculatedStats, growth: GrowthStats, endLevel: number): CalculatedStats {
+  const stats = {
+    ...base
   };
 
   for (let level = 2; level <= Math.max(1, Math.floor(endLevel)); level += 1) {
@@ -297,6 +378,30 @@ function calculateStats(growth: GrowthStats, endLevel: number): CalculatedStats 
   }
 
   return stats;
+}
+
+function completeInitialStats(values: Partial<CalculatedStats>): CalculatedStats | undefined {
+  const stats: CalculatedStats = {
+    maxHp: values.maxHp ?? Number.NaN,
+    maxPp: values.maxPp ?? Number.NaN,
+    offense: values.offense ?? Number.NaN,
+    defense: values.defense ?? Number.NaN,
+    speed: values.speed ?? Number.NaN,
+    guts: values.guts ?? Number.NaN,
+    vitality: values.vitality ?? Number.NaN,
+    iq: values.iq ?? Number.NaN,
+    luck: values.luck ?? Number.NaN
+  };
+  return Object.values(stats).every((value) => Number.isFinite(value)) ? stats : undefined;
+}
+
+function defaultInitialStatsEntry(): InitialStatsEntry {
+  return {
+    level: 1,
+    experience: 0,
+    money: 0,
+    items: []
+  };
 }
 
 function calcNewStat(statName: keyof GrowthStats, growth: GrowthStats, newLevel: number, oldStatValue: number): number {

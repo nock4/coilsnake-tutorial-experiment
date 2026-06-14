@@ -122,6 +122,21 @@ describe("menuModel navigation", () => {
     });
     expect(parseMenuAction("save")).toEqual({ kind: "save" });
   });
+
+  it("orders the main menu like vanilla EarthBound before local additions", () => {
+    const screen = buildMainMenuScreen();
+
+    expect(screen.items.map((item) => item.label)).toEqual([
+      "Talk",
+      "Goods",
+      "PSI",
+      "Equip",
+      "Check",
+      "Status",
+      "ATM",
+      "Save"
+    ]);
+  });
 });
 
 describe("Status view model", () => {

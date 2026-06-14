@@ -299,15 +299,15 @@ describe("generated validation", () => {
         name: "ALPHA",
         level: 1,
         experience: 0,
-        maxHp: 30,
-        maxPp: 10,
-        offense: 2,
-        defense: 2,
-        speed: 2,
-        guts: 2,
+        maxHp: 41,
+        maxPp: 12,
+        offense: 6,
+        defense: 5,
+        speed: 4,
+        guts: 3,
         vitality: 2,
-        iq: 2,
-        luck: 2,
+        iq: 1,
+        luck: 7,
         startingItems: [10],
         money: 3,
         growth: {
@@ -331,15 +331,15 @@ describe("generated validation", () => {
         name: "BETA",
         level: 4,
         experience: 100,
-        maxHp: 75,
-        maxPp: 25,
-        offense: 6,
-        defense: 6,
-        speed: 6,
-        guts: 6,
-        vitality: 5,
-        iq: 5,
-        luck: 6,
+        maxHp: 63,
+        maxPp: 14,
+        offense: 11,
+        defense: 10,
+        speed: 9,
+        guts: 8,
+        vitality: 7,
+        iq: 6,
+        luck: 5,
         startingItems: [11],
         money: 0
       });
@@ -347,6 +347,40 @@ describe("generated validation", () => {
       expect(result.generatedFiles).toContain("characters.json");
       expect(result.characters).toBe(2);
       expect(result.characterStatFieldsPopulated).toBe(22);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  });
+
+  it("falls back to neutral character starts when initial stats are absent", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-characters-missing-initial-"));
+    try {
+      const project = path.join(temp, "project");
+      const out = path.join(temp, "generated");
+      await writeCharacterFixture(project);
+      await rm(path.join(project, "initial_stats.yml"), { force: true });
+
+      const generated = await convertProject({ project, out, characters: true });
+      const characters = CharacterCollectionSchema.parse(generated.characters);
+
+      expect(characters.characters).toHaveLength(2);
+      expect(characters.characters[0]).toMatchObject({
+        id: 0,
+        level: 1,
+        experience: 0,
+        maxHp: 30,
+        maxPp: 10,
+        offense: 2,
+        defense: 2,
+        speed: 2,
+        guts: 2,
+        vitality: 2,
+        iq: 2,
+        luck: 2,
+        startingItems: [],
+        money: 0
+      });
+      expect(characters.warnings.some((warning) => warning.code === "character_initial_stats_missing")).toBe(true);
     } finally {
       await rm(temp, { recursive: true, force: true });
     }
@@ -681,18 +715,36 @@ async function writeCharacterFixture(project: string): Promise<void> {
   await writeFile(path.join(project, "initial_stats.yml"), [
     "0:",
     "  Experience Points: 0",
+    "  HP: 41",
     "  Items Possessed:",
     "  - 10",
     "  - 0",
     "  Level: 1",
     "  Money: 3",
+    "  Offense: 6",
+    "  PP: 12",
+    "  Defense: 5",
+    "  Speed: 4",
+    "  Guts: 3",
+    "  Vitality: 2",
+    "  IQ: 1",
+    "  Luck: 7",
     "1:",
     "  Experience Points: 100",
     "  Items Possessed:",
     "  - 0",
     "  - 11",
     "  Level: 4",
+    "  Max HP: 63",
+    "  Max PP: 14",
     "  Money: 0",
+    "  Offense: 11",
+    "  Defense: 10",
+    "  Speed: 9",
+    "  Guts: 8",
+    "  Vitality: 7",
+    "  IQ: 6",
+    "  Luck: 5",
     ""
   ].join("\n"), "utf8");
   await writeFile(path.join(project, "stats_growth_vars.yml"), [

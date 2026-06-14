@@ -90,7 +90,7 @@ test("each NPC speaks its own imported dialogue", async ({ page }) => {
   expect((await readRequiredDebug(page)).interactionTargetId).toBe(745);
   await page.keyboard.press("Space");
   const greeterOpen = await waitForDebug(page, (state) => state.dialogueOpen && state.activeNpcId === 745);
-  expect(greeterOpen.dialogueText).toBe("@Beep boop. I greet, therefore I am.");
+  expect(greeterOpen.dialogueText).toBe("Beep boop. I greet, therefore I am.");
 
   await page.keyboard.press("Escape");
   await waitForDebug(page, (state) => !state.dialogueOpen);
@@ -100,7 +100,7 @@ test("each NPC speaks its own imported dialogue", async ({ page }) => {
   expect((await readRequiredDebug(page)).interactionTargetId).toBe(744);
   await page.keyboard.press("Space");
   const robotOpen = await waitForDebug(page, (state) => state.dialogueOpen && state.activeNpcId === 744);
-  expect(robotOpen.dialogueText).toBe("@Hello World!");
+  expect(robotOpen.dialogueText).toBe("Hello World!");
 
   await page.keyboard.press("Escape");
   await waitForDebug(page, (state) => !state.dialogueOpen);
@@ -151,7 +151,7 @@ test("dialogue pauses the patroller and turns it toward the player", async ({ pa
   expect(openNpc.paused, "patroller should pause while its dialogue is open").toBe(true);
   expect(openNpc.moving, "patroller should not move while paused for dialogue").toBe(false);
   expectFacingTowardPlayer(openNpc, openState.player!);
-  expect(openState.dialogueText).toBe("@Patrolling this canyon. Step aside, hero.");
+  expect(openState.dialogueText).toBe("Patrolling this canyon. Step aside, hero.");
 
   await page.waitForTimeout(700);
   const heldNpc = await readDebugNpc(page, 746);
