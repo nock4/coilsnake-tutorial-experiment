@@ -1113,7 +1113,8 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
         fontGlyphs: sum(font.fonts, (sheet) => sheet.glyphCount)
       } : {}),
       ...(window ? {
-        windowFlavors: window.flavors.length
+        windowFlavors: window.flavors.length,
+        windowLayouts: window.layouts?.length ?? 0
       } : {}),
       ...(characters ? {
         characters: characters.counts.characters,

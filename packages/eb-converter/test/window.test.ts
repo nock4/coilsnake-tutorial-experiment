@@ -17,6 +17,7 @@ import {
   buildWindowData,
   decodeIndexedPng,
   detectWindowFlavor,
+  parseWindowConfigurationTable,
   type IndexedPngImage
 } from "../src/window";
 
@@ -31,6 +32,24 @@ const FLAVOR_FILL_COLORS: RgbColor[] = Array.from({ length: 7 }, (_, id) => ({
 }));
 
 describe("window extraction", () => {
+  it("parses CoilSnake window configuration entries in tile units", () => {
+    expect(parseWindowConfigurationTable([
+      "101:",
+      "  Height: 5",
+      "  Width: 9",
+      "  X Offset: 2",
+      "  Y Offset: 4",
+      "205:",
+      "  Height: 7",
+      "  Width: 12",
+      "  X Offset: 6",
+      "  Y Offset: 3"
+    ].join("\n"))).toEqual([
+      { id: 101, width: 9, height: 5, xOffset: 2, yOffset: 4 },
+      { id: 205, width: 12, height: 7, xOffset: 6, yOffset: 3 }
+    ]);
+  });
+
   it("emits confirmed corner/edge rect constants from a synthetic keyed sheet", () => {
     const image = syntheticWindowSheet();
     const flavor = detectWindowFlavor({
@@ -63,6 +82,10 @@ describe("window extraction", () => {
       expect(roundTrip.defaultFlavorId).toBe(0);
       expect(roundTrip.transparentKey).toEqual(WINDOW_TRANSPARENT_KEY);
       expect(roundTrip.flavors).toHaveLength(7);
+      expect(roundTrip.layouts).toEqual([
+        { id: 101, width: 9, height: 5, xOffset: 2, yOffset: 4 },
+        { id: 205, width: 12, height: 7, xOffset: 6, yOffset: 3 }
+      ]);
       expect(new Set(roundTrip.flavors.map((flavor) => colorKey(flavor.interiorColor))).size).toBe(7);
       expect(roundTrip.flavors[0]).toEqual({
         id: 0,
@@ -112,13 +135,19 @@ describe("window extraction", () => {
       const validation = await validateGeneratedOutput(out);
 
       expect(generated.window?.flavors).toHaveLength(7);
+      expect(generated.window?.layouts).toEqual([
+        { id: 101, width: 9, height: 5, xOffset: 2, yOffset: 4 },
+        { id: 205, width: 12, height: 7, xOffset: 6, yOffset: 3 }
+      ]);
       expect(new Set(generated.window?.flavors.map((flavor) => colorKey(flavor.interiorColor))).size).toBe(7);
       expect(generated.manifest.files.window).toBe("window.json");
       expect(generated.manifest.counts.windowFlavors).toBe(7);
+      expect(generated.manifest.counts.windowLayouts).toBe(2);
       expect(existsSync(path.join(out, "window.json"))).toBe(true);
       expect(existsSync(path.join(out, "assets/window/0.png"))).toBe(true);
       expect(validation.generatedFiles).toContain("window.json");
       expect(validation.windowFlavors).toBe(7);
+      expect(validation.windowLayouts).toBe(2);
       expect(validation.windowAssetsChecked).toBe(7);
     } finally {
       await rm(temp, { recursive: true, force: true });
@@ -132,6 +161,18 @@ async function writeWindowFixture(project: string): Promise<void> {
     const png = encodeIndexedPng(syntheticWindowSheet(FLAVOR_FILL_COLORS[id] ?? FILL_COLOR));
     await writeFile(path.join(project, "WindowGraphics", `Windows1_${id}.png`), png);
   }
+  await writeFile(path.join(project, "window_configuration_table.yml"), [
+    "101:",
+    "  Height: 5",
+    "  Width: 9",
+    "  X Offset: 2",
+    "  Y Offset: 4",
+    "205:",
+    "  Height: 7",
+    "  Width: 12",
+    "  X Offset: 6",
+    "  Y Offset: 3"
+  ].join("\n"), "utf8");
 }
 
 function syntheticWindowSheet(fillColor: RgbColor = FILL_COLOR): IndexedPngImage {

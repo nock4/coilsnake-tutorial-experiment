@@ -7,11 +7,14 @@ import {
   type RgbColor,
   type WindowCollection,
   type WindowFlavor,
+  type WindowLayout,
   type WindowRect
 } from "@eb/schemas";
+import { parseIntKeyedYaml, parseYamlInteger } from "./coilsnakeYaml";
 
 export const WINDOW_FILE = "window.json";
 export const WINDOW_ASSET_DIR = "assets/window";
+export const WINDOW_CONFIGURATION_TABLE_FILE = "window_configuration_table.yml";
 export const DEFAULT_WINDOW_FLAVOR_ID = 0;
 export const WINDOW_FLAVOR_IDS = [0, 1, 2, 3, 4, 5, 6] as const;
 export const WINDOW_TRANSPARENT_KEY: RgbColor = { r: 0, g: 224, b: 112 };
@@ -76,12 +79,50 @@ export async function buildWindowData(options: WindowBuildOptions): Promise<Wind
 
   await mkdir(path.join(options.outAbs, WINDOW_ASSET_DIR), { recursive: true });
   await Promise.all(copies.map((copy) => copyFile(copy.source, copy.destination)));
+  const layouts = await readWindowLayouts(options.projectAbs);
 
   return WindowCollectionSchema.parse({
     defaultFlavorId: DEFAULT_WINDOW_FLAVOR_ID,
     transparentKey: WINDOW_TRANSPARENT_KEY,
-    flavors
+    flavors,
+    layouts
   });
+}
+
+export function parseWindowConfigurationTable(source: string): WindowLayout[] {
+  return [...parseIntKeyedYaml(source).entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([id, fields]) => ({
+      id,
+      width: positiveIntegerField(id, fields, "Width"),
+      height: positiveIntegerField(id, fields, "Height"),
+      xOffset: nonnegativeIntegerField(id, fields, "X Offset"),
+      yOffset: nonnegativeIntegerField(id, fields, "Y Offset")
+    }));
+}
+
+async function readWindowLayouts(projectAbs: string): Promise<WindowLayout[]> {
+  const configPath = path.join(projectAbs, WINDOW_CONFIGURATION_TABLE_FILE);
+  if (!existsSync(configPath)) {
+    return [];
+  }
+  return parseWindowConfigurationTable(await readFile(configPath, "utf8"));
+}
+
+function positiveIntegerField(id: number, fields: Record<string, string>, key: string): number {
+  const value = parseYamlInteger(fields[key]);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${WINDOW_CONFIGURATION_TABLE_FILE} entry ${id} has invalid ${key}.`);
+  }
+  return value;
+}
+
+function nonnegativeIntegerField(id: number, fields: Record<string, string>, key: string): number {
+  const value = parseYamlInteger(fields[key]);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${WINDOW_CONFIGURATION_TABLE_FILE} entry ${id} has invalid ${key}.`);
+  }
+  return value;
 }
 
 export function decodeIndexedPng(bytes: Uint8Array, label = "indexed PNG"): IndexedPngImage {

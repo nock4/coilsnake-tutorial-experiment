@@ -672,10 +672,19 @@ export const WindowFlavorSchema = z.object({
   detectionNotes: z.record(z.string()).optional()
 });
 
+export const WindowLayoutSchema = z.object({
+  id: z.number().int().nonnegative(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  xOffset: z.number().int().nonnegative(),
+  yOffset: z.number().int().nonnegative()
+});
+
 export const WindowCollectionSchema = z.object({
   defaultFlavorId: z.number().int().nonnegative(),
   transparentKey: RgbColorSchema,
-  flavors: z.array(WindowFlavorSchema)
+  flavors: z.array(WindowFlavorSchema),
+  layouts: z.array(WindowLayoutSchema).optional()
 }).refine((collection) => collection.flavors.some((flavor) => flavor.id === collection.defaultFlavorId), {
   message: "defaultFlavorId must reference an emitted window flavor",
   path: ["defaultFlavorId"]
@@ -872,6 +881,7 @@ export const ManifestSchema = z.object({
     fontSheets: z.number().int().nonnegative().optional(),
     fontGlyphs: z.number().int().nonnegative().optional(),
     windowFlavors: z.number().int().nonnegative().optional(),
+    windowLayouts: z.number().int().nonnegative().optional(),
     characters: z.number().int().nonnegative().optional(),
     characterStatFieldsPopulated: z.number().int().nonnegative().optional(),
     items: z.number().int().nonnegative().optional(),
@@ -929,6 +939,7 @@ export type FontCollection = z.infer<typeof FontCollectionSchema>;
 export type RgbColor = z.infer<typeof RgbColorSchema>;
 export type WindowRect = z.infer<typeof WindowRectSchema>;
 export type WindowFlavor = z.infer<typeof WindowFlavorSchema>;
+export type WindowLayout = z.infer<typeof WindowLayoutSchema>;
 export type WindowCollection = z.infer<typeof WindowCollectionSchema>;
 export type CharacterCollection = z.infer<typeof CharacterCollectionSchema>;
 export type CharacterData = z.infer<typeof CharacterDataSchema>;

@@ -59,6 +59,7 @@ export type GeneratedValidationResult = {
   fontGlyphs?: number;
   fontAssetsChecked?: number;
   windowFlavors?: number;
+  windowLayouts?: number;
   windowAssetsChecked?: number;
   characters?: number;
   characterStatFieldsPopulated?: number;
@@ -224,6 +225,7 @@ export async function validateGeneratedOutput(outInput = DEFAULT_OUT): Promise<G
     } : {}),
     ...(window ? {
       windowFlavors: window.flavors.length,
+      windowLayouts: window.layouts?.length ?? 0,
       windowAssetsChecked
     } : {}),
     ...(characters ? {

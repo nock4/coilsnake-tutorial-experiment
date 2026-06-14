@@ -48,6 +48,7 @@ import {
 import { publishBattleDebug, type BattlePhase, type BattleTransitionPhase } from "./state";
 import {
   BitmapFontText,
+  measureBitmapText,
   prepareBitmapFont,
   queueBitmapFontAssets,
   type BitmapTextOptions,
@@ -60,6 +61,12 @@ import {
   type PreparedWindowFrames
 } from "./windowFrame";
 import { WINDOW_FLAVOR_CHANGE_EVENT, activeWindowFlavorId } from "./windowSettings";
+import {
+  EB_BITMAP_TEXT_SCALE,
+  EB_UI_SCALE,
+  type CanvasRect,
+  contentFitWindowRect
+} from "./windowLayout";
 import {
   CANCEL_KEY_NAMES,
   CONFIRM_KEY_NAMES,
@@ -83,8 +90,15 @@ const MONO = "Menlo, Consolas, monospace";
 const TAU = Math.PI * 2;
 const COMMANDS = ["BASH", "PSI", "GOODS", "RUN"] as const;
 const STATUS_TOP = 288;
-const BATTLE_TEXT_SCALE = 2;
 const BATTLE_LINE_SPACING = 2;
+const BATTLE_BOTTOM_MARGIN = 8;
+const BATTLE_LEFT_MARGIN = 16;
+const BATTLE_GAP = 8;
+const BATTLE_LINE_HEIGHT = 18;
+const BATTLE_COMMAND_TEXT_PADDING_X = 16;
+const BATTLE_COMMAND_TEXT_PADDING_Y = 14;
+const BATTLE_STATUS_TEXT_PADDING_X = 20;
+const BATTLE_STATUS_TEXT_PADDING_Y = 14;
 const PADDED_HP_DIGITS = 3;
 const ACTION_ADVANCE_DELAY_MS = 350;
 const MENU_MAX_ROWS = 4;
@@ -145,6 +159,7 @@ export class BattleScene extends Phaser.Scene {
   private actionDelayMs_ = 0;
   private statusGraphics?: Phaser.GameObjects.Graphics;
   private statusWindows: Phaser.GameObjects.Container[] = [];
+  private statusLayoutSignature = "";
   private targetCursor?: Phaser.GameObjects.Graphics;
   private commandText?: GameText;
   private partyText?: GameText;
@@ -211,6 +226,7 @@ export class BattleScene extends Phaser.Scene {
     this.currentActor_ = null;
     this.lastEnemyAction_ = null;
     this.actionDelayMs_ = 0;
+    this.statusLayoutSignature = "";
     this.backgroundAnimation = undefined;
     this.backgroundDebug = staticBattleBackgroundDebug();
     this.exitOutcome_ = null;
@@ -892,9 +908,6 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createStatusWindow(): void {
-    const windowTop = STATUS_TOP + 8;
-    const windowHeight = this.scale.height - STATUS_TOP - 16;
-    const textTop = STATUS_TOP + 16;
     for (const window of this.statusWindows) {
       window.destroy(true);
     }
@@ -905,35 +918,113 @@ export class BattleScene extends Phaser.Scene {
     this.partyText?.destroy();
     this.statusGraphics = this.add.graphics().setDepth(20);
     this.targetCursor = this.add.graphics().setDepth(30);
-    this.commandText = this.createGameText(44, textTop, "", {
-      fontFamily: MONO,
-      fontSize: "15px",
-      color: "#f8fafc",
-      lineSpacing: 8
-    }, {
-      scale: BATTLE_TEXT_SCALE,
-      tint: 0xf8fafc,
-      lineSpacing: BATTLE_LINE_SPACING,
-      maxWidth: 92
-    }).setDepth(21);
-    this.partyText = this.createGameText(178, textTop, "", {
-      fontFamily: MONO,
-      fontSize: "14px",
-      color: "#f8fafc",
-      lineSpacing: 7
-    }, {
-      scale: BATTLE_TEXT_SCALE,
-      tint: 0xf8fafc,
-      lineSpacing: BATTLE_LINE_SPACING,
-      maxWidth: 292
-    }).setDepth(21);
+    this.statusLayoutSignature = "";
+  }
+
+  private layoutStatusWindows(commandLines: string[], partyLines: string[]): void {
+    const commandRect = commandLines.length > 0 ? this.battleCommandRect(commandLines) : undefined;
+    const statusRect = this.battleStatusRect(partyLines, commandRect);
+    const signature = JSON.stringify({ commandRect, statusRect });
+    if (signature === this.statusLayoutSignature && this.partyText && (commandLines.length === 0 || this.commandText)) {
+      return;
+    }
+    this.statusLayoutSignature = signature;
+
+    for (const window of this.statusWindows) {
+      window.destroy(true);
+    }
+    this.statusWindows = [];
+    this.commandText?.destroy();
+    this.commandText = undefined;
+    this.partyText?.destroy();
+    this.partyText = undefined;
 
     const graphics = this.statusGraphics;
+    if (!graphics) {
+      return;
+    }
     graphics.clear();
     graphics.fillStyle(0x050914, 0.98);
     graphics.fillRect(0, STATUS_TOP, this.scale.width, this.scale.height - STATUS_TOP);
-    this.drawWindow(24, windowTop, 120, windowHeight);
-    this.drawWindow(160, windowTop, 328, windowHeight);
+    if (commandRect) {
+      this.drawWindow(commandRect.x, commandRect.y, commandRect.width, commandRect.height);
+      this.commandText = this.createGameText(
+        commandRect.x + BATTLE_COMMAND_TEXT_PADDING_X,
+        commandRect.y + BATTLE_COMMAND_TEXT_PADDING_Y,
+        "",
+        {
+          fontFamily: MONO,
+          fontSize: "15px",
+          color: "#f8fafc",
+          lineSpacing: 8
+        },
+        {
+          scale: EB_BITMAP_TEXT_SCALE,
+          tint: 0xf8fafc,
+          lineSpacing: BATTLE_LINE_SPACING,
+          maxWidth: Math.max(1, commandRect.width - BATTLE_COMMAND_TEXT_PADDING_X * 2)
+        }
+      ).setDepth(21);
+    }
+    this.drawWindow(statusRect.x, statusRect.y, statusRect.width, statusRect.height);
+    this.partyText = this.createGameText(
+      statusRect.x + BATTLE_STATUS_TEXT_PADDING_X,
+      statusRect.y + BATTLE_STATUS_TEXT_PADDING_Y,
+      "",
+      {
+        fontFamily: MONO,
+        fontSize: "14px",
+        color: "#f8fafc",
+        lineSpacing: 7
+      },
+      {
+        scale: EB_BITMAP_TEXT_SCALE,
+        tint: 0xf8fafc,
+        lineSpacing: BATTLE_LINE_SPACING,
+        maxWidth: Math.max(1, statusRect.width - BATTLE_STATUS_TEXT_PADDING_X * 2)
+      }
+    ).setDepth(21);
+  }
+
+  private battleCommandRect(lines: string[]): CanvasRect {
+    const rect = contentFitWindowRect({
+      x: BATTLE_LEFT_MARGIN,
+      y: 0,
+      labels: lines,
+      measureText: (label) => this.measureTextWidth(label),
+      lineHeight: BATTLE_LINE_HEIGHT,
+      lineCount: Math.max(1, lines.length),
+      paddingX: BATTLE_COMMAND_TEXT_PADDING_X,
+      paddingY: BATTLE_COMMAND_TEXT_PADDING_Y,
+      minWidth: 80,
+      maxWidth: 180,
+      maxHeight: this.scale.height - STATUS_TOP - BATTLE_BOTTOM_MARGIN * 2
+    });
+    return {
+      ...rect,
+      y: Math.round(this.scale.height - rect.height - BATTLE_BOTTOM_MARGIN)
+    };
+  }
+
+  private battleStatusRect(lines: string[], commandRect: CanvasRect | undefined): CanvasRect {
+    const x = commandRect ? commandRect.x + commandRect.width + BATTLE_GAP : BATTLE_LEFT_MARGIN;
+    const rect = contentFitWindowRect({
+      x,
+      y: 0,
+      labels: lines,
+      measureText: (label) => this.measureTextWidth(label),
+      lineHeight: BATTLE_LINE_HEIGHT,
+      lineCount: Math.max(1, lines.length),
+      paddingX: BATTLE_STATUS_TEXT_PADDING_X,
+      paddingY: BATTLE_STATUS_TEXT_PADDING_Y,
+      minWidth: Math.min(160, this.scale.width - x - BATTLE_LEFT_MARGIN),
+      maxWidth: Math.max(80, this.scale.width - x - BATTLE_LEFT_MARGIN),
+      maxHeight: this.scale.height - STATUS_TOP - BATTLE_BOTTOM_MARGIN * 2
+    });
+    return {
+      ...rect,
+      y: Math.round(this.scale.height - rect.height - BATTLE_BOTTOM_MARGIN)
+    };
   }
 
   private drawWindow(x: number, y: number, width: number, height: number): void {
@@ -943,7 +1034,7 @@ export class BattleScene extends Phaser.Scene {
     }
     if (this.windowFrames) {
       this.statusWindows.push(
-        drawWindowFrame(this, this.windowFrames, x, y, width, height, { scale: BATTLE_TEXT_SCALE }).setDepth(20)
+        drawWindowFrame(this, this.windowFrames, x, y, width, height, { scale: EB_UI_SCALE }).setDepth(20)
       );
       return;
     }
@@ -968,6 +1059,15 @@ export class BattleScene extends Phaser.Scene {
     return this.add.text(x, y, text, style);
   }
 
+  private measureTextWidth(text: string): number {
+    if (this.bitmapFont) {
+      return measureBitmapText(this.bitmapFont.collection, this.bitmapFont.sheet, text, {
+        scale: EB_BITMAP_TEXT_SCALE
+      }).width;
+    }
+    return text.length * 8;
+  }
+
   private updateBackground(): void {
     if (!this.backgroundAnimation) {
       return;
@@ -977,19 +1077,24 @@ export class BattleScene extends Phaser.Scene {
 
   private renderStatus(): void {
     const menuVisible = this.phase_ === "menu" && this.currentActor_?.side === "party";
+    let commandLines: string[] = [];
+    let partyLines: string[] = [];
     if (this.phase_ === "victory-summary") {
-      this.commandText?.setText("> OK");
-      this.partyText?.setText(this.victorySummaryLines().join("\n"));
+      commandLines = ["> OK"];
+      partyLines = this.victorySummaryLines();
     } else if (this.phase_ === "lose") {
-      this.commandText?.setText("> OK");
-      this.partyText?.setText("The party fell.");
+      commandLines = ["> OK"];
+      partyLines = ["The party fell."];
     } else if (this.phase_ === "flee") {
-      this.commandText?.setText("> OK");
-      this.partyText?.setText("Got away.");
+      commandLines = ["> OK"];
+      partyLines = ["Got away."];
     } else {
-      this.commandText?.setText(menuVisible ? this.menuTextLines().join("\n") : "");
-      this.partyText?.setText(this.partyStatusLines().join("\n"));
+      commandLines = menuVisible ? this.menuTextLines() : [];
+      partyLines = this.partyStatusLines();
     }
+    this.layoutStatusWindows(commandLines, partyLines);
+    this.commandText?.setText(commandLines.join("\n"));
+    this.partyText?.setText(partyLines.join("\n"));
     this.renderEnemySpriteEffects(this.time.now);
     this.renderTargetCursor(menuVisible);
   }
