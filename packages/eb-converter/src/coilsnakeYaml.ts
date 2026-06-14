@@ -308,21 +308,28 @@ export function doorTriggerToWorldPixel(door: Pick<MapDoorEntry, "areaX" | "area
   };
 }
 
+/** The Scripted Teleport Destination Table stores X/Y in 8-pixel "warp grid"
+ * units; multiply by this to get world pixels. Verified against the full map:
+ * table X/Y max ~1022/1276, and *8 spans the whole 8192x10240 map, whereas
+ * treating them as raw pixels crams every destination into the top-left corner.
+ * (e.g. dest 150 *8 = (2000,1424) lands in north Onett next to the canonical
+ * new-game start; unscaled it resolves to the NW edge.) */
+const TELEPORT_WARP_UNIT_PX = 8;
+
 /**
- * Parses CoilSnake teleport_destination_table.yml.
+ * Parses CoilSnake teleport_destination_table.yml into WORLD-PIXEL coordinates.
  *
- * Unlike map_doors.yml trigger X/Y, destination-table X/Y are already world
- * pixels. That matches the direct door Destination X/Y fields consumed by
- * emitWorldDoors, so the runtime can place the player at these coordinates
- * without area/cell scaling.
+ * NOTE: this is a SEPARATE table from map_doors.yml. Door Destination X/Y are
+ * already world pixels (consumed directly by emitWorldDoors); the scripted
+ * teleport table is in 8px warp-grid units, so scale X/Y by TELEPORT_WARP_UNIT_PX.
  */
 export function parseTeleportDestinationTable(source: string): TeleportDestinationEntry[] {
   const entries = parseIntKeyedYaml(source);
   return [...entries.entries()]
     .map(([id, entry]) => ({
       id,
-      x: parseYamlInteger(entry.X),
-      y: parseYamlInteger(entry.Y),
+      x: parseYamlInteger(entry.X) * TELEPORT_WARP_UNIT_PX,
+      y: parseYamlInteger(entry.Y) * TELEPORT_WARP_UNIT_PX,
       direction: parseYamlInteger(entry.Direction),
       warpStyle: parseYamlInteger(entry["Warp Style"])
     }))

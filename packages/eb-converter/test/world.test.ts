@@ -228,9 +228,10 @@ describe("coilsnake yaml readers", () => {
       ""
     ].join("\n"));
 
+    // X/Y are scaled from 8px warp-grid units to world pixels (*8).
     expect(destinations).toEqual([
-      { id: 2, x: 320, y: 448, direction: 3, warpStyle: 7 },
-      { id: 5, x: 640, y: 768, direction: 7, warpStyle: 1 }
+      { id: 2, x: 2560, y: 3584, direction: 3, warpStyle: 7 },
+      { id: 5, x: 5120, y: 6144, direction: 7, warpStyle: 1 }
     ]);
   });
 
@@ -647,8 +648,8 @@ describe("world artifact build (synthetic project)", () => {
       expect(result.teleportDestinations).toMatchObject({
         units: { x: "world-pixels", y: "world-pixels" },
         destinations: [
-          { id: 2, x: 320, y: 448, direction: 3, warpStyle: 7 },
-          { id: 5, x: 640, y: 768, direction: 7, warpStyle: 1 }
+          { id: 2, x: 2560, y: 3584, direction: 3, warpStyle: 7 },
+          { id: 5, x: 5120, y: 6144, direction: 7, warpStyle: 1 }
         ],
         counts: { destinations: 2 }
       });
