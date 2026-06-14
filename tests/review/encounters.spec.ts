@@ -6,6 +6,7 @@ import {
   waitForDebug,
   type FirstSceneDebug
 } from "./gameHarness";
+import { walkableFootprintClear } from "../../apps/game/src/collisionFootprint";
 
 type ForceEncounterResult =
   | { started: true; enemyGroup: number }
@@ -119,19 +120,5 @@ function surfaceBlocked(
   point: { x: number; y: number },
   collision: { cellSize: number; width: number; height: number; solidRows: string[] }
 ): boolean {
-  const corners: Array<[number, number]> = [
-    [point.x - 7, point.y - 10],
-    [point.x + 6, point.y - 10],
-    [point.x - 7, point.y - 1],
-    [point.x + 6, point.y - 1]
-  ];
-  return corners.some(([px, py]) => {
-    const cx = Math.floor(px / collision.cellSize);
-    const cy = Math.floor(py / collision.cellSize);
-    return cx < 0 ||
-      cy < 0 ||
-      cx >= collision.width ||
-      cy >= collision.height ||
-      collision.solidRows[cy]?.[cx] === "1";
-  });
+  return !walkableFootprintClear(point, collision.solidRows, collision);
 }

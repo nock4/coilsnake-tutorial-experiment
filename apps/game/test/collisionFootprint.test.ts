@@ -3,6 +3,7 @@ import { createPlayerState, IDLE_INPUT, stepPlayer, type MoveInput } from "../sr
 import {
   footBoxCornerCells,
   footBoxCornersClear,
+  footBoxCorners,
   PLAYER_FOOT_BOX,
   resolveWalkableFootprintDestination,
   walkableFootprintClear
@@ -48,24 +49,43 @@ describe("walkable destination resolution", () => {
 });
 
 describe("player foot box", () => {
-  it("keeps the current narrow footprint dimensions documented", () => {
-    expect(PLAYER_FOOT_BOX).toEqual({ left: -7, right: 6, top: -10, bottom: -1 });
+  it("keeps the narrow footprint anchored to the feet", () => {
+    const feet = { x: 40, y: 48 };
+    const corners = footBoxCorners(feet);
+
+    expect(PLAYER_FOOT_BOX).toEqual({ left: -7, right: 6, top: -6, bottom: 0 });
+    expect(corners).toEqual([
+      { x: 33, y: 42 },
+      { x: 46, y: 42 },
+      { x: 33, y: 48 },
+      { x: 46, y: 48 }
+    ]);
+    expect(Math.max(...corners.map((corner) => corner.y))).toBe(feet.y);
   });
 
   it("keeps foot-box corners off solid cells after attempted movement into a cliff", () => {
     const solidRows = rows(GRID.width, GRID.height, Array.from({ length: GRID.width }, (_, x) => [x, 6]));
-    const state = createPlayerState(40, 48);
+    const state = createPlayerState(40, 40);
 
     for (let frame = 0; frame < 20; frame += 1) {
       stepPlayer(state, input({ down: true }), {
         deltaMs: 16,
         speed: 100,
         bounds: { minX: 0, maxX: 95, minY: 12, maxY: 95 },
-        blocked: (x, y) => !footBoxCornersClear({ x, y }, solidRows, GRID)
+        blocked: (x, y) => !walkableFootprintClear({ x, y }, solidRows, GRID)
       });
       expect(footBoxCornersClear(state, solidRows, GRID)).toBe(true);
+      expect(walkableFootprintClear(state, solidRows, GRID)).toBe(true);
       expect(footBoxCornerCells(state, GRID).some((cell) => solidRows[cell.cellY]?.[cell.cellX] === "1")).toBe(false);
     }
+  });
+
+  it("rejects a solid feet cell even when the footprint corners straddle it", () => {
+    const solidRows = rows(GRID.width, GRID.height, [[5, 5]]);
+    const feet = { x: 44, y: 44 };
+
+    expect(footBoxCornersClear(feet, solidRows, GRID)).toBe(true);
+    expect(walkableFootprintClear(feet, solidRows, GRID)).toBe(false);
   });
 
   it("preserves passage through a 32px-wide gap", () => {
@@ -83,12 +103,12 @@ describe("player foot box", () => {
         deltaMs: 16,
         speed: 100,
         bounds: { minX: 0, maxX: 95, minY: 12, maxY: 95 },
-        blocked: (x, y) => !footBoxCornersClear({ x, y }, solidRows, GRID)
+        blocked: (x, y) => !walkableFootprintClear({ x, y }, solidRows, GRID)
       });
     }
 
     expect(state.y).toBeGreaterThan(56);
-    expect(footBoxCornersClear(state, solidRows, GRID)).toBe(true);
+    expect(walkableFootprintClear(state, solidRows, GRID)).toBe(true);
   });
 });
 

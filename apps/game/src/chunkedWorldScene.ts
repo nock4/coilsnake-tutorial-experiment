@@ -119,7 +119,6 @@ import {
 import { buildPartyMember, type PartyMember } from "./characterModel";
 import { activeWindowFlavorId } from "./windowSettings";
 import {
-  footBoxCornersClear,
   resolveWalkableFootprintDestination,
   walkableFootprintClear
 } from "./collisionFootprint";
@@ -944,7 +943,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private surfaceBlocked(x: number, y: number): boolean {
-    return !footBoxCornersClear({ x, y }, this.solidRows, this.collisionGrid());
+    return !this.walkableFootprint({ x, y });
   }
 
   private walkableFootprint(point: { x: number; y: number }): boolean {

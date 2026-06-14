@@ -9,14 +9,14 @@ export type FootBox = {
 
 /**
  * Narrow EB-style walking footprint, anchored to the actor's feet.
- * The 13x9 px span fits comfortably through 32px passages while keeping the
+ * The 13x6 px span fits comfortably through 32px passages while keeping the
  * sprite body free to overhang ledges and walls.
  */
 export const PLAYER_FOOT_BOX: FootBox = {
   left: -7,
   right: 6,
-  top: -10,
-  bottom: -1
+  top: -6,
+  bottom: 0
 };
 
 export type FootBoxCorner = {
