@@ -7,8 +7,13 @@ vi.mock("phaser", () => ({
 }));
 
 import {
+  DEFAULT_INTRO_BEATS,
+  INTRO_TEXT_LINES,
   advanceIntro,
   createIntroState,
+  currentIntroBeat,
+  introFlashAlpha,
+  introMeteorPosition,
   introBeatProgress,
   introOverlayAlpha,
   isIntroDisabled,
@@ -24,6 +29,41 @@ const TEST_BEATS: readonly IntroBeat[] = [
 ];
 
 describe("intro sequencer", () => {
+  it("uses the original AA2 cinematic beat sequence and text", () => {
+    expect(DEFAULT_INTRO_BEATS.map((beat) => beat.kind)).toEqual([
+      "nightSky",
+      "meteor",
+      "flash",
+      "shake",
+      "text",
+      "fadeOut"
+    ]);
+    expect(INTRO_TEXT_LINES).toEqual([
+      "A streak of light falls through the night.",
+      "Your story begins."
+    ]);
+  });
+
+  it("walks the AA2 sequence by injected delta time", () => {
+    let state = createIntroState(DEFAULT_INTRO_BEATS);
+    const observed: string[] = [];
+
+    while (!state.complete) {
+      const beat = currentIntroBeat(state);
+      expect(beat).toBeDefined();
+      observed.push(beat?.kind ?? "");
+      state = advanceIntro(state, beatMs(beat));
+    }
+
+    expect(observed).toEqual(["nightSky", "meteor", "flash", "shake", "text", "fadeOut"]);
+    expect(state).toMatchObject({
+      beatIndex: DEFAULT_INTRO_BEATS.length,
+      elapsedMs: 0,
+      complete: true,
+      skipped: false
+    });
+  });
+
   it("advances beats by injected delta time", () => {
     const start = createIntroState(TEST_BEATS);
     const midFade = advanceIntro(start, 40);
@@ -69,6 +109,34 @@ describe("intro sequencer", () => {
     expect(introOverlayAlpha(fadeOut)).toBe(0.25);
   });
 
+  it("keeps meteor positions monotonic and bounded on screen", () => {
+    const width = 512;
+    const height = 448;
+    let previous = introMeteorPosition(0, width, height);
+
+    for (const progress of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
+      const position = introMeteorPosition(progress, width, height);
+      expect(position.x).toBeGreaterThanOrEqual(0);
+      expect(position.x).toBeLessThanOrEqual(width);
+      expect(position.y).toBeGreaterThanOrEqual(0);
+      expect(position.y).toBeLessThanOrEqual(height);
+      expect(position.x).toBeGreaterThanOrEqual(previous.x);
+      expect(position.y).toBeGreaterThanOrEqual(previous.y);
+      previous = position;
+    }
+  });
+
+  it("bounds the flash pulse alpha", () => {
+    for (const progress of [-1, 0, 0.1, 0.5, 0.9, 1, 2]) {
+      const alpha = introFlashAlpha(progress);
+      expect(alpha).toBeGreaterThanOrEqual(0);
+      expect(alpha).toBeLessThanOrEqual(0.88);
+    }
+
+    const flash = advanceIntro(createIntroState([{ kind: "flash", ms: 100 }]), 50);
+    expect(introOverlayAlpha(flash)).toBeCloseTo(0.88);
+  });
+
   it("skips immediately", () => {
     const skipped = skipIntro(advanceIntro(createIntroState(TEST_BEATS), 25));
     expect(skipped).toMatchObject({
@@ -77,6 +145,24 @@ describe("intro sequencer", () => {
       complete: true,
       skipped: true
     });
+  });
+
+  it("skips from every AA2 beat to complete", () => {
+    for (let beatIndex = 0; beatIndex < DEFAULT_INTRO_BEATS.length; beatIndex += 1) {
+      const skipped = skipIntro({
+        ...createIntroState(DEFAULT_INTRO_BEATS),
+        beatIndex,
+        elapsedMs: 1,
+        complete: false
+      });
+
+      expect(skipped).toMatchObject({
+        beatIndex: DEFAULT_INTRO_BEATS.length,
+        elapsedMs: 0,
+        complete: true,
+        skipped: true
+      });
+    }
   });
 });
 
@@ -100,3 +186,7 @@ describe("intro new-game gating", () => {
     });
   });
 });
+
+function beatMs(beat: IntroBeat | undefined): number {
+  return beat?.ms ?? 0;
+}
