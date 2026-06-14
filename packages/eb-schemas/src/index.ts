@@ -494,6 +494,24 @@ export const BattleDropRaritySchema = z.object({
   denominator: z.number().int().positive()
 });
 
+export const BattleBackgroundScrollSchema = z.object({
+  x: z.number(),
+  y: z.number()
+});
+
+export const BattleBackgroundDistortionSchema = z.object({
+  kind: z.string(),
+  amplitude: z.number().nonnegative(),
+  frequency: z.number().nonnegative(),
+  speed: z.number()
+});
+
+export const BattleBackgroundSchema = z.object({
+  id: z.number().int().nonnegative(),
+  scroll: BattleBackgroundScrollSchema.optional(),
+  distortion: BattleBackgroundDistortionSchema.optional()
+});
+
 export const BattleEnemySchema = z.object({
   id: z.number().int().nonnegative(),
   name: z.string(),
@@ -555,6 +573,7 @@ export const BattleDataSchema = z.object({
   }),
   enemies: z.array(BattleEnemySchema),
   groups: z.array(BattleGroupSchema),
+  backgrounds: z.array(BattleBackgroundSchema).optional(),
   counts: z.object({
     enemies: z.number().int().nonnegative(),
     groups: z.number().int().nonnegative(),
@@ -852,6 +871,9 @@ export type SpriteSheetCollection = z.infer<typeof SpriteSheetCollectionSchema>;
 export type BattleData = z.infer<typeof BattleDataSchema>;
 export type BattleEnemy = z.infer<typeof BattleEnemySchema>;
 export type BattleGroup = z.infer<typeof BattleGroupSchema>;
+export type BattleBackground = z.infer<typeof BattleBackgroundSchema>;
+export type BattleBackgroundScroll = z.infer<typeof BattleBackgroundScrollSchema>;
+export type BattleBackgroundDistortion = z.infer<typeof BattleBackgroundDistortionSchema>;
 export type BattleDropRarity = z.infer<typeof BattleDropRaritySchema>;
 export type FontGlyphSheet = z.infer<typeof FontGlyphSheetSchema>;
 export type FontCollection = z.infer<typeof FontCollectionSchema>;

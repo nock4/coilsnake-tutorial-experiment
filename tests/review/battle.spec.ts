@@ -30,6 +30,12 @@ type BattleDebug = {
   } | null;
   party: BattleCombatantDebug[];
   enemies: BattleCombatantDebug[];
+  background: {
+    animated: boolean;
+    scrollX: number;
+    scrollY: number;
+    warpSample: number;
+  };
   player?: {
     hpDisplayed: number;
     hpTarget: number;
@@ -294,6 +300,10 @@ function expectBattleNumbers(state: BattleDebug): void {
   expect(Array.isArray(state.turnOrder)).toBe(true);
   expect(state.party.length).toBeGreaterThan(0);
   expect(state.enemies.length).toBeGreaterThan(0);
+  expect(typeof state.background.animated).toBe("boolean");
+  expect(Number.isFinite(state.background.scrollX)).toBe(true);
+  expect(Number.isFinite(state.background.scrollY)).toBe(true);
+  expect(Number.isFinite(state.background.warpSample)).toBe(true);
   if (state.lastEnemyAction) {
     expect(Number.isInteger(state.lastEnemyAction.enemyIndex)).toBe(true);
     expect(Number.isInteger(state.lastEnemyAction.actionIndex)).toBe(true);

@@ -4,6 +4,7 @@ import path from "node:path";
 import {
   BattleDataSchema,
   SCHEMA_VERSION,
+  type BattleBackground,
   type BattleData,
   type BattleGroup,
   type ValidationIssue
@@ -24,6 +25,10 @@ const TOWN_MAP = "onett";
 const MAP_ENEMY_PLACEMENT_WIDTH = 128;
 const ENCOUNTER_CELLS_PER_SECTOR_X = 4;
 const ENCOUNTER_CELLS_PER_SECTOR_Y = 2;
+const BATTLE_SCROLL_UNITS_PER_PIXEL = 256;
+const BATTLE_SCROLL_FRAMES_PER_SECOND = 60;
+const BATTLE_RIPPLE_AMPLITUDE_UNITS_PER_PIXEL = 1024;
+const BATTLE_RIPPLE_FREQUENCY_UNITS_PER_RADIAN = 4096;
 
 const BATTLE_SPRITE_SIZES = [
   [32, 32],
@@ -148,12 +153,14 @@ export async function buildBattleData(options: BattleBuildOptions): Promise<Batt
     background2: group.background2,
     enemyIds: uniqueSorted(positiveEnemyIds(group).filter((id) => enemyIds.includes(id)))
   }));
+  const backgroundIds = uniqueSorted(groups.flatMap((group) => [group.background1, group.background2]));
+  const backgrounds = await readBattleBackgroundAnimations(options.projectAbs, backgroundIds);
 
   const copied = await copyBattleAssets({
     projectAbs: options.projectAbs,
     outAbs: options.outAbs,
     enemyIds,
-    backgroundIds: uniqueSorted(groups.flatMap((group) => [group.background1, group.background2]))
+    backgroundIds
   });
 
   return BattleDataSchema.parse({
@@ -194,6 +201,7 @@ export async function buildBattleData(options: BattleBuildOptions): Promise<Batt
     },
     enemies,
     groups,
+    backgrounds,
     counts: {
       enemies: enemies.length,
       groups: groups.length,
@@ -451,6 +459,99 @@ async function readBattleActions(file: string): Promise<Map<number, BattleAction
   return actions;
 }
 
+async function readBattleBackgroundAnimations(projectAbs: string, backgroundIds: number[]): Promise<BattleBackground[]> {
+  const dataRows = await readOptionalIntKeyedYaml(path.join(projectAbs, "bg_data_table.yml"));
+  const scrollingRows = await readOptionalIntKeyedYaml(path.join(projectAbs, "bg_scrolling_table.yml"));
+  const distortionRows = await readOptionalIntKeyedYaml(path.join(projectAbs, "bg_distortion_table.yml"));
+
+  return backgroundIds.map((id) => {
+    const dataRow = dataRows.get(id);
+    if (!dataRow) {
+      return { id };
+    }
+    const scroll = resolveBackgroundScroll(dataRow, scrollingRows);
+    const distortion = resolveBackgroundDistortion(dataRow, distortionRows);
+    return {
+      id,
+      ...(scroll ? { scroll } : {}),
+      ...(distortion ? { distortion } : {})
+    };
+  });
+}
+
+async function readOptionalIntKeyedYaml(file: string): Promise<ReturnType<typeof parseIntKeyedYaml>> {
+  if (!existsSync(file)) {
+    return new Map();
+  }
+  return parseIntKeyedYaml(await readFile(file, "utf8"));
+}
+
+function resolveBackgroundScroll(
+  dataRow: Record<string, string>,
+  scrollingRows: ReturnType<typeof parseIntKeyedYaml>
+): BattleBackground["scroll"] | undefined {
+  let x = 0;
+  let y = 0;
+  for (let index = 1; index <= 4; index += 1) {
+    const rowId = optionalNumericField(dataRow, `Scrolling Movement ${index}`);
+    if (rowId === undefined || rowId <= 0) {
+      continue;
+    }
+    const row = scrollingRows.get(rowId);
+    if (!row) {
+      continue;
+    }
+    const horizontal = optionalNumericField(row, "Horizontal Movement");
+    const vertical = optionalNumericField(row, "Vertical Movement");
+    if (horizontal === undefined || vertical === undefined) {
+      continue;
+    }
+    x += signed16(horizontal) / BATTLE_SCROLL_UNITS_PER_PIXEL * BATTLE_SCROLL_FRAMES_PER_SECOND;
+    y += signed16(vertical) / BATTLE_SCROLL_UNITS_PER_PIXEL * BATTLE_SCROLL_FRAMES_PER_SECOND;
+  }
+  if (isEffectivelyZero(x) && isEffectivelyZero(y)) {
+    return undefined;
+  }
+  return {
+    x: roundBattleNumber(x),
+    y: roundBattleNumber(y)
+  };
+}
+
+function resolveBackgroundDistortion(
+  dataRow: Record<string, string>,
+  distortionRows: ReturnType<typeof parseIntKeyedYaml>
+): BattleBackground["distortion"] | undefined {
+  for (let index = 1; index <= 4; index += 1) {
+    const rowId = optionalNumericField(dataRow, `Distortion ${index}`);
+    if (rowId === undefined || rowId <= 0) {
+      continue;
+    }
+    const row = distortionRows.get(rowId);
+    if (!row) {
+      continue;
+    }
+    const amplitude = optionalNumericField(row, "Ripple Amplitude");
+    const frequency = optionalNumericField(row, "Ripple Frequency");
+    const speed = optionalNumericField(row, "Speed");
+    if (amplitude === undefined || frequency === undefined || speed === undefined) {
+      continue;
+    }
+    const normalizedAmplitude = amplitude / BATTLE_RIPPLE_AMPLITUDE_UNITS_PER_PIXEL;
+    const normalizedFrequency = frequency / BATTLE_RIPPLE_FREQUENCY_UNITS_PER_RADIAN;
+    if (normalizedAmplitude <= 0 || normalizedFrequency <= 0) {
+      continue;
+    }
+    return {
+      kind: row.Type?.trim() || "unknown",
+      amplitude: roundBattleNumber(normalizedAmplitude),
+      frequency: roundBattleNumber(normalizedFrequency),
+      speed: roundBattleNumber(speed)
+    };
+  }
+  return undefined;
+}
+
 async function copyBattleAssets(options: {
   projectAbs: string;
   outAbs: string;
@@ -634,6 +735,11 @@ function numericField(entry: Record<string, string>, field: string): number {
   return parsed;
 }
 
+function optionalNumericField(entry: Record<string, string>, field: string): number | undefined {
+  const parsed = parseYamlInteger(entry[field]);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
 function enumField(entry: Record<string, string>, field: string, values: Map<string, number>): number {
   const raw = entry[field]?.trim();
   const parsed = parseYamlInteger(raw);
@@ -714,6 +820,20 @@ function uniqueInOrder(values: number[]): number[] {
     seen.add(value);
     return true;
   });
+}
+
+function signed16(value: number): number {
+  const normalized = value & 0xffff;
+  return normalized >= 0x8000 ? normalized - 0x10000 : normalized;
+}
+
+function roundBattleNumber(value: number): number {
+  const rounded = Math.round(value * 1000) / 1000;
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function isEffectivelyZero(value: number): boolean {
+  return Math.abs(value) < 0.0005;
 }
 
 function pad3(value: number): string {

@@ -208,6 +208,23 @@ describe("generated validation", () => {
         { id: 30, background1: 6, background2: 0, enemyIds: [30] },
         { id: 31, background1: 7, background2: 0, enemyIds: [31] }
       ]);
+      expect(battle?.backgrounds?.map((background) => background.id)).toEqual([0, 3, 4, 6, 7]);
+      expect(battle?.backgrounds?.find((background) => background.id === 0)).toEqual({ id: 0 });
+      expect(battle?.backgrounds?.find((background) => background.id === 3)).toEqual({
+        id: 3,
+        scroll: { x: 120, y: -60 },
+        distortion: {
+          kind: "horizontal, synthetic",
+          amplitude: 3,
+          frequency: 0.25,
+          speed: 3
+        }
+      });
+      expect(battle?.backgrounds?.find((background) => background.id === 4)).toEqual({
+        id: 4,
+        scroll: { x: 0, y: 30 }
+      });
+      expect(battle?.backgrounds?.find((background) => background.id === 6)).toEqual({ id: 6 });
       expect(battle?.enemies.find((enemy) => enemy.id === 10)).toMatchObject({
         name: "Neutral One",
         spriteId: 10,
@@ -692,6 +709,106 @@ async function writeBattleFixture(project: string): Promise<void> {
     "33:",
     "  Town Map: onett",
     "  Town Map Image: onett",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "bg_data_table.yml"), [
+    "0:",
+    "  Distortion 1: 0",
+    "  Distortion 2: 0",
+    "  Distortion 3: 0",
+    "  Distortion 4: 0",
+    "  Scrolling Movement 1: 0",
+    "  Scrolling Movement 2: 0",
+    "  Scrolling Movement 3: 0",
+    "  Scrolling Movement 4: 0",
+    "3:",
+    "  Distortion 1: 1",
+    "  Distortion 2: 0",
+    "  Distortion 3: 0",
+    "  Distortion 4: 0",
+    "  Scrolling Movement 1: 1",
+    "  Scrolling Movement 2: 0",
+    "  Scrolling Movement 3: 0",
+    "  Scrolling Movement 4: 0",
+    "4:",
+    "  Distortion 1: 0",
+    "  Distortion 2: 0",
+    "  Distortion 3: 0",
+    "  Distortion 4: 0",
+    "  Scrolling Movement 1: 2",
+    "  Scrolling Movement 2: 0",
+    "  Scrolling Movement 3: 0",
+    "  Scrolling Movement 4: 0",
+    "6:",
+    "  Distortion 1: 99",
+    "  Distortion 2: 0",
+    "  Distortion 3: 0",
+    "  Distortion 4: 0",
+    "  Scrolling Movement 1: 0",
+    "  Scrolling Movement 2: 0",
+    "  Scrolling Movement 3: 0",
+    "  Scrolling Movement 4: 0",
+    "7:",
+    "  Distortion 1: 2",
+    "  Distortion 2: 0",
+    "  Distortion 3: 0",
+    "  Distortion 4: 0",
+    "  Scrolling Movement 1: 3",
+    "  Scrolling Movement 2: 4",
+    "  Scrolling Movement 3: 0",
+    "  Scrolling Movement 4: 0",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "bg_scrolling_table.yml"), [
+    "1:",
+    "  Duration: 0",
+    "  Horizontal Acceleration: 0",
+    "  Horizontal Movement: 512",
+    "  Vertical Acceleration: 0",
+    "  Vertical Movement: 65280",
+    "2:",
+    "  Duration: 0",
+    "  Horizontal Acceleration: 0",
+    "  Horizontal Movement: 0",
+    "  Vertical Acceleration: 0",
+    "  Vertical Movement: 128",
+    "3:",
+    "  Duration: 0",
+    "  Horizontal Acceleration: 0",
+    "  Horizontal Movement: 65408",
+    "  Vertical Acceleration: 0",
+    "  Vertical Movement: 0",
+    "4:",
+    "  Duration: 0",
+    "  Horizontal Acceleration: 0",
+    "  Horizontal Movement: 256",
+    "  Vertical Acceleration: 0",
+    "  Vertical Movement: 256",
+    ""
+  ].join("\n"), "utf8");
+  await writeFile(path.join(project, "bg_distortion_table.yml"), [
+    "1:",
+    "  Ripple Amplitude: 3072",
+    "  Ripple Amplitude Acceleration: 0",
+    "  Ripple Frequency: 1024",
+    "  Ripple Frequency Acceleration: 0",
+    "  Speed: 3",
+    "  Type: horizontal, synthetic",
+    "  Unknown A: 0",
+    "  Unknown B: 0",
+    "  Unknown C: 0",
+    "  Unknown D: 0",
+    "2:",
+    "  Ripple Amplitude: 5120",
+    "  Ripple Amplitude Acceleration: 0",
+    "  Ripple Frequency: 2048",
+    "  Ripple Frequency Acceleration: 0",
+    "  Speed: 1",
+    "  Type: horizontal, synthetic",
+    "  Unknown A: 0",
+    "  Unknown B: 0",
+    "  Unknown C: 0",
+    "  Unknown D: 0",
     ""
   ].join("\n"), "utf8");
 

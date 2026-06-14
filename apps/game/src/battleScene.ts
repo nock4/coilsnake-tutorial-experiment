@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import {
   ItemCollectionSchema,
   PsiCollectionSchema,
+  type BattleBackground,
   type BattleData,
   type BattleEnemy,
   type BattleGroup,
@@ -57,6 +58,12 @@ import {
   queueWindowFrameAssets,
   type PreparedWindowFrames
 } from "./windowFrame";
+import {
+  createAnimatedBattleBackground,
+  staticBattleBackgroundDebug,
+  type AnimatedBattleBackgroundHandle,
+  type BattleBackgroundDebug
+} from "./battleBackground";
 
 const MONO = "Menlo, Consolas, monospace";
 const COMMANDS = ["BASH", "PSI", "GOODS", "RUN"] as const;
@@ -130,6 +137,8 @@ export class BattleScene extends Phaser.Scene {
   private enemySprites: Phaser.GameObjects.Image[] = [];
   private enemySpriteBasePoints: Array<SpritePoint | undefined> = [];
   private enemyLastHitAt: Array<number | null> = [];
+  private backgroundAnimation?: AnimatedBattleBackgroundHandle;
+  private backgroundDebug: BattleBackgroundDebug = staticBattleBackgroundDebug();
 
   constructor() {
     super("battle");
@@ -176,6 +185,8 @@ export class BattleScene extends Phaser.Scene {
     this.currentActor_ = null;
     this.lastEnemyAction_ = null;
     this.actionDelayMs_ = 0;
+    this.backgroundAnimation = undefined;
+    this.backgroundDebug = staticBattleBackgroundDebug();
   }
 
   preload(): void {
@@ -194,6 +205,7 @@ export class BattleScene extends Phaser.Scene {
     this.windowFrames = prepareWindowFrames(this, this.window_);
     this.cameras.main.setBackgroundColor("#050505");
     this.drawBackground();
+    this.events.once("shutdown", () => this.backgroundAnimation?.destroy());
     this.drawEnemySprites();
     this.createStatusWindow();
     this.input.keyboard?.on("keydown-UP", () => this.moveMenu(-1));
@@ -212,6 +224,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(_: number, delta: number): void {
+    this.updateBackground();
+
     if (this.phase_ === "enter-transition") {
       this.transitionMs_ = Math.max(0, this.transitionMs_ - delta);
       if (this.transitionMs_ <= 0) {
@@ -672,14 +686,28 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
-    const key = this.textures.exists(backgroundKey(this.group_.background1))
-      ? backgroundKey(this.group_.background1)
-      : backgroundKey(this.group_.background2);
+    const backgroundId = this.textures.exists(backgroundKey(this.group_.background1))
+      ? this.group_.background1
+      : this.group_.background2;
+    const key = backgroundKey(backgroundId);
     if (this.textures.exists(key)) {
+      this.backgroundAnimation = createAnimatedBattleBackground(
+        this,
+        key,
+        selectBattleBackground(this.battleData_, backgroundId),
+        this.scale.width,
+        STATUS_TOP
+      );
+      if (this.backgroundAnimation) {
+        this.backgroundDebug = this.backgroundAnimation.debug();
+        return;
+      }
+      this.backgroundDebug = staticBattleBackgroundDebug();
       this.add.image(0, 0, key).setOrigin(0, 0).setDisplaySize(this.scale.width, STATUS_TOP);
       return;
     }
 
+    this.backgroundDebug = staticBattleBackgroundDebug();
     const graphics = this.add.graphics();
     graphics.fillStyle(0x182033, 1);
     graphics.fillRect(0, 0, this.scale.width, STATUS_TOP);
@@ -781,6 +809,13 @@ export class BattleScene extends Phaser.Scene {
     return this.add.text(x, y, text, style);
   }
 
+  private updateBackground(): void {
+    if (!this.backgroundAnimation) {
+      return;
+    }
+    this.backgroundDebug = this.backgroundAnimation.update(this.time.now);
+  }
+
   private renderStatus(): void {
     const menuVisible = this.phase_ === "menu" && this.currentActor_?.side === "party";
     if (this.phase_ === "victory-summary") {
@@ -825,6 +860,7 @@ export class BattleScene extends Phaser.Scene {
       lastEnemyAction: this.lastEnemyAction_,
       party,
       enemies,
+      background: this.backgroundDebug,
       windowLoaded: Boolean(this.window_),
       ...(this.window_ ? { defaultFlavorId: this.window_.defaultFlavorId } : {}),
       player: {
@@ -1091,6 +1127,10 @@ function enemiesForGroup(data: BattleData, group: BattleGroup): BattleEnemy[] {
   return group.enemyIds
     .map((enemyId) => data.enemies.find((enemy) => enemy.id === enemyId))
     .filter((enemy): enemy is BattleEnemy => Boolean(enemy));
+}
+
+function selectBattleBackground(data: BattleData, id: number): BattleBackground | undefined {
+  return data.backgrounds?.find((background) => background.id === id);
 }
 
 function generatedAssetUrl(dir: string, id: number): string {

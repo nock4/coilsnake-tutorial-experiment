@@ -73,6 +73,13 @@ export type LastEnemyActionDebug = {
   target: number | null;
 };
 
+export type BattleBackgroundDebug = {
+  animated: boolean;
+  scrollX: number;
+  scrollY: number;
+  warpSample: number;
+};
+
 export type BattleDebug = {
   mode: "battle";
   phase: BattlePhase;
@@ -90,6 +97,7 @@ export type BattleDebug = {
   lastEnemyAction: LastEnemyActionDebug | null;
   party: BattleCombatantDebug[];
   enemies: BattleEnemyCombatantDebug[];
+  background: BattleBackgroundDebug;
   windowLoaded?: boolean;
   defaultFlavorId?: number;
   player: {
