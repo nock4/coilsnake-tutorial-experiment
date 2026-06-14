@@ -64,8 +64,10 @@ import {
   type AnimatedBattleBackgroundHandle,
   type BattleBackgroundDebug
 } from "./battleBackground";
+import { swirlMask, type SwirlMask } from "./transitions";
 
 const MONO = "Menlo, Consolas, monospace";
+const TAU = Math.PI * 2;
 const COMMANDS = ["BASH", "PSI", "GOODS", "RUN"] as const;
 const STATUS_TOP = 288;
 const BATTLE_TEXT_SCALE = 2;
@@ -652,22 +654,7 @@ export class BattleScene extends Phaser.Scene {
     graphics.clear();
     if (this.transitionPhase_ === "enter") {
       const progress = 1 - this.transitionMs_ / ENTER_TRANSITION_MS;
-      const fade = Math.max(0, 1 - progress);
-      graphics.fillStyle(0xf8fafc, 0.18 * fade);
-      graphics.fillRect(0, 0, this.scale.width, this.scale.height);
-      const cx = this.scale.width / 2;
-      const cy = STATUS_TOP / 2;
-      for (let index = 0; index < 9; index += 1) {
-        const radius = 24 + index * 30 + progress * 90;
-        const alpha = Math.max(0, (0.6 - index * 0.045) * fade);
-        graphics.lineStyle(4, index % 2 === 0 ? 0xf8fafc : 0x38bdf8, alpha);
-        graphics.strokeCircle(cx, cy, radius);
-      }
-      graphics.lineStyle(6, 0xfb7185, 0.22 * fade);
-      graphics.beginPath();
-      graphics.moveTo(cx - 220 + progress * 140, cy - 140);
-      graphics.lineTo(cx + 220 - progress * 80, cy + 140);
-      graphics.strokePath();
+      this.renderEnterSwirl(graphics, progress);
       return;
     }
 
@@ -675,6 +662,105 @@ export class BattleScene extends Phaser.Scene {
       const progress = 1 - this.transitionMs_ / EXIT_TRANSITION_MS;
       graphics.fillStyle(0x000000, Math.min(1, Math.max(0, progress)));
       graphics.fillRect(0, 0, this.scale.width, this.scale.height);
+    }
+  }
+
+  private renderEnterSwirl(graphics: Phaser.GameObjects.Graphics, progress: number): void {
+    const mask = swirlMask(progress);
+    if (mask.clear) {
+      return;
+    }
+
+    const width = this.scale.width;
+    const height = this.scale.height;
+    const cx = width / 2;
+    const cy = STATUS_TOP / 2;
+    const maxRadius = Math.hypot(Math.max(cx, width - cx), Math.max(cy, height - cy));
+
+    graphics.fillStyle(0x050505, mask.baseAlpha);
+    graphics.fillRect(0, 0, width, height);
+    if (mask.fullyCovered) {
+      return;
+    }
+
+    this.drawSwirlBands(graphics, mask, cx, cy, maxRadius);
+    this.drawSwirlHighlights(graphics, mask, cx, cy, maxRadius);
+  }
+
+  private drawSwirlBands(
+    graphics: Phaser.GameObjects.Graphics,
+    mask: SwirlMask,
+    cx: number,
+    cy: number,
+    maxRadius: number
+  ): void {
+    const armSpan = TAU / mask.armCount;
+    const segmentOverscan = 1.1 / mask.bandCount;
+    for (let arm = 0; arm < mask.armCount; arm += 1) {
+      for (let segment = 0; segment < mask.bandCount; segment += 1) {
+        const innerRatio = Math.max(mask.revealRadiusRatio, segment / mask.bandCount);
+        const outerRatio = Math.min(1.32, (segment + 1) / mask.bandCount + segmentOverscan);
+        if (outerRatio <= mask.revealRadiusRatio) {
+          continue;
+        }
+        const centerRatio = (innerRatio + outerRatio) / 2;
+        const angle = mask.rotationRadians + arm * armSpan + centerRatio * mask.spiralPitch * TAU;
+        const span = armSpan * (0.18 + mask.coverage * 0.18);
+        const inner = innerRatio * maxRadius;
+        const outer = outerRatio * maxRadius + 22 * mask.coverage;
+        const points = [
+          polarPoint(cx, cy, inner, angle - span * 0.58),
+          polarPoint(cx, cy, outer, angle - span * 0.38),
+          polarPoint(cx, cy, outer, angle + span * 0.38),
+          polarPoint(cx, cy, inner, angle + span * 0.58)
+        ];
+
+        graphics.fillStyle(segment % 2 === 0 ? 0x050505 : 0x111827, mask.bandAlpha);
+        graphics.beginPath();
+        graphics.moveTo(points[0].x, points[0].y);
+        for (let index = 1; index < points.length; index += 1) {
+          graphics.lineTo(points[index].x, points[index].y);
+        }
+        graphics.closePath();
+        graphics.fillPath();
+      }
+    }
+  }
+
+  private drawSwirlHighlights(
+    graphics: Phaser.GameObjects.Graphics,
+    mask: SwirlMask,
+    cx: number,
+    cy: number,
+    maxRadius: number
+  ): void {
+    const alpha = 0.34 * mask.coverage;
+    if (alpha <= 0) {
+      return;
+    }
+    const armSpan = TAU / mask.armCount;
+    for (let arm = 0; arm < mask.armCount; arm += 1) {
+      graphics.lineStyle(3, arm % 2 === 0 ? 0xf8fafc : 0x7dd3fc, alpha);
+      graphics.beginPath();
+      let started = false;
+      for (let segment = 0; segment <= mask.bandCount; segment += 1) {
+        const ratio = segment / mask.bandCount;
+        if (ratio < mask.revealRadiusRatio) {
+          continue;
+        }
+        const radius = ratio * maxRadius;
+        const angle = mask.rotationRadians + arm * armSpan + ratio * mask.spiralPitch * TAU;
+        const point = polarPoint(cx, cy, radius, angle);
+        if (!started) {
+          graphics.moveTo(point.x, point.y);
+          started = true;
+        } else {
+          graphics.lineTo(point.x, point.y);
+        }
+      }
+      if (started) {
+        graphics.strokePath();
+      }
     }
   }
 
@@ -1201,6 +1287,13 @@ function enemySpritePoint(stageWidth: number, count: number, index: number, widt
   return {
     x: stageWidth / 2 + (index - (count - 1) / 2) * widthBudget,
     y: 164
+  };
+}
+
+function polarPoint(cx: number, cy: number, radius: number, angle: number): SpritePoint {
+  return {
+    x: cx + Math.cos(angle) * radius,
+    y: cy + Math.sin(angle) * radius
   };
 }
 

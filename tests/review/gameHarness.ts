@@ -94,6 +94,8 @@ export type FirstSceneDebug = {
   animFrame?: number;
   inputLocked?: boolean;
   lastDoor?: { from: { x: number; y: number }; to: { x: number; y: number } };
+  doorFadeActive?: boolean;
+  doorFadePhase?: "none" | "fade-out" | "fade-in";
   loadedChunkCount?: number;
   activeNpcCount?: number;
   currentChunk?: { cx: number; cy: number };

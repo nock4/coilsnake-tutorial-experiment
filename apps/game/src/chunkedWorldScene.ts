@@ -131,6 +131,11 @@ type BlockedOptions = {
   includeNpcs?: boolean;
 };
 
+type DoorFadePhase = "none" | "fade-out" | "fade-in";
+
+const DOOR_FADE_HALF_MS = 90;
+const DOOR_FADE_OVERLAY_DEPTH = 1_000_000;
+
 export class ChunkedWorldScene extends Phaser.Scene {
   private data_!: GameData;
   private world_!: WorldChunked;
@@ -153,6 +158,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
   private doorTriggerState: DoorTriggerState = { suppressUntilClear: false };
   private lastDoor?: { from: { x: number; y: number }; to: { x: number; y: number } };
+  private doorFadePhase: DoorFadePhase = "none";
+  private doorFadeOverlay?: Phaser.GameObjects.Rectangle;
+  private doorFadeTween?: Phaser.Tweens.Tween;
   readonly dialogue = new DialogueController();
   private readonly gameFlags = new GameFlags();
   private readonly partyState = new PartyState();
@@ -194,6 +202,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.hasSave = Boolean(this.bootSaveState) || Boolean(this.saveSlots?.hasSave(this.saveSlot));
     this.lastSavedAt = this.bootSaveState?.savedAt;
     this.restoredFromSave = false;
+    this.doorFadePhase = "none";
   }
 
   preload(): void {
@@ -239,6 +248,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.cameras.main.setZoom(2);
     this.cameras.main.startFollow(this.player, true);
     this.cameras.main.roundPixels = true;
+    this.events.once("shutdown", () => this.destroyDoorFadeOverlay());
 
     this.cursors = this.input.keyboard?.createCursorKeys();
     this.keys = this.input.keyboard?.addKeys("W,A,S,D") as Record<string, Phaser.Input.Keyboard.Key>;
@@ -298,7 +308,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.stepNpcs(delta);
     this.eventSequence?.update(delta);
 
-    const inputOwned = this.dialogue.open || Boolean(this.eventSequence?.running);
+    const inputOwned = this.dialogue.open || Boolean(this.eventSequence?.running) || this.isDoorFadeActive();
     if (inputOwned && !this.playerState.inputLocked) {
       lockPlayer(this.playerState, this.playerFrames);
     } else if (!inputOwned && this.playerState.inputLocked) {
@@ -312,7 +322,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
       blocked: (x, y) => this.blocked(x, y, { includeNpcs: true }),
       frames: this.playerFrames
     });
-    this.handleDoorTrigger();
+    if (!this.isDoorFadeActive()) {
+      this.handleDoorTrigger();
+    }
 
     this.player.x = this.playerState.x;
     this.player.y = this.playerState.y;
@@ -687,6 +699,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private handleDoorTrigger(): void {
+    if (this.isDoorFadeActive()) {
+      return;
+    }
     // Phase-2 owns eventFlag gating. This slice treats every imported trigger as active.
     const result = resolveDoorTrigger(
       this.playerState,
@@ -707,7 +722,17 @@ export class ChunkedWorldScene extends Phaser.Scene {
     });
   }
 
-  private applyDoorWarp(destination: EventWarpDestination): void {
+  private applyDoorWarp(destination: EventWarpDestination, options: { instant?: boolean } = {}): void {
+    if (options.instant) {
+      this.applyDoorWarpInstant(destination);
+      return;
+    }
+    if (!this.beginDoorFade(destination)) {
+      this.applyDoorWarpInstant(destination);
+    }
+  }
+
+  private applyDoorWarpInstant(destination: EventWarpDestination): void {
     const from = { x: this.playerState.x, y: this.playerState.y };
     const to = this.clampSpawn(destination.worldPixel ?? destination);
     this.doorTriggerState = { suppressUntilClear: true };
@@ -732,6 +757,93 @@ export class ChunkedWorldScene extends Phaser.Scene {
       }
       this.player.setDepth(to.y);
     }
+  }
+
+  private beginDoorFade(destination: EventWarpDestination): boolean {
+    if (this.isDoorFadeActive()) {
+      return false;
+    }
+    try {
+      const overlay = this.ensureDoorFadeOverlay();
+      this.doorFadePhase = "fade-out";
+      lockPlayer(this.playerState, this.playerFrames);
+      overlay.setAlpha(0);
+      overlay.setVisible(true);
+      this.publish();
+      this.doorFadeTween = this.tweens.add({
+        targets: overlay,
+        alpha: 1,
+        duration: DOOR_FADE_HALF_MS,
+        ease: "Linear",
+        onComplete: () => this.finishDoorFadeOut(destination)
+      });
+      return true;
+    } catch {
+      this.finishDoorFade();
+      return false;
+    }
+  }
+
+  private finishDoorFadeOut(destination: EventWarpDestination): void {
+    try {
+      this.applyDoorWarpInstant(destination);
+      this.doorFadePhase = "fade-in";
+      this.publish();
+      const overlay = this.ensureDoorFadeOverlay();
+      overlay.setVisible(true);
+      overlay.setAlpha(1);
+      this.doorFadeTween = this.tweens.add({
+        targets: overlay,
+        alpha: 0,
+        duration: DOOR_FADE_HALF_MS,
+        ease: "Linear",
+        onComplete: () => this.finishDoorFade()
+      });
+    } catch {
+      this.finishDoorFade();
+    }
+  }
+
+  private finishDoorFade(): void {
+    this.doorFadeTween?.stop();
+    this.doorFadeTween = undefined;
+    this.doorFadeOverlay?.setAlpha(0);
+    this.doorFadeOverlay?.setVisible(false);
+    this.doorFadePhase = "none";
+    if (this.canReleaseDoorFadeLock()) {
+      unlockPlayer(this.playerState);
+    }
+    this.publish();
+  }
+
+  private ensureDoorFadeOverlay(): Phaser.GameObjects.Rectangle {
+    if (this.doorFadeOverlay) {
+      this.doorFadeOverlay.setSize(this.scale.width, this.scale.height);
+      return this.doorFadeOverlay;
+    }
+    this.doorFadeOverlay = this.add.rectangle(0, 0, this.scale.width, this.scale.height, 0x000000)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(DOOR_FADE_OVERLAY_DEPTH)
+      .setAlpha(0)
+      .setVisible(false);
+    return this.doorFadeOverlay;
+  }
+
+  private destroyDoorFadeOverlay(): void {
+    this.doorFadeTween?.stop();
+    this.doorFadeTween = undefined;
+    this.doorFadeOverlay?.destroy();
+    this.doorFadeOverlay = undefined;
+    this.doorFadePhase = "none";
+  }
+
+  private isDoorFadeActive(): boolean {
+    return this.doorFadePhase !== "none";
+  }
+
+  private canReleaseDoorFadeLock(): boolean {
+    return !this.menuState.open && !this.dialogue.open && !this.eventSequence?.running;
   }
 
   private actorBodyBlocked(x: number, y: number, bodyX: number, bodyY: number): boolean {
@@ -1304,7 +1416,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       this.startupFallbackReason = "unsafe_warp_destination";
       return false;
     }
-    this.applyDoorWarp(destination);
+    this.applyDoorWarp(destination, { instant: true });
     if (!this.isPlayableWorldPoint(this.currentPlayerPoint())) {
       this.startupFallbackReason = "unsafe_warp_result";
       return false;
@@ -1361,7 +1473,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private afterDialogueClosed(): void {
-    if (!this.menuState.open) {
+    if (!this.menuState.open && !this.isDoorFadeActive()) {
       unlockPlayer(this.playerState);
     }
     this.restoreActiveNpc();
@@ -1421,7 +1533,11 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private isPlayerControllable(): boolean {
-    return !this.menuState.open && !this.dialogue.open && !this.eventSequence?.running && !this.playerState.inputLocked;
+    return !this.menuState.open
+      && !this.dialogue.open
+      && !this.eventSequence?.running
+      && !this.isDoorFadeActive()
+      && !this.playerState.inputLocked;
   }
 
   private isPlayableWorldPoint(point: { x: number; y: number }): boolean {
@@ -1501,6 +1617,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       `anim: ${state.animKey} frame ${state.animFrame}`,
       `feet: ${Math.round(state.x)},${Math.round(state.y)} | chunk: ${this.currentChunk?.cx ?? "?"},${this.currentChunk?.cy ?? "?"} | target: ${this.interactionTarget()?.id ?? "none"}`,
       `chunks loaded: ${this.loadedChunkCount()} | active NPCs: ${this.npcRuntimes.size}`,
+      `door fade: ${this.doorFadePhase}`,
       `wallet: ${this.partyState.wallet} | bank: ${this.partyState.bank} | shop: ${this.activeShopStoreId ?? "none"}`,
       `save: ${this.hasSave ? "yes" : "no"} | restored: ${this.restoredFromSave ? "yes" : "no"}`
     ];
@@ -1571,6 +1688,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
       animFrame: this.playerState.animFrame,
       inputLocked: this.playerState.inputLocked,
       lastDoor: this.lastDoor,
+      doorFadeActive: this.isDoorFadeActive(),
+      doorFadePhase: this.doorFadePhase,
       loadedChunkCount: this.loadedChunkCount(),
       activeNpcCount: this.npcRuntimes.size,
       currentChunk: this.currentChunk,
