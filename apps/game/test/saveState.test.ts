@@ -26,6 +26,20 @@ describe("SaveState", () => {
     sourceParty.give(2, 10);
     sourceParty.equip(2, { id: 10, type: 0x10 });
     sourceParty.equip(2, { id: 11, type: 0x14 });
+    sourceParty.restore({
+      ...sourceParty.snapshot(),
+      battleMembers: [{
+        charId: 2,
+        level: 4,
+        experience: 250,
+        hp: 33,
+        maxHp: 60,
+        pp: 7,
+        maxPp: 12,
+        inventory: [10, 11, 10],
+        stats: { offense: 9, defense: 8, speed: 7, guts: 6, vitality: 5, iq: 4, luck: 3 }
+      }]
+    });
 
     const save = captureSaveState({
       flags: sourceFlags,
@@ -71,6 +85,7 @@ describe("SaveState", () => {
     expect(targetParty.party()).toEqual([2]);
     expect(targetParty.inventory(2)).toEqual([10, 11, 10]);
     expect(targetParty.equipped(2)).toEqual({ weapon: 10, body: 11 });
+    expect(targetParty.battleMember(2)).toMatchObject({ level: 4, experience: 250, hp: 33 });
   });
 
   it("returns null for empty, corrupt, missing, and older-version blobs", () => {

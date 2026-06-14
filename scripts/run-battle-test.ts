@@ -14,6 +14,7 @@ async function main(): Promise<void> {
     await convertProject({
       project: "external/coilsnake-full",
       out: GENERATED_OUT,
+      worldMode: "full",
       battle: true,
       characters: true,
       items: true,

@@ -1,5 +1,8 @@
 import Phaser from "phaser";
 import { isNpcVisibleForEventFlags, type ItemData, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
+import { rollEncounter, sectorIndexForTile } from "./encounterLogic";
+import { createStatefulRng, seedFromSearch, type StatefulRng } from "./seededRng";
+import type { BattleReturnContext, BattleReturnSource, ChunkedWorldRestore } from "./battleReturn";
 import { resolveDoorTrigger, type DoorTriggerState } from "./doorTriggers";
 import {
   buildDialogueForReference,
@@ -64,7 +67,7 @@ import {
   type NewGameStartupRunDebug
 } from "./state";
 import { createDialogueResolver, textSpeedCpsFromSearch } from "./dialogueRenderer";
-import { PartyState } from "./partyState";
+import { PartyState, type PartyStateSnapshot } from "./partyState";
 import {
   applySaveState,
   captureSaveState,
@@ -136,6 +139,12 @@ type DoorFadePhase = "none" | "fade-out" | "fade-in";
 
 const DOOR_FADE_HALF_MS = 90;
 const DOOR_FADE_OVERLAY_DEPTH = 1_000_000;
+const ENCOUNTER_RETURN_COOLDOWN_MS = 1_500;
+
+type TilePoint = { x: number; y: number };
+type ForceEncounterResult =
+  | { started: true; enemyGroup: number }
+  | { started: false; reason: string; enemyGroup?: number };
 
 export class ChunkedWorldScene extends Phaser.Scene {
   private data_!: GameData;
@@ -172,9 +181,19 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private bootSaveState?: SaveState;
   private saveSlot = 0;
   private saveSlots?: SaveSlotPersistence;
+  private restoreState?: ChunkedWorldRestore;
+  private returnContextActive = false;
   private hasSave = false;
   private lastSavedAt?: string;
   private restoredFromSave = false;
+  private encounterEnabled = false;
+  private encounterCooldownMs = 0;
+  private encounterRng: StatefulRng = createStatefulRng(0);
+  private encounterSeed = 0;
+  private currentSectorIndex?: number;
+  private lastPlayerTile?: TilePoint;
+  private lastEncounterGroup?: number;
+  private forceEncounterHook?: (groupId?: number) => ForceEncounterResult;
   private newGameStartupRecord?: NewGameStartupRunDebug;
   private startupRunActive = false;
   private startupRunFinalized = false;
@@ -194,16 +213,30 @@ export class ChunkedWorldScene extends Phaser.Scene {
     saveState?: SaveState | null;
     saveSlot?: number;
     saveSlots?: SaveSlotPersistence;
+    restore?: ChunkedWorldRestore;
   }): void {
     this.data_ = data.gameData;
     this.world_ = data.gameData.world as WorldChunked;
+    this.resetRuntimeStateForStart();
     this.bootSaveState = data.saveState ?? undefined;
     this.saveSlot = Number.isInteger(data.saveSlot) && (data.saveSlot as number) >= 0 ? data.saveSlot as number : 0;
     this.saveSlots = data.saveSlots;
+    this.restoreState = data.restore;
+    this.returnContextActive = Boolean(data.restore);
     this.hasSave = Boolean(this.bootSaveState) || Boolean(this.saveSlots?.hasSave(this.saveSlot));
     this.lastSavedAt = this.bootSaveState?.savedAt;
     this.restoredFromSave = false;
     this.doorFadePhase = "none";
+    this.lastPlayerTile = undefined;
+    this.currentSectorIndex = undefined;
+    const disabledByQuery = encountersDisabledBySearch(globalThis.location?.search);
+    const canEncounter = Boolean(data.gameData.encounters && data.gameData.battle);
+    const restoredEncounter = data.restore?.encounter;
+    this.encounterEnabled = canEncounter && !disabledByQuery && (restoredEncounter?.enabled ?? true);
+    this.encounterCooldownMs = Math.max(0, restoredEncounter?.cooldownMs ?? 0);
+    this.encounterSeed = restoredEncounter?.rngSeed ?? seedFromSearch(globalThis.location?.search, "encounterSeed");
+    this.encounterRng = createStatefulRng(this.encounterSeed);
+    this.lastEncounterGroup = restoredEncounter?.lastEncounterGroup;
   }
 
   preload(): void {
@@ -237,19 +270,24 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.collisionWidth = world.collision.width;
     this.collisionHeight = world.collision.height;
 
-    const restoredPlayer = this.applyInitialSave();
-    const spawn = this.clampSpawn(restoredPlayer ?? this.parseSpawnOverride() ?? world.player.spawnWorldPixel);
-    const playerFacing = restoredPlayer?.facing ?? "down";
+    const restoredPlayer = this.restoreState ? undefined : this.applyInitialSave();
+    const returnPlayer = this.applyReturnRestore();
+    const spawn = this.clampSpawn(returnPlayer ?? restoredPlayer ?? this.parseSpawnOverride() ?? world.player.spawnWorldPixel);
+    const playerFacing = returnPlayer?.facing ?? restoredPlayer?.facing ?? "down";
     this.playerFrames = this.framesForGroup(world.player.spriteGroup);
     this.playerState = createPlayerState(spawn.x, spawn.y, playerFacing, this.playerFrames);
     this.player = this.spawnActor(spawn.x, spawn.y, world.player.spriteGroup, playerFacing);
+    this.syncEncounterTileState();
 
     const bounds = this.movementBounds();
     this.cameras.main.setBounds(0, 0, bounds.maxX + 8, bounds.maxY + 1);
     this.cameras.main.setZoom(2);
     this.cameras.main.startFollow(this.player, true);
     this.cameras.main.roundPixels = true;
-    this.events.once("shutdown", () => this.destroyDoorFadeOverlay());
+    this.events.once("shutdown", () => {
+      this.destroyDoorFadeOverlay();
+      this.unregisterForceEncounter();
+    });
 
     this.cursors = this.input.keyboard?.createCursorKeys();
     this.keys = this.input.keyboard?.addKeys("W,A,S,D") as Record<string, Phaser.Input.Keyboard.Key>;
@@ -289,7 +327,10 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.refreshStreaming(true);
     this.updatePrompt();
     this.scene.launch("ui", { worldSceneKey: "chunked-world", font: this.data_.font, window: this.data_.window });
-    this.maybeStartNewGameStartup(spawn);
+    this.registerForceEncounter();
+    if (!this.restoreState) {
+      this.maybeStartNewGameStartup(spawn);
+    }
     this.publish();
   }
 
@@ -298,6 +339,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return;
     }
     this.partyState.tickMeters(delta);
+    this.encounterCooldownMs = Math.max(0, this.encounterCooldownMs - delta);
     if (this.menuState.open) {
       if (!this.playerState.inputLocked) {
         lockPlayer(this.playerState, this.playerFrames);
@@ -334,6 +376,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     this.player.setDepth(this.player.y);
     this.refreshStreaming();
+    if (this.handleEncounterStep()) {
+      return;
+    }
     this.updatePrompt();
     this.publish();
   }
@@ -345,6 +390,40 @@ export class ChunkedWorldScene extends Phaser.Scene {
       tileSize: this.world_.tileSize,
       chunkSizeTiles: this.world_.chunkSizeTiles
     };
+  }
+
+  private resetRuntimeStateForStart(): void {
+    this.destroyDoorFadeOverlay();
+    this.unregisterForceEncounter();
+    this.player = undefined;
+    this.playerFrames = CANONICAL_DIRECTION_FRAMES;
+    this.activeNpcDialogue = undefined;
+    this.chunkByKey.clear();
+    this.npcPlacementsByChunk.clear();
+    this.npcRuntimes.clear();
+    this.chunkObjects.clear();
+    this.loadingTextureKeys.clear();
+    this.loadingSheetGroups.clear();
+    this.currentChunk = undefined;
+    this.cursors = undefined;
+    this.keys = undefined;
+    this.doorTriggerState = { suppressUntilClear: false };
+    this.lastDoor = undefined;
+    this.doorFadePhase = "none";
+    this.dialogue.close();
+    this.gameFlags.clear();
+    this.partyState.restore(emptyPartyStateSnapshot());
+    this.menuState = closedMenu();
+    this.menuScreens.clear();
+    this.activeShopStoreId = undefined;
+    this.eventSequence = undefined;
+    this.newGameStartupRecord = undefined;
+    this.startupRunActive = false;
+    this.startupRunFinalized = false;
+    this.startupInitialSpawn = undefined;
+    this.startupFallbackReason = undefined;
+    this.prompt = "";
+    this.assetsLoaded = false;
   }
 
   private indexChunks(): void {
@@ -438,7 +517,11 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private materializeChunkLayer(key: string, streamed: StreamedChunk, layer: ChunkLayer): void {
-    if (streamed[layer] || !streamed.chunk[layer]) {
+    const existing = streamed[layer];
+    if (existing && isLiveGameObject(existing)) {
+      return;
+    }
+    if (!streamed.chunk[layer]) {
       return;
     }
     const textureKey = this.chunkTextureKey(streamed.chunk, layer);
@@ -749,6 +832,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.lastDoor = { from, to };
     this.currentChunk = undefined;
     this.refreshStreaming(true);
+    this.syncEncounterTileState();
     this.cameras.main.centerOn(to.x, to.y);
     if (this.player) {
       this.player.x = to.x;
@@ -1216,6 +1300,39 @@ export class ChunkedWorldScene extends Phaser.Scene {
     return player;
   }
 
+  private applyReturnRestore(): (SavePlayerSnapshot & { mode: "chunked" }) | undefined {
+    const restore = this.restoreState;
+    if (!restore) {
+      return undefined;
+    }
+
+    this.gameFlags.clear();
+    for (const flag of restore.flags.strings) {
+      this.gameFlags.set(flag);
+    }
+    for (const flag of restore.flags.numeric) {
+      this.gameFlags.setNum(flag);
+    }
+    this.partyState.restore(restore.party);
+    this.encounterCooldownMs = Math.max(this.encounterCooldownMs, restore.encounter.cooldownMs);
+    this.encounterRng.setState(restore.encounter.rngSeed);
+    this.encounterSeed = restore.encounter.rngSeed;
+    this.lastEncounterGroup = restore.encounter.lastEncounterGroup;
+    this.encounterEnabled = this.encounterEnabled && restore.encounter.enabled;
+
+    const player = {
+      mode: "chunked" as const,
+      mapId: this.saveMapId(),
+      x: restore.player.x,
+      y: restore.player.y,
+      facing: restore.player.facing
+    };
+    if (!this.isCompatibleSavePlayer(player) || !this.isPlayableWorldPoint(player)) {
+      return undefined;
+    }
+    return player;
+  }
+
   private isCompatibleSavePlayer(player: SavePlayerSnapshot): boolean {
     return player.mode === "chunked" && player.mapId === this.saveMapId();
   }
@@ -1439,25 +1556,155 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.openShopMenu(storeId);
   }
 
-  private resolveEventWarpDestination(dest: number, style?: number): EventWarpDestination | undefined {
-    return resolveTeleportDestination(this.data_.teleportDestinations, dest, style);
-  }
-
-  private startEventBattle(group: number): boolean {
-    if (!this.data_.battle) {
+  private handleEncounterStep(): boolean {
+    const crossedTile = this.syncEncounterTileState();
+    if (!crossedTile || !this.canRollEncounter()) {
       return false;
     }
+    const result = rollEncounter(this.currentEncounterSector(), () => this.encounterRng.next(), {
+      isFlagSet: (flag) => this.gameFlags.isSet(flag)
+    });
+    if (!result) {
+      return false;
+    }
+    return this.startEncounterBattle(result.enemyGroup);
+  }
+
+  private canRollEncounter(): boolean {
+    return this.encounterEnabled
+      && this.encounterCooldownMs <= 0
+      && Boolean(this.data_.encounters && this.data_.battle)
+      && !this.menuState.open
+      && !this.dialogue.open
+      && !this.eventSequence?.running
+      && !this.isDoorFadeActive();
+  }
+
+  private startEncounterBattle(group: number): boolean {
+    return this.startBattleWithReturn(group, "encounter");
+  }
+
+  private startBattleWithReturn(group: number, source: BattleReturnSource): boolean {
+    if (!this.data_.battle || !this.battleGroupExists(group) || !this.player) {
+      return false;
+    }
+    this.lastEncounterGroup = group;
     this.scene.stop("ui");
     this.scene.start("battle", {
       battleData: this.data_.battle,
       groupId: group,
       characters: this.data_.characters,
+      partyMembers: this.battlePartyMembers(),
+      wallet: this.partyState.wallet,
       items: this.data_.items,
       psi: this.data_.psi,
       font: this.data_.font,
-      window: this.data_.window
+      window: this.data_.window,
+      returnTo: this.battleReturnContext(group, source)
     });
     return true;
+  }
+
+  private battleReturnContext(group: number, source: BattleReturnSource): BattleReturnContext {
+    return {
+      sceneKey: "chunked-world",
+      gameData: this.data_,
+      saveSlot: this.saveSlot,
+      saveSlots: this.saveSlots,
+      restore: {
+        player: {
+          x: this.playerState.x,
+          y: this.playerState.y,
+          facing: this.playerState.facing
+        },
+        flags: {
+          strings: this.gameFlags.list(),
+          numeric: this.gameFlags.listNums()
+        },
+        party: this.partyState.snapshot(),
+        encounter: {
+          enabled: this.encounterEnabled,
+          cooldownMs: ENCOUNTER_RETURN_COOLDOWN_MS,
+          rngSeed: this.encounterRng.state(),
+          lastEncounterGroup: group
+        },
+        source
+      }
+    };
+  }
+
+  private battlePartyMembers(): PartyMember[] | undefined {
+    if (!this.data_.characters) {
+      return undefined;
+    }
+    return this.partyState.applyToPartyMembers(this.data_.characters.characters.map(buildPartyMember));
+  }
+
+  private battleGroupExists(group: number): boolean {
+    return Number.isInteger(group) && group >= 0 && Boolean(this.data_.battle?.groups.some((entry) => entry.id === group));
+  }
+
+  private registerForceEncounter(): void {
+    this.forceEncounterHook = (groupId?: number) => this.forceEncounter(groupId);
+    (globalThis as Record<string, unknown>).__forceEncounter = this.forceEncounterHook;
+  }
+
+  private unregisterForceEncounter(): void {
+    const globals = globalThis as Record<string, unknown>;
+    if (this.forceEncounterHook && globals.__forceEncounter === this.forceEncounterHook) {
+      delete globals.__forceEncounter;
+    }
+    this.forceEncounterHook = undefined;
+  }
+
+  private forceEncounter(groupId?: number): ForceEncounterResult {
+    const enemyGroup = normalizeOptionalGroupId(groupId) ?? this.firstEncounterGroupForCurrentSector();
+    if (enemyGroup === undefined) {
+      return { started: false, reason: "no encounter group available" };
+    }
+    const started = this.startEncounterBattle(enemyGroup);
+    return started
+      ? { started: true, enemyGroup }
+      : { started: false, enemyGroup, reason: "battle data unavailable for encounter group" };
+  }
+
+  private firstEncounterGroupForCurrentSector(): number | undefined {
+    const sector = this.currentEncounterSector();
+    return sector?.subGroups[0]?.candidates[0]?.enemyGroup;
+  }
+
+  private currentEncounterSector() {
+    if (this.currentSectorIndex === undefined) {
+      return undefined;
+    }
+    return this.data_.encounters?.sectors[String(this.currentSectorIndex)];
+  }
+
+  private syncEncounterTileState(): boolean {
+    const tile = this.currentPlayerTile();
+    const previous = this.lastPlayerTile;
+    this.lastPlayerTile = tile;
+    if (this.data_.encounters) {
+      this.currentSectorIndex = sectorIndexForTile(tile.x, tile.y, this.data_.encounters);
+    } else {
+      this.currentSectorIndex = undefined;
+    }
+    return Boolean(previous && (previous.x !== tile.x || previous.y !== tile.y));
+  }
+
+  private currentPlayerTile(): TilePoint {
+    return {
+      x: Math.floor(this.playerState.x / this.world_.tileSize),
+      y: Math.floor(this.playerState.y / this.world_.tileSize)
+    };
+  }
+
+  private resolveEventWarpDestination(dest: number, style?: number): EventWarpDestination | undefined {
+    return resolveTeleportDestination(this.data_.teleportDestinations, dest, style);
+  }
+
+  private startEventBattle(group: number): boolean {
+    return this.startBattleWithReturn(group, "event");
   }
 
   private restoreActiveNpc(): void {
@@ -1619,6 +1866,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       `feet: ${Math.round(state.x)},${Math.round(state.y)} | chunk: ${this.currentChunk?.cx ?? "?"},${this.currentChunk?.cy ?? "?"} | target: ${this.interactionTarget()?.id ?? "none"}`,
       `chunks loaded: ${this.loadedChunkCount()} | active NPCs: ${this.npcRuntimes.size}`,
       `door fade: ${this.doorFadePhase}`,
+      `encounters: ${this.encounterEnabled ? "on" : "off"} | sector: ${this.currentSectorIndex ?? "?"} | cooldown: ${Math.ceil(this.encounterCooldownMs)}ms`,
       `wallet: ${this.partyState.wallet} | bank: ${this.partyState.bank} | shop: ${this.activeShopStoreId ?? "none"}`,
       `save: ${this.hasSave ? "yes" : "no"} | restored: ${this.restoredFromSave ? "yes" : "no"}`
     ];
@@ -1647,7 +1895,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private loadedChunkCount(): number {
     let count = 0;
     for (const streamed of this.chunkObjects.values()) {
-      if (streamed.background || streamed.foreground) {
+      if (isLiveGameObject(streamed.background) || isLiveGameObject(streamed.foreground)) {
         count += 1;
       }
     }
@@ -1694,6 +1942,12 @@ export class ChunkedWorldScene extends Phaser.Scene {
       loadedChunkCount: this.loadedChunkCount(),
       activeNpcCount: this.npcRuntimes.size,
       currentChunk: this.currentChunk,
+      currentSectorIndex: this.currentSectorIndex,
+      encounterEnabled: this.encounterEnabled,
+      encounterCooldownMs: Math.ceil(this.encounterCooldownMs),
+      encounterSeed: this.encounterRng.state(),
+      lastEncounterGroup: this.lastEncounterGroup,
+      returnContextActive: this.returnContextActive,
       canInteract: Boolean(target),
       interactionTargetId: target?.id,
       activeNpcId: (this.dialogue.open || this.eventSequence?.running) ? this.activeNpcDialogue?.id : undefined,
@@ -1754,6 +2008,34 @@ function vitalsForPartyMember(member: PartyMember | undefined): {
 
 function fallbackShopItem(itemId: number): Pick<ItemData, "id" | "cost"> {
   return { id: itemId, cost: 0 };
+}
+
+function isLiveGameObject<T extends Phaser.GameObjects.GameObject>(object: T | undefined): object is T {
+  return Boolean(object?.active && object.scene);
+}
+
+function emptyPartyStateSnapshot(): PartyStateSnapshot {
+  return {
+    wallet: 0,
+    bank: 0,
+    partyIds: [],
+    inventory: [],
+    equipped: [],
+    battleMembers: []
+  };
+}
+
+function encountersDisabledBySearch(search: string | undefined): boolean {
+  const params = new URLSearchParams(search ?? "");
+  return params.get("noEncounters") === "1" || params.get("encounters") === "0";
+}
+
+function normalizeOptionalGroupId(value: number | undefined): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return undefined;
+  }
+  const group = Math.floor(value);
+  return group >= 0 ? group : undefined;
 }
 
 function startupCoverageByKind(effectsByKind: Partial<Record<string, number>>): Partial<Record<string, number>> {

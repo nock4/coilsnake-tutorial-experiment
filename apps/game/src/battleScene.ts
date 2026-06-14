@@ -37,6 +37,7 @@ import {
   type BattleVictorySummary,
   type Rng
 } from "./battleLogic";
+import type { BattleReturnContext, BattleReturnOutcome } from "./battleReturn";
 import {
   DEFAULT_DAMAGE_FLASH_MS,
   DEFAULT_ENEMY_WOBBLE_AMP_PX,
@@ -59,6 +60,8 @@ import {
   type PreparedWindowFrames
 } from "./windowFrame";
 import { WINDOW_FLAVOR_CHANGE_EVENT, activeWindowFlavorId } from "./windowSettings";
+import type { PartyMember } from "./characterModel";
+import type { PartyBattleMemberSnapshot, PartyStateSnapshot } from "./partyState";
 import {
   createAnimatedBattleBackground,
   staticBattleBackgroundDebug,
@@ -143,6 +146,8 @@ export class BattleScene extends Phaser.Scene {
   private backgroundAnimation?: AnimatedBattleBackgroundHandle;
   private backgroundDebug: BattleBackgroundDebug = staticBattleBackgroundDebug();
   private windowFlavorListener?: () => void;
+  private returnTo_?: BattleReturnContext;
+  private exitOutcome_: BattleReturnOutcome | null = null;
 
   constructor() {
     super("battle");
@@ -156,6 +161,9 @@ export class BattleScene extends Phaser.Scene {
     psi?: PsiCollection;
     font?: FontCollection;
     window?: WindowCollection;
+    partyMembers?: PartyMember[];
+    wallet?: number;
+    returnTo?: BattleReturnContext;
   }): void {
     this.battleData_ = data.battleData;
     this.group_ = selectBattleGroup(data.battleData, data.groupId);
@@ -167,7 +175,12 @@ export class BattleScene extends Phaser.Scene {
     if (enemies.length === 0) {
       throw new Error(`Battle group ${this.group_.id} has no matching runtime enemy.`);
     }
-    this.battle_ = createBattleState(enemies, { characters: data.characters });
+    this.returnTo_ = data.returnTo;
+    this.battle_ = createBattleState(enemies, {
+      characters: data.characters,
+      partyMembers: data.partyMembers,
+      wallet: data.wallet
+    });
     this.enemyLastHitAt = enemies.map(() => null);
     this.enemySpriteBasePoints = [];
     this.rng_ = createSeededRng((this.group_.id + 1) * 65537 + enemies.reduce((sum, enemy) => sum + enemy.id, 0));
@@ -191,6 +204,7 @@ export class BattleScene extends Phaser.Scene {
     this.actionDelayMs_ = 0;
     this.backgroundAnimation = undefined;
     this.backgroundDebug = staticBattleBackgroundDebug();
+    this.exitOutcome_ = null;
   }
 
   preload(): void {
@@ -657,6 +671,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.phase_ === "exit-transition") {
       return;
     }
+    this.exitOutcome_ = this.currentReturnOutcome();
     this.phase_ = "exit-transition";
     this.transitionPhase_ = "exit";
     this.transitionMs_ = EXIT_TRANSITION_MS;
@@ -788,8 +803,34 @@ export class BattleScene extends Phaser.Scene {
   private exitBattle(): void {
     this.transitionGraphics?.clear();
     this.transitionPhase_ = "none";
+    if (this.returnTo_) {
+      const outcome = this.exitOutcome_ ?? this.currentReturnOutcome();
+      const restore = {
+        ...this.returnTo_.restore,
+        outcome,
+        party: buildPostBattlePartySnapshot(this.returnTo_.restore.party, this.battle_),
+        encounter: {
+          ...this.returnTo_.restore.encounter,
+          lastEncounterGroup: this.group_.id
+        }
+      };
+      this.scene.start(this.returnTo_.sceneKey, {
+        gameData: this.returnTo_.gameData,
+        saveSlot: this.returnTo_.saveSlot,
+        saveSlots: this.returnTo_.saveSlots,
+        restore
+      });
+      return;
+    }
     removeBattleSearchParam();
     this.scene.start("boot");
+  }
+
+  private currentReturnOutcome(): BattleReturnOutcome {
+    if (this.phase_ === "flee") {
+      return "flee";
+    }
+    return outcome(this.battle_) === "win" ? "win" : "lose";
   }
 
   private drawBackground(): void {
@@ -1237,6 +1278,75 @@ function selectBattleGroup(data: BattleData, groupId: number | undefined): Battl
   return data.groups.find((group) => group.id === groupId) ?? data.groups[0];
 }
 
+function buildPostBattlePartySnapshot(base: PartyStateSnapshot, battle: BattleState): PartyStateSnapshot {
+  const partyCombatants = battle.party.filter((combatant) => !combatant.isEnemy);
+  const inventoryByChar = new Map<number, number[]>(
+    base.inventory.map((entry) => [entry.charId, [...entry.itemIds]])
+  );
+  const battleMembersByChar = new Map<number, PartyBattleMemberSnapshot>(
+    (base.battleMembers ?? []).map((member) => [member.charId, cloneBattleMemberSnapshot(member)])
+  );
+
+  for (const combatant of partyCombatants) {
+    inventoryByChar.set(combatant.charId, combatant.inventory.map((itemId) => stat(itemId)));
+    battleMembersByChar.set(combatant.charId, battleMemberSnapshotFromCombatant(combatant));
+  }
+
+  const partyIds = unique([
+    ...base.partyIds,
+    ...partyCombatants.map((combatant) => stat(combatant.charId))
+  ]).sort((a, b) => a - b);
+
+  return {
+    wallet: stat(battle.wallet),
+    ...(base.bank !== undefined ? { bank: stat(base.bank) } : {}),
+    partyIds,
+    inventory: [...inventoryByChar.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([charId, itemIds]) => ({ charId, itemIds })),
+    equipped: base.equipped.map((entry) => ({ charId: entry.charId, slots: { ...entry.slots } })),
+    battleMembers: [...battleMembersByChar.values()]
+      .sort((a, b) => a.charId - b.charId)
+      .map(cloneBattleMemberSnapshot)
+  };
+}
+
+function battleMemberSnapshotFromCombatant(combatant: BattleState["party"][number]): PartyBattleMemberSnapshot {
+  return {
+    charId: stat(combatant.charId),
+    level: Math.max(1, stat(combatant.level)),
+    experience: stat(combatant.experience),
+    hp: Math.min(Math.max(1, stat(combatant.maxHp)), stat(combatant.hp.target)),
+    maxHp: Math.max(1, stat(combatant.maxHp)),
+    pp: Math.min(stat(combatant.maxPp), stat(combatant.pp)),
+    maxPp: stat(combatant.maxPp),
+    inventory: combatant.inventory.map((itemId) => stat(itemId)),
+    stats: {
+      offense: stat(combatant.stats.offense),
+      defense: stat(combatant.stats.defense),
+      speed: stat(combatant.stats.speed),
+      guts: stat(combatant.stats.guts),
+      vitality: stat(combatant.stats.vitality),
+      iq: stat(combatant.stats.iq),
+      luck: stat(combatant.stats.luck)
+    }
+  };
+}
+
+function cloneBattleMemberSnapshot(member: PartyBattleMemberSnapshot): PartyBattleMemberSnapshot {
+  return {
+    charId: member.charId,
+    level: member.level,
+    experience: member.experience,
+    hp: member.hp,
+    maxHp: member.maxHp,
+    pp: member.pp,
+    maxPp: member.maxPp,
+    inventory: [...member.inventory],
+    stats: { ...member.stats }
+  };
+}
+
 function enemiesForGroup(data: BattleData, group: BattleGroup): BattleEnemy[] {
   return group.enemyIds
     .map((enemyId) => data.enemies.find((enemy) => enemy.id === enemyId))
@@ -1415,6 +1525,13 @@ function odometer(value: number): string {
 
 function unique(values: number[]): number[] {
   return [...new Set(values)];
+}
+
+function stat(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
 }
 
 function createSeededRng(seed: number): Rng {

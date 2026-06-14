@@ -1,4 +1,6 @@
 import type { ItemData } from "@eb/schemas";
+import type { Combatant } from "./battleLogic";
+import type { PartyMember, PartyMemberStats } from "./characterModel";
 import {
   createRollingMeter,
   setTarget,
@@ -28,12 +30,25 @@ export type PartyEquipmentSnapshot = {
   slots: EquippedSlots;
 };
 
+export type PartyBattleMemberSnapshot = {
+  charId: number;
+  level: number;
+  experience: number;
+  hp: number;
+  maxHp: number;
+  pp: number;
+  maxPp: number;
+  inventory: number[];
+  stats: PartyMemberStats;
+};
+
 export type PartyStateSnapshot = {
   wallet: number;
   bank?: number;
   partyIds: number[];
   inventory: PartyInventorySnapshot[];
   equipped: PartyEquipmentSnapshot[];
+  battleMembers?: PartyBattleMemberSnapshot[];
 };
 
 export type PartyVitalsInput = {
@@ -147,6 +162,7 @@ export class PartyState {
   private readonly partyIds = new Set<number>();
   private readonly equippedByChar = new Map<number, EquippedSlots>();
   private readonly vitalsByChar = new Map<number, PartyVitals>();
+  private readonly battleMembersByChar = new Map<number, PartyBattleMemberSnapshot>();
 
   get wallet(): number {
     return this.walletValue;
@@ -167,6 +183,11 @@ export class PartyState {
   vitals(char: number): PartyVitals | undefined {
     const vitals = this.vitalsByChar.get(normalizeId(char));
     return vitals ? cloneVitals(vitals) : undefined;
+  }
+
+  battleMember(char: number): PartyBattleMemberSnapshot | undefined {
+    const member = this.battleMembersByChar.get(normalizeId(char));
+    return member ? cloneBattleMember(member) : undefined;
   }
 
   party(): number[] {
@@ -346,6 +367,60 @@ export class PartyState {
     this.partyIds.delete(normalizedChar);
   }
 
+  applyBattleResult(party: Combatant[], wallet: number): void {
+    this.walletValue = stat(wallet);
+    for (const combatant of party.filter((member) => !member.isEnemy)) {
+      const charId = normalizeId(combatant.charId);
+      const inventory = combatant.inventory.map(normalizeId);
+      this.partyIds.add(charId);
+      if (inventory.length > 0) {
+        this.inventoryByChar.set(charId, inventory);
+      } else {
+        this.inventoryByChar.delete(charId);
+      }
+      this.vitalsByChar.set(charId, {
+        hp: {
+          ...combatant.hp,
+          displayed: Math.min(positiveStat(combatant.maxHp), stat(combatant.hp.displayed)),
+          target: Math.min(positiveStat(combatant.maxHp), stat(combatant.hp.target)),
+          ratePerSec: positiveStat(combatant.hp.ratePerSec),
+          isRolling: false
+        },
+        maxHp: positiveStat(combatant.maxHp),
+        pp: Math.min(stat(combatant.maxPp), stat(combatant.pp)),
+        maxPp: stat(combatant.maxPp)
+      });
+      this.battleMembersByChar.set(charId, battleMemberFromCombatant(combatant));
+    }
+  }
+
+  applyToPartyMembers(members: PartyMember[]): PartyMember[] {
+    const activeIds = this.party();
+    const selected = activeIds.length > 0
+      ? activeIds.map((id) => members.find((member) => normalizeId(member.id) === id)).filter((member): member is PartyMember => Boolean(member))
+      : members;
+    return selected.map((member) => {
+      const charId = normalizeId(member.id);
+      const battleMember = this.battleMembersByChar.get(charId);
+      const vitals = this.vitalsByChar.get(charId);
+      const inventory = this.inventoryByChar.has(charId)
+        ? this.inventory(charId)
+        : battleMember?.inventory ?? member.inventory.map(normalizeId);
+      const stats = battleMember?.stats ?? member.stats;
+      return {
+        ...member,
+        level: battleMember?.level ?? member.level,
+        experience: battleMember?.experience ?? member.experience,
+        maxHp: battleMember?.maxHp ?? member.maxHp,
+        hp: vitals?.hp.target ?? battleMember?.hp ?? member.hp,
+        maxPp: battleMember?.maxPp ?? member.maxPp,
+        pp: vitals?.pp ?? battleMember?.pp ?? member.pp,
+        stats: { ...stats },
+        inventory: [...inventory]
+      };
+    });
+  }
+
   counts(): PartyStateCounts {
     let inventoryItems = 0;
     for (const items of this.inventoryByChar.values()) {
@@ -370,7 +445,13 @@ export class PartyState {
         .map(([charId, itemIds]) => ({ charId, itemIds: [...itemIds] })),
       equipped: [...this.equippedByChar.entries()]
         .sort(([a], [b]) => a - b)
-        .map(([charId, slots]) => ({ charId, slots: cloneEquippedSlots(slots) }))
+        .map(([charId, slots]) => ({ charId, slots: cloneEquippedSlots(slots) })),
+      battleMembers: [...this.battleMembersByChar.values()]
+        .sort((a, b) => a.charId - b.charId)
+        .map((member) => ({
+          ...cloneBattleMember(member),
+          inventory: this.inventory(member.charId)
+        }))
     };
   }
 
@@ -381,6 +462,7 @@ export class PartyState {
     this.partyIds.clear();
     this.equippedByChar.clear();
     this.vitalsByChar.clear();
+    this.battleMembersByChar.clear();
 
     for (const charId of snapshot.partyIds) {
       this.partyIds.add(normalizeId(charId));
@@ -394,6 +476,16 @@ export class PartyState {
     }
     for (const entry of snapshot.equipped) {
       this.setEquippedSlots(normalizeId(entry.charId), cloneEquippedSlots(entry.slots));
+    }
+    for (const entry of snapshot.battleMembers ?? []) {
+      const member = normalizeBattleMember(entry);
+      this.battleMembersByChar.set(member.charId, member);
+      this.vitalsByChar.set(member.charId, {
+        hp: createRollingMeter(member.hp, HP_RATE_PER_SEC),
+        maxHp: member.maxHp,
+        pp: member.pp,
+        maxPp: member.maxPp
+      });
     }
   }
 
@@ -538,6 +630,58 @@ function cloneVitals(vitals: PartyVitals): PartyVitals {
   return {
     ...vitals,
     hp: { ...vitals.hp }
+  };
+}
+
+function battleMemberFromCombatant(combatant: Combatant): PartyBattleMemberSnapshot {
+  return normalizeBattleMember({
+    charId: combatant.charId,
+    level: combatant.level,
+    experience: combatant.experience,
+    hp: combatant.hp.target,
+    maxHp: combatant.maxHp,
+    pp: combatant.pp,
+    maxPp: combatant.maxPp,
+    inventory: combatant.inventory,
+    stats: combatant.stats
+  });
+}
+
+function cloneBattleMember(member: PartyBattleMemberSnapshot): PartyBattleMemberSnapshot {
+  return {
+    charId: member.charId,
+    level: member.level,
+    experience: member.experience,
+    hp: member.hp,
+    maxHp: member.maxHp,
+    pp: member.pp,
+    maxPp: member.maxPp,
+    inventory: [...member.inventory],
+    stats: { ...member.stats }
+  };
+}
+
+function normalizeBattleMember(member: PartyBattleMemberSnapshot): PartyBattleMemberSnapshot {
+  const maxHp = positiveStat(member.maxHp);
+  const maxPp = stat(member.maxPp);
+  return {
+    charId: normalizeId(member.charId),
+    level: positiveStat(member.level),
+    experience: stat(member.experience),
+    hp: Math.min(maxHp, stat(member.hp)),
+    maxHp,
+    pp: Math.min(maxPp, stat(member.pp)),
+    maxPp,
+    inventory: member.inventory.map(normalizeId),
+    stats: {
+      offense: stat(member.stats.offense),
+      defense: stat(member.stats.defense),
+      speed: stat(member.stats.speed),
+      guts: stat(member.stats.guts),
+      vitality: stat(member.stats.vitality),
+      iq: stat(member.stats.iq),
+      luck: stat(member.stats.luck)
+    }
   };
 }
 

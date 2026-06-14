@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { ItemData } from "@eb/schemas";
 import { PartyState, sellPriceForItem } from "../src/partyState";
+import { buildPlayerCombatant } from "../src/battleLogic";
+import type { PartyMember } from "../src/characterModel";
 
 describe("PartyState", () => {
   it("tracks wallet deltas without going below zero", () => {
@@ -177,7 +179,68 @@ describe("PartyState", () => {
       reason: "notEquippable"
     });
   });
+
+  it("carries battle results into the next generated party model", () => {
+    const state = new PartyState();
+    const combatant = {
+      ...buildPlayerCombatant({
+        name: "A",
+        level: 3,
+        maxHp: 52,
+        offense: 12,
+        defense: 8,
+        speed: 5
+      }),
+      charId: 1,
+      experience: 99,
+      inventory: [10, 11],
+      hp: { displayed: 17, target: 17, ratePerSec: 36, isRolling: false, stepRemainder: 0 },
+      pp: 4,
+      maxPp: 8
+    };
+
+    state.applyBattleResult([combatant], 77);
+
+    expect(state.wallet).toBe(77);
+    expect(state.inventory(1)).toEqual([10, 11]);
+    expect(state.vitals(1)).toMatchObject({ maxHp: 52, pp: 4, maxPp: 8 });
+    expect(state.battleMember(1)).toMatchObject({ level: 3, experience: 99, hp: 17 });
+    expect(state.applyToPartyMembers([partyMember(1)])).toMatchObject([{
+      id: 1,
+      level: 3,
+      experience: 99,
+      hp: 17,
+      maxHp: 52,
+      pp: 4,
+      maxPp: 8,
+      inventory: [10, 11]
+    }]);
+  });
 });
+
+function partyMember(id: number): PartyMember {
+  return {
+    id,
+    name: "A",
+    level: 1,
+    experience: 0,
+    hp: 40,
+    maxHp: 40,
+    pp: 0,
+    maxPp: 0,
+    stats: {
+      offense: 1,
+      defense: 1,
+      speed: 1,
+      guts: 1,
+      vitality: 1,
+      iq: 1,
+      luck: 1
+    },
+    inventory: [],
+    money: 0
+  };
+}
 
 function itemData(id: number, options: {
   type?: number;

@@ -189,6 +189,12 @@ export type OverworldDebug = {
   loadedChunkCount?: number;
   activeNpcCount?: number;
   currentChunk?: { cx: number; cy: number };
+  currentSectorIndex?: number;
+  encounterEnabled?: boolean;
+  encounterCooldownMs?: number;
+  encounterSeed?: number;
+  lastEncounterGroup?: number;
+  returnContextActive?: boolean;
   /** Facing-aware: an interactable NPC is in front and in range. */
   canInteract?: boolean;
   interactionTargetId?: number;

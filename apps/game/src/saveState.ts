@@ -1,4 +1,4 @@
-import type { EquipmentSlot, EquippedSlots, PartyStateSnapshot } from "./partyState";
+import type { EquipmentSlot, EquippedSlots, PartyBattleMemberSnapshot, PartyStateSnapshot } from "./partyState";
 import type { Facing } from "./playerController";
 
 export const SAVE_STATE_SCHEMA_VERSION = 1;
@@ -176,7 +176,10 @@ function clonePartyStateSnapshot(snapshot: PartyStateSnapshot): PartyStateSnapsh
     equipped: snapshot.equipped.map((entry) => ({
       charId: entry.charId,
       slots: { ...entry.slots }
-    }))
+    })),
+    ...(snapshot.battleMembers ? {
+      battleMembers: snapshot.battleMembers.map(cloneBattleMemberSnapshot)
+    } : {})
   };
 }
 
@@ -198,10 +201,25 @@ function validatePartyStateSnapshot(value: unknown): PartyStateSnapshot | null {
   const partyIds = validateIdArray(value.partyIds, { unique: true });
   const inventory = validateInventory(value.inventory);
   const equipped = validateEquipment(value.equipped);
-  if (wallet === undefined || (value.bank !== undefined && bank === undefined) || !partyIds || !inventory || !equipped) {
+  const battleMembers = value.battleMembers === undefined ? undefined : validateBattleMembers(value.battleMembers);
+  if (
+    wallet === undefined ||
+    (value.bank !== undefined && bank === undefined) ||
+    !partyIds ||
+    !inventory ||
+    !equipped ||
+    (value.battleMembers !== undefined && !battleMembers)
+  ) {
     return null;
   }
-  return { wallet, ...(bank !== undefined ? { bank } : {}), partyIds, inventory, equipped };
+  return {
+    wallet,
+    ...(bank !== undefined ? { bank } : {}),
+    partyIds,
+    inventory,
+    equipped,
+    ...(battleMembers ? { battleMembers } : {})
+  };
 }
 
 function validatePlayerSnapshot(value: unknown): SavePlayerSnapshot | null {
@@ -303,6 +321,67 @@ function validateEquipment(value: unknown): PartyStateSnapshot["equipped"] | nul
   return equipped;
 }
 
+function validateBattleMembers(value: unknown): PartyBattleMemberSnapshot[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const members: PartyBattleMemberSnapshot[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) {
+      return null;
+    }
+    const charId = validateId(entry.charId);
+    const level = validateId(entry.level);
+    const experience = validateId(entry.experience);
+    const hp = validateId(entry.hp);
+    const maxHp = validateId(entry.maxHp);
+    const pp = validateId(entry.pp);
+    const maxPp = validateId(entry.maxPp);
+    const inventory = validateIdArray(entry.inventory);
+    const stats = validatePartyMemberStats(entry.stats);
+    if (
+      charId === undefined ||
+      level === undefined ||
+      experience === undefined ||
+      hp === undefined ||
+      maxHp === undefined ||
+      pp === undefined ||
+      maxPp === undefined ||
+      !inventory ||
+      !stats
+    ) {
+      return null;
+    }
+    members.push({ charId, level, experience, hp, maxHp, pp, maxPp, inventory, stats });
+  }
+  return members;
+}
+
+function validatePartyMemberStats(value: unknown): PartyBattleMemberSnapshot["stats"] | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const offense = validateId(value.offense);
+  const defense = validateId(value.defense);
+  const speed = validateId(value.speed);
+  const guts = validateId(value.guts);
+  const vitality = validateId(value.vitality);
+  const iq = validateId(value.iq);
+  const luck = validateId(value.luck);
+  if (
+    offense === undefined ||
+    defense === undefined ||
+    speed === undefined ||
+    guts === undefined ||
+    vitality === undefined ||
+    iq === undefined ||
+    luck === undefined
+  ) {
+    return null;
+  }
+  return { offense, defense, speed, guts, vitality, iq, luck };
+}
+
 function validateEquippedSlots(value: unknown): EquippedSlots | null {
   if (!isRecord(value)) {
     return null;
@@ -319,6 +398,20 @@ function validateEquippedSlots(value: unknown): EquippedSlots | null {
     slots[slot] = itemId;
   }
   return slots;
+}
+
+function cloneBattleMemberSnapshot(member: PartyBattleMemberSnapshot): PartyBattleMemberSnapshot {
+  return {
+    charId: member.charId,
+    level: member.level,
+    experience: member.experience,
+    hp: member.hp,
+    maxHp: member.maxHp,
+    pp: member.pp,
+    maxPp: member.maxPp,
+    inventory: [...member.inventory],
+    stats: { ...member.stats }
+  };
 }
 
 function validateStringArray(value: unknown): string[] | null {

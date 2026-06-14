@@ -99,6 +99,12 @@ export type FirstSceneDebug = {
   loadedChunkCount?: number;
   activeNpcCount?: number;
   currentChunk?: { cx: number; cy: number };
+  currentSectorIndex?: number;
+  encounterEnabled?: boolean;
+  encounterCooldownMs?: number;
+  encounterSeed?: number;
+  lastEncounterGroup?: number;
+  returnContextActive?: boolean;
   /** Facing-aware: an interactable NPC is in front and in range. */
   canInteract?: boolean;
   interactionTargetId?: number;
@@ -214,7 +220,7 @@ export type RuntimeIssues = {
 };
 
 export async function gotoFirstScene(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/?noEncounters=1");
   await expect(page.locator("canvas")).toBeVisible();
   await waitForDebug(page, (state) => state.targetReference === "robot.hello_world" || Boolean(state.error));
 }

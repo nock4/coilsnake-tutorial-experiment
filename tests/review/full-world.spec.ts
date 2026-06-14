@@ -74,7 +74,11 @@ test("door trigger teleports from Onett exterior into the destination map area",
 });
 
 async function gotoFullWorld(page: Page, spawn?: { x: number; y: number }): Promise<FirstSceneDebug> {
-  const query = spawn ? `?spawn=${spawn.x},${spawn.y}` : "";
+  const params = new URLSearchParams({ noEncounters: "1" });
+  if (spawn) {
+    params.set("spawn", `${spawn.x},${spawn.y}`);
+  }
+  const query = `?${params.toString()}`;
   await page.goto(appUrl(query));
   await expect(page.locator("canvas")).toBeVisible();
   return waitForDebug(page, (state) =>

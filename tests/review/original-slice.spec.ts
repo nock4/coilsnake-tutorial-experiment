@@ -64,7 +64,7 @@ async function gotoOriginalSlice(page: Page): Promise<FirstSceneDebug> {
   await page.addInitScript(() => {
     localStorage.clear();
   });
-  await page.goto("/");
+  await page.goto("/?noEncounters=1");
   await expect(page.locator("canvas")).toBeVisible();
   return waitForDebug(page, (state) =>
     state.mode === "world" &&

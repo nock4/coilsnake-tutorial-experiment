@@ -55,7 +55,7 @@ export default defineConfig({
     },
     {
       name: "battle-chromium",
-      testMatch: /battle\.spec\.ts/,
+      testMatch: /(?:battle|encounters)\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         baseURL: "http://127.0.0.1:5173/",
