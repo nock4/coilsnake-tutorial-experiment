@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { WorldDoor } from "@eb/schemas";
-import { doorAtFeet, feetInDoorCell, resolveDoorIntentTrigger, resolveDoorTrigger } from "../src/doorTriggers";
+import {
+  doorAtFeet,
+  feetInDoorCell,
+  resolveAdjacentDoorIntentTrigger,
+  resolveDoorWarpLanding,
+  resolveDoorIntentTrigger,
+  resolveDoorTrigger,
+  type DoorTriggerResult,
+  type DoorTriggerState
+} from "../src/doorTriggers";
+import type { CollisionGrid } from "../src/collisionOverlay";
+
+const GRID: CollisionGrid = { cellSize: 8, width: 12, height: 12 };
 
 const door: WorldDoor = {
   type: "door",
@@ -11,6 +23,13 @@ const door: WorldDoor = {
   textPointer: "$0",
   style: 1
 };
+
+function rows(width: number, height: number, solidCells: Array<[number, number]>): string[] {
+  const solid = new Set(solidCells.map(([x, y]) => `${x},${y}`));
+  return Array.from({ length: height }, (_, y) =>
+    Array.from({ length: width }, (_, x) => solid.has(`${x},${y}`) ? "1" : "0").join("")
+  );
+}
 
 describe("door trigger cells", () => {
   it("matches any feet position inside the one 8px trigger cell", () => {
@@ -151,3 +170,167 @@ describe("door movement intent", () => {
     expect(result.suppressUntilClear).toBe(true);
   });
 });
+
+describe("adjacent door movement intent", () => {
+  it("fires a door in the adjacent cell when the player presses toward it", () => {
+    const result = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 296 },
+      { dx: 0, dy: -1 },
+      [door],
+      { suppressUntilClear: false },
+      8
+    );
+
+    expect(result.door).toBe(door);
+    expect(result.suppressUntilClear).toBe(true);
+    expect(result.suppressedDoorCell).toEqual({ x: 67, y: 36 });
+  });
+
+  it("does not fire when pressing away from or parallel to the adjacent door cell", () => {
+    const away = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 296 },
+      { dx: 0, dy: 1 },
+      [door],
+      { suppressUntilClear: false },
+      8
+    );
+    const parallel = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 296 },
+      { dx: 1, dy: 0 },
+      [door],
+      { suppressUntilClear: false },
+      8
+    );
+
+    expect(away.door).toBeUndefined();
+    expect(away.suppressUntilClear).toBe(false);
+    expect(parallel.door).toBeUndefined();
+    expect(parallel.suppressUntilClear).toBe(false);
+  });
+
+  it("does not fire while idle", () => {
+    const result = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 296 },
+      { dx: 0, dy: 0 },
+      [door],
+      { suppressUntilClear: false },
+      8
+    );
+
+    expect(result.door).toBeUndefined();
+    expect(result.suppressUntilClear).toBe(false);
+  });
+
+  it("fires once while held into the same door cell and rearms after the approach clears", () => {
+    let state: DoorTriggerState = { suppressUntilClear: false };
+
+    const first = resolveAdjacentDoorIntentTrigger({ x: 540, y: 296 }, { dx: 0, dy: -1 }, [door], state, 8);
+    expect(first.door).toBe(door);
+    expect(first.suppressUntilClear).toBe(true);
+
+    state = stateFrom(first);
+    const held = resolveAdjacentDoorIntentTrigger({ x: 540, y: 296 }, { dx: 0, dy: -1 }, [door], state, 8);
+    expect(held.door).toBeUndefined();
+    expect(held.suppressUntilClear).toBe(true);
+
+    state = stateFrom(held);
+    const cleared = resolveAdjacentDoorIntentTrigger({ x: 540, y: 296 }, { dx: 1, dy: 0 }, [door], state, 8);
+    expect(cleared.door).toBeUndefined();
+    expect(cleared.suppressUntilClear).toBe(false);
+
+    state = stateFrom(cleared);
+    const retrigger = resolveAdjacentDoorIntentTrigger({ x: 540, y: 296 }, { dx: 0, dy: -1 }, [door], state, 8);
+    expect(retrigger.door).toBe(door);
+  });
+
+  it("does not fire when the door is more than one cell away", () => {
+    const result = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 304 },
+      { dx: 0, dy: -1 },
+      [door],
+      { suppressUntilClear: false },
+      8
+    );
+
+    expect(result.door).toBeUndefined();
+    expect(result.suppressUntilClear).toBe(false);
+  });
+
+  it("uses the preferred axis first for diagonal input", () => {
+    const leftDoor: WorldDoor = {
+      ...door,
+      worldPixel: { x: 528, y: 296 },
+      destinationWorldPixel: { x: 700, y: 768 }
+    };
+
+    const preferY = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 300 },
+      { dx: -1, dy: -1, preferredAxis: "y" },
+      [leftDoor, door],
+      { suppressUntilClear: false },
+      8
+    );
+    const preferX = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 300 },
+      { dx: -1, dy: -1, preferredAxis: "x" },
+      [leftDoor, door],
+      { suppressUntilClear: false },
+      8
+    );
+
+    expect(preferY.door).toBe(door);
+    expect(preferX.door).toBe(leftDoor);
+  });
+});
+
+describe("door warp landing guard", () => {
+  it("keeps an unrecoverably solid destination from moving the player while consuming the door press", () => {
+    const invalidDestinationDoor: WorldDoor = {
+      ...door,
+      destinationWorldPixel: { x: 34, y: 35 }
+    };
+    const allSolidRows = rows(GRID.width, GRID.height, Array.from({ length: GRID.width * GRID.height }, (_, index) => [
+      index % GRID.width,
+      Math.floor(index / GRID.width)
+    ]));
+    const player = { x: 540, y: 296 };
+
+    const trigger = resolveAdjacentDoorIntentTrigger(
+      player,
+      { dx: 0, dy: -1 },
+      [invalidDestinationDoor],
+      { suppressUntilClear: false },
+      GRID.cellSize
+    );
+    const landing = resolveDoorWarpLanding(
+      invalidDestinationDoor.destinationWorldPixel,
+      allSolidRows,
+      GRID,
+      { maxRingCells: 2 }
+    );
+    const finalPlayer = landing.walkable ? landing.point : player;
+
+    expect(trigger.door).toBe(invalidDestinationDoor);
+    expect(trigger.suppressUntilClear).toBe(true);
+    expect(trigger.suppressedDoorCell).toEqual({ x: 67, y: 36 });
+    expect(landing.walkable).toBe(false);
+    expect(landing.point).toEqual(invalidDestinationDoor.destinationWorldPixel);
+    expect(finalPlayer).toEqual(player);
+  });
+
+  it("keeps a snap-recoverable destination warping to the recovered walkable point", () => {
+    const solidRows = rows(GRID.width, GRID.height, [[4, 4]]);
+    const destination = { x: 34, y: 35 };
+
+    const landing = resolveDoorWarpLanding(destination, solidRows, GRID, { maxRingCells: 4 });
+
+    expect(landing.walkable).toBe(true);
+    expect(landing.point).not.toEqual(destination);
+  });
+});
+
+function stateFrom(result: DoorTriggerResult): DoorTriggerState {
+  return result.suppressedDoorCell
+    ? { suppressUntilClear: result.suppressUntilClear, suppressedDoorCell: result.suppressedDoorCell }
+    : { suppressUntilClear: result.suppressUntilClear };
+}

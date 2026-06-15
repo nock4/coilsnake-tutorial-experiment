@@ -3,7 +3,15 @@ import { isNpcVisibleForEventFlags, type ItemData, type SpriteSheet, type WorldC
 import { rollEncounter, sectorIndexForTile } from "./encounterLogic";
 import { createStatefulRng, seedFromSearch, type StatefulRng } from "./seededRng";
 import type { BattleReturnContext, BattleReturnSource, ChunkedWorldRestore } from "./battleReturn";
-import { resolveDoorIntentTrigger, type DoorTriggerState } from "./doorTriggers";
+import {
+  resolveAdjacentDoorIntentTrigger,
+  resolveDoorWarpLanding,
+  resolveDoorIntentTrigger,
+  type DoorIntentDirection,
+  type DoorWarpLanding,
+  type DoorTriggerResult,
+  type DoorTriggerState
+} from "./doorTriggers";
 import {
   buildDialogueForReference,
   buildMetadataLines,
@@ -118,10 +126,7 @@ import {
 } from "./inputModel";
 import { buildPartyMember, type PartyMember } from "./characterModel";
 import { activeWindowFlavorId } from "./windowSettings";
-import {
-  resolveWalkableFootprintDestination,
-  walkableFootprintClear
-} from "./collisionFootprint";
+import { walkableFootprintClear } from "./collisionFootprint";
 
 type ChunkLayer = "background" | "foreground";
 type WorldChunk = WorldChunked["chunks"][number];
@@ -156,6 +161,11 @@ type BlockedOptions = {
   ignoreNpcId?: number;
   includePlayer?: boolean;
   includeNpcs?: boolean;
+};
+
+type DoorWarpOptions = {
+  instant?: boolean;
+  triggerWorldPixel?: { x: number; y: number };
 };
 
 type DoorFadePhase = "none" | "fade-out" | "fade-in";
@@ -197,6 +207,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private keys?: Record<string, Phaser.Input.Keyboard.Key>;
   private doorTriggerState: DoorTriggerState = { suppressUntilClear: false };
   private lastDoor?: { from: { x: number; y: number }; to: { x: number; y: number } };
+  private warnedInvalidDoorWarps = new Set<string>();
   private doorFadePhase: DoorFadePhase = "none";
   private doorFadeOverlay?: Phaser.GameObjects.Rectangle;
   private doorFadeTween?: Phaser.Tweens.Tween;
@@ -954,18 +965,36 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (this.menuState.open || this.dialogue.open || this.eventSequence?.running || this.isDoorFadeActive()) {
       return false;
     }
-    const intendedFeet = this.intendedMoveFeet(input, deltaMs);
-    if (!intendedFeet) {
+    if (this.playerState.inputLocked) {
       return false;
     }
-    const result = resolveDoorIntentTrigger(
+    const movement = this.doorIntentDirection(input);
+    let result = resolveAdjacentDoorIntentTrigger(
       this.playerState,
-      intendedFeet,
+      movement,
       this.world_.doors,
       this.doorTriggerState,
       this.collisionCellSize
     );
-    this.doorTriggerState = { suppressUntilClear: result.suppressUntilClear };
+    if (movement.dx === 0 && movement.dy === 0) {
+      this.setDoorTriggerState(result);
+      return false;
+    }
+    if (!result.door && !result.suppressUntilClear) {
+      const intendedFeet = this.intendedMoveFeet(input, deltaMs);
+      if (!intendedFeet) {
+        this.setDoorTriggerState(result);
+        return false;
+      }
+      result = resolveDoorIntentTrigger(
+        this.playerState,
+        intendedFeet,
+        this.world_.doors,
+        result,
+        this.collisionCellSize
+      );
+    }
+    this.setDoorTriggerState(result);
     if (!result.door) {
       return false;
     }
@@ -974,8 +1003,39 @@ export class ChunkedWorldScene extends Phaser.Scene {
       y: result.door.destinationWorldPixel.y,
       worldPixel: result.door.destinationWorldPixel,
       direction: result.door.direction
+    }, {
+      triggerWorldPixel: result.door.worldPixel
     });
     return true;
+  }
+
+  private setDoorTriggerState(result: DoorTriggerResult): void {
+    this.doorTriggerState = result.suppressedDoorCell
+      ? { suppressUntilClear: result.suppressUntilClear, suppressedDoorCell: result.suppressedDoorCell }
+      : { suppressUntilClear: result.suppressUntilClear };
+  }
+
+  private doorIntentDirection(input: MoveInput): DoorIntentDirection {
+    const dx = ((input.right ? 1 : 0) - (input.left ? 1 : 0)) as DoorIntentDirection["dx"];
+    const dy = ((input.down ? 1 : 0) - (input.up ? 1 : 0)) as DoorIntentDirection["dy"];
+    const preferredAxis = this.doorIntentPreferredAxis(dx, dy);
+    return preferredAxis ? { dx, dy, preferredAxis } : { dx, dy };
+  }
+
+  private doorIntentPreferredAxis(
+    dx: DoorIntentDirection["dx"],
+    dy: DoorIntentDirection["dy"]
+  ): DoorIntentDirection["preferredAxis"] {
+    if (dx === 0 || dy === 0) {
+      return undefined;
+    }
+    if ((this.playerState.facing === "up" && dy < 0) || (this.playerState.facing === "down" && dy > 0)) {
+      return "y";
+    }
+    if ((this.playerState.facing === "left" && dx < 0) || (this.playerState.facing === "right" && dx > 0)) {
+      return "x";
+    }
+    return "x";
   }
 
   private intendedMoveFeet(input: MoveInput, deltaMs: number): { x: number; y: number } | undefined {
@@ -996,20 +1056,36 @@ export class ChunkedWorldScene extends Phaser.Scene {
     };
   }
 
-  private applyDoorWarp(destination: EventWarpDestination, options: { instant?: boolean } = {}): void {
-    if (options.instant) {
-      this.applyDoorWarpInstant(destination);
+  private applyDoorWarp(destination: EventWarpDestination, options: DoorWarpOptions = {}): void {
+    const landing = this.resolveWalkableWarpPoint(destination.worldPixel ?? destination);
+    if (!landing.walkable) {
+      this.warnInvalidDoorWarp(destination, landing.point, options.triggerWorldPixel);
       return;
     }
-    if (!this.beginDoorFade(destination)) {
-      this.applyDoorWarpInstant(destination);
+    if (options.instant) {
+      this.applyDoorWarpInstant(destination, landing, options);
+      return;
+    }
+    if (!this.beginDoorFade(destination, landing, options)) {
+      this.applyDoorWarpInstant(destination, landing, options);
     }
   }
 
-  private applyDoorWarpInstant(destination: EventWarpDestination): void {
+  private applyDoorWarpInstant(
+    destination: EventWarpDestination,
+    landing = this.resolveWalkableWarpPoint(destination.worldPixel ?? destination),
+    options: DoorWarpOptions = {}
+  ): boolean {
+    if (!landing.walkable) {
+      this.warnInvalidDoorWarp(destination, landing.point, options.triggerWorldPixel);
+      return false;
+    }
     const from = { x: this.playerState.x, y: this.playerState.y };
-    const to = this.resolveWalkableWarpPoint(destination.worldPixel ?? destination);
-    this.doorTriggerState = { suppressUntilClear: true };
+    const to = landing.point;
+    const suppressedDoorCell = this.doorTriggerState.suppressedDoorCell;
+    this.doorTriggerState = from.x === to.x && from.y === to.y && suppressedDoorCell
+      ? { suppressUntilClear: true, suppressedDoorCell }
+      : { suppressUntilClear: true };
     this.playerState.x = to.x;
     this.playerState.y = to.y;
     this.playerState.velocityX = 0;
@@ -1032,9 +1108,14 @@ export class ChunkedWorldScene extends Phaser.Scene {
       }
       this.player.setDepth(to.y);
     }
+    return true;
   }
 
-  private beginDoorFade(destination: EventWarpDestination): boolean {
+  private beginDoorFade(
+    destination: EventWarpDestination,
+    landing: DoorWarpLanding,
+    options: DoorWarpOptions = {}
+  ): boolean {
     if (this.isDoorFadeActive()) {
       return false;
     }
@@ -1050,7 +1131,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
         alpha: 1,
         duration: DOOR_FADE_HALF_MS,
         ease: "Linear",
-        onComplete: () => this.finishDoorFadeOut(destination)
+        onComplete: () => this.finishDoorFadeOut(destination, landing, options)
       });
       return true;
     } catch {
@@ -1059,9 +1140,16 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
   }
 
-  private finishDoorFadeOut(destination: EventWarpDestination): void {
+  private finishDoorFadeOut(
+    destination: EventWarpDestination,
+    landing: DoorWarpLanding,
+    options: DoorWarpOptions = {}
+  ): void {
     try {
-      this.applyDoorWarpInstant(destination);
+      if (!this.applyDoorWarpInstant(destination, landing, options)) {
+        this.finishDoorFade();
+        return;
+      }
       this.doorFadePhase = "fade-in";
       this.publish();
       const overlay = this.ensureDoorFadeOverlay();
@@ -1119,6 +1207,29 @@ export class ChunkedWorldScene extends Phaser.Scene {
 
   private canReleaseDoorFadeLock(): boolean {
     return !this.menuState.open && !this.dialogue.open && !this.eventSequence?.running;
+  }
+
+  private warnInvalidDoorWarp(
+    destination: EventWarpDestination,
+    resolved: { x: number; y: number },
+    triggerWorldPixel?: { x: number; y: number }
+  ): void {
+    const raw = destination.worldPixel ?? destination;
+    const triggerKey = triggerWorldPixel ? `${triggerWorldPixel.x},${triggerWorldPixel.y}` : `${this.playerState.x},${this.playerState.y}`;
+    const warningKey = `${triggerKey}->${raw.x},${raw.y}`;
+    if (this.warnedInvalidDoorWarps.has(warningKey)) {
+      return;
+    }
+    this.warnedInvalidDoorWarps.add(warningKey);
+    console.warn(
+      "Door warp aborted: destination did not resolve to a walkable footprint.",
+      {
+        triggerWorldPixel: triggerWorldPixel ?? { x: this.playerState.x, y: this.playerState.y },
+        destinationWorldPixel: { x: raw.x, y: raw.y },
+        resolvedWorldPixel: resolved,
+        direction: destination.direction
+      }
+    );
   }
 
   private actorBodyBlocked(x: number, y: number, bodyX: number, bodyY: number): boolean {
@@ -2098,8 +2209,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
     };
   }
 
-  private resolveWalkableWarpPoint(destination: { x: number; y: number }): { x: number; y: number } {
-    return resolveWalkableFootprintDestination(
+  private resolveWalkableWarpPoint(destination: { x: number; y: number }): DoorWarpLanding {
+    return resolveDoorWarpLanding(
       this.clampSpawn(destination),
       this.solidRows,
       this.collisionGrid(),
