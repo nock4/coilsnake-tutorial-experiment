@@ -38,8 +38,9 @@ Parity splits cleanly into two layers:
 1. ~~**Bitmap font.**~~ DONE — real EB bitmap font everywhere.
 2. ~~**Window frame art.**~~ DONE — real EB 9-slice frames (flavor 0). Flavor switching +
    non-default flavor interior colors remain future work.
-3. **Selection cursor.** Still text `>` — no clean EB hand-cursor art was identifiable;
-   not invented. (open, low priority) [6528f59 skipped]
+3. ~~**Selection cursor.**~~ DONE — the text `>` (which rendered as a stray `"` in the EB
+   font) is replaced by a drawn, blinking, right-pointing EB-style triangle in a reserved
+   gutter, shared by all battle menus + the overworld main menu. [CU6 014e164]
 4. ~~**Battle background animation.**~~ DONE — scroll + bounded scanline warp from the
    bg distortion/scroll tables. [e6fd0ee]
 5. ~~**Enemy damage flash.**~~ DONE — white-tint flash on hit + subtle idle wobble.
@@ -86,5 +87,46 @@ teleports generally (verify the unit before changing — low payoff for the intr
 relevant to story warps).
 
 ### Remaining open (low priority)
-Hand cursor (no clean art), dev chrome overlay, true enemy-frame animation, BG palette
-cycling; and the deferred own-music/audio phase.
+Dev chrome overlay, true enemy-frame animation, BG palette cycling; and the deferred
+own-music/audio phase.
+
+## UX / playability fix pass (CU1–CU6) — 2026-06-15
+
+Triggered by hands-on playtest feedback (controls, collision feel, NPCs, menus, doors,
+battle). All six committed + verified in-browser on the full build.
+
+- **CU1 — controls + input** [a7618b3]: Z = A/confirm, X = B/cancel (Space/Enter/Esc/Backspace
+  aliases); edge-triggered discrete input so every menu/dialogue advance needs a fresh press
+  (no key-repeat auto-advance), in battle too.
+- **CU2 — window sizing** [6a4f8cd]: removed the double-scale (canvas is already 2× EB native);
+  menus content-fit (compact, top-left), dialogue is a wide shallow bottom strip, battle
+  windows snug — EB-native proportions.
+- **CU3 — NPC spin** [1a6135c]: wandering NPCs no longer re-roll facing every frame when
+  blocked; direction changes are gated to the step timer (~1.2 s EB-like cadence).
+- **CU4 — collision footprint** [5b6f136]: the collision foot box was floating above the feet
+  (shins), so the player clipped tree/cliff bases and stopped ~10 px early going north.
+  Re-anchored the box to the feet — collision DATA was already correct (verified: house +
+  field trees solid; walk-behind-tree-tops preserved).
+- **CU5 — door triggers + void guard** [d389309]: ~90 % of EB door cells are solid; the trigger
+  now fires when pressing *toward* an adjacent door cell (EB's "walk into the door"). A guard
+  aborts the warp (instead of stranding the player) when the destination resolves to a
+  non-walkable void.
+- **CU6 — battle/menu visual parity** [014e164]: blinking EB triangle cursor (replaces the `"`),
+  battle background fills the full screen behind the windows (no black band), enemies
+  flash/fade/vanish on defeat before the victory window.
+
+Diagnosed as **not a bug** (correct EB collision): "can't go north to Ness's house" — the house
+is a solid block directly NW of the start; the road goes *around* it, and you *enter* via the door.
+
+### Open follow-ons surfaced by this pass
+- **CU-DEST — door destination data (RE):** door TRIGGERS work, but ~26 % of door *destinations*
+  in the EB data resolve to non-walkable void (e.g. Ness's-house door → (900,49), the top sky
+  border). Walkable destinations DO load real navigable sub-areas, so interiors are present —
+  this is per-door destination correctness, needing EB ground-truth (which interior each door
+  leads to). Possibly related to the scripted-teleport coordinate-unit lead noted above. See
+  memory `door-destination-data-issue`.
+- **Battle command completeness:** EB's command menu includes Auto Fight + Defend (+ Spy/etc.);
+  ours is BASH/PSI/GOODS/RUN. Adding them is *gameplay* (new behaviors), scoped separately.
+- **Build cleanup (CU7 candidate):** default `pnpm dev` (build:eb-fullworld) omits battle/character/
+  item data — only `pnpm dev:full` is complete, and `pnpm test` clobbers it (shared output dir).
+  Make the full build the default or split output dirs. See memory `build-clobber-gotcha`.
