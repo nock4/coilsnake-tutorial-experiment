@@ -125,9 +125,30 @@ is a solid block directly NW of the start; the road goes *around* it, and you *e
   walkability 37% → 100%; the Onett house door now opens into the real house interior.
   [CU-DEST 0cd7f2a]. Residual: a handful of over-range outliers could still need per-door
   ground-truth if a bad warp shows up in play. See memory `door-destination-data-issue`.
-- **Battle command completeness:** ~~Auto Fight + Defend~~ DONE [CU-CMD cc54ffe] — menu is now
-  BASH/GOODS/AUTO/PSI/DEFEND/RUN; DEFEND halves a round of incoming damage, AUTO auto-attacks
-  the party per round. Remaining: character-specific commands (Spy, Pray/Paula, Shoot+Bottle
-  Rocket/Jeff, Mirror/Poo) — per-character command sets, a separate gameplay task.
+- ~~**Battle command completeness:**~~ DONE — AUTO + DEFEND [CU-CMD cc54ffe], then per-character
+  command sets [CU-CMD2 79840ed]: Ness/Paula/Poo PSI, Jeff SPY (no PSI), Paula PRAY, Poo MIRROR.
+  SPY is faithful (reveals enemy HP/Off/Def); PRAY/MIRROR are documented bounded approximations
+  of EB's larger random/transform mechanics (future RE pass).
 - ~~**Build cleanup (CU7):**~~ DONE — `build:eb-fullworld` is the single complete build used by
   `pnpm dev`, `pnpm build`, and pretest hooks. `build:eb-full` and `dev:full` remain aliases.
+
+## Menu parity pass (CU-MENU) — 2026-06-15
+
+Hands-on note: "menus not at parity." Audited all four axes (colors, border, layout, screens).
+- **CU-MENU-1 [415aab1] — window colors (the dominant tell).** The window frame PNGs are sprite
+  sheets; the converter mis-sampled a sprite pixel (tan rgb 200,144,112) as the interior and
+  filled every window with it. Decoded the art: EB's interior is a dark near-black fill with
+  white text; the flavor tints the BORDER. Fixed the extraction (flavor 0 interior → rgb 16,16,16,
+  all flavors dark) → menus/dialogue/battle now render the EB dark window + white text + sage/white
+  rounded border + arrow cursor.
+- **CU-MENU-2 [f0d74bb] — Status + Talk.** Status was an all-party dump (+Wallet/Bank in one
+  window); now EB per-character: member-select → single-character page (Name/Level, HP, PP, EXP,
+  Offense/Defense/Speed/Guts/Luck/Vitality/IQ), no Wallet/Bank. Talk was "Not implemented yet";
+  now reuses the facing-NPC dialogue path with a "There's no one to talk to." fallback.
+- **CU-MENU-3 [5d42ba3] — drill-down + Equip slots + spacing.** Goods/PSI/Equip now member-select →
+  detail (EB drills char→detail). Equip shows EB slots Weapon/Body/Arms/Other (equipped item or "-")
+  → equippable list per slot. Fixed Status label spacing (the "|" separator rendered as a music-note
+  glyph in the EB font; now clean spaced fields).
+
+Open menu decision: vanilla EB's pause menu is exactly Talk/Goods/PSI/Equip/Check/Status; our
+ATM + Save entries are non-EB conveniences (kept for usability, pending a parity-vs-usability call).
