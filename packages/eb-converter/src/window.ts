@@ -22,7 +22,9 @@ export const WINDOW_CORNER_RECT: WindowRect = { x: 32, y: 0, w: 8, h: 8 };
 export const WINDOW_H_EDGE_RECT: WindowRect = { x: 40, y: 0, w: 8, h: 8 };
 export const WINDOW_V_EDGE_RECT: WindowRect = { x: 48, y: 0, w: 8, h: 8 };
 export const WINDOW_MORE_ARROW_RECT: WindowRect = { x: 32, y: 8, w: 8, h: 8 };
-const WINDOW_INTERIOR_FILL_RECT: WindowRect = { x: 16, y: 0, w: 8, h: 8 };
+const WINDOW_FRAME_COLOR_RECTS = [WINDOW_CORNER_RECT, WINDOW_H_EDGE_RECT, WINDOW_V_EDGE_RECT] as const;
+const WINDOW_INTERIOR_DARK_MAX_CHANNEL = 64;
+const WINDOW_INTERIOR_DARK_MAX_LUMA = 48;
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
@@ -45,6 +47,17 @@ type WindowCopy = {
   destination: string;
 };
 
+type WindowFlavorDetection = {
+  flavor: WindowFlavor;
+  borderColor?: RgbColor;
+};
+
+type ColorCount = {
+  color: RgbColor;
+  count: number;
+  firstIndex: number;
+};
+
 export async function buildWindowData(options: WindowBuildOptions): Promise<WindowCollection | undefined> {
   const windowsDir = path.join(options.projectAbs, "WindowGraphics");
   if (!existsSync(windowsDir)) {
@@ -52,6 +65,7 @@ export async function buildWindowData(options: WindowBuildOptions): Promise<Wind
   }
 
   const flavors: WindowFlavor[] = [];
+  const detections: WindowFlavorDetection[] = [];
   const copies: WindowCopy[] = [];
   for (const id of WINDOW_FLAVOR_IDS) {
     const sourcePng = path.join(windowsDir, `Windows1_${id}.png`);
@@ -61,11 +75,13 @@ export async function buildWindowData(options: WindowBuildOptions): Promise<Wind
 
     const file = `${WINDOW_ASSET_DIR}/${id}.png`;
     const image = decodeIndexedPng(await readFile(sourcePng), `Windows1_${id}.png`);
-    flavors.push(detectWindowFlavor({
+    const detection = detectWindowFlavorDetails({
       id,
       file,
       image
-    }));
+    });
+    flavors.push(detection.flavor);
+    detections.push(detection);
     copies.push({
       source: sourcePng,
       destination: path.join(options.outAbs, file)
@@ -75,7 +91,7 @@ export async function buildWindowData(options: WindowBuildOptions): Promise<Wind
   if (!flavors.some((flavor) => flavor.id === DEFAULT_WINDOW_FLAVOR_ID)) {
     return undefined;
   }
-  assertDistinctInteriorColors(flavors);
+  assertWindowFlavorSanity(detections);
 
   await mkdir(path.join(options.outAbs, WINDOW_ASSET_DIR), { recursive: true });
   await Promise.all(copies.map((copy) => copyFile(copy.source, copy.destination)));
@@ -234,7 +250,15 @@ export function detectWindowFlavor(input: {
   file: string;
   image: IndexedPngImage;
 }): WindowFlavor {
-  for (const rect of [WINDOW_INTERIOR_FILL_RECT, WINDOW_CORNER_RECT, WINDOW_H_EDGE_RECT, WINDOW_V_EDGE_RECT, WINDOW_MORE_ARROW_RECT]) {
+  return detectWindowFlavorDetails(input).flavor;
+}
+
+function detectWindowFlavorDetails(input: {
+  id: number;
+  file: string;
+  image: IndexedPngImage;
+}): WindowFlavorDetection {
+  for (const rect of [WINDOW_CORNER_RECT, WINDOW_H_EDGE_RECT, WINDOW_V_EDGE_RECT, WINDOW_MORE_ARROW_RECT]) {
     assertRectWithin(input.image, rect);
   }
 
@@ -265,7 +289,10 @@ export function detectWindowFlavor(input: {
   if (Object.keys(detectionNotes).length > 0) {
     flavor.detectionNotes = detectionNotes;
   }
-  return flavor;
+  return {
+    flavor,
+    borderColor: sampleBorderColor(input.image, exteriorKey)
+  };
 }
 
 function unfilterByte(filter: number, raw: number, left: number, up: number, upLeft: number): number {
@@ -317,55 +344,96 @@ function rectContainsColor(image: IndexedPngImage, rect: WindowRect, expected: R
 }
 
 function sampleInteriorColor(image: IndexedPngImage, exteriorKey: RgbColor): RgbColor {
-  const interiorRect = {
-    x: WINDOW_CORNER_RECT.x + Math.max(0, WINDOW_CORNER_RECT.w - 3),
-    y: WINDOW_CORNER_RECT.y + Math.max(0, WINDOW_CORNER_RECT.h - 3),
-    w: Math.min(3, WINDOW_CORNER_RECT.w),
-    h: Math.min(3, WINDOW_CORNER_RECT.h)
-  };
-  return modalNonKeyColor(image, WINDOW_INTERIOR_FILL_RECT, exteriorKey)
-    ?? modalNonKeyColor(image, interiorRect, exteriorKey)
-    ?? modalNonKeyColor(image, WINDOW_CORNER_RECT, exteriorKey)
+  return modalNonKeyColor(image, WINDOW_FRAME_COLOR_RECTS, exteriorKey, isDarkWindowInteriorColor)
     ?? failInteriorColor();
 }
 
 function modalNonKeyColor(
   image: IndexedPngImage,
-  rect: WindowRect,
-  exteriorKey: RgbColor
+  rects: readonly WindowRect[],
+  exteriorKey: RgbColor,
+  includeColor: (color: RgbColor) => boolean = () => true
 ): RgbColor | undefined {
-  const counts = new Map<string, { color: RgbColor; count: number; firstIndex: number }>();
+  return collectNonKeyColorCounts(image, rects, exteriorKey)
+    .filter((entry) => includeColor(entry.color))
+    .sort((a, b) =>
+      b.count - a.count ||
+      colorLuma(a.color) - colorLuma(b.color) ||
+      maxChannel(a.color) - maxChannel(b.color) ||
+      a.firstIndex - b.firstIndex
+    )[0]?.color;
+}
+
+function collectNonKeyColorCounts(
+  image: IndexedPngImage,
+  rects: readonly WindowRect[],
+  exteriorKey: RgbColor
+): ColorCount[] {
+  const counts = new Map<string, ColorCount>();
   let firstIndex = 0;
-  for (let y = rect.y; y < rect.y + rect.h; y += 1) {
-    for (let x = rect.x; x < rect.x + rect.w; x += 1) {
-      const color = colorAt(image, x, y);
-      if (sameColor(color, exteriorKey)) {
-        continue;
+  for (const rect of rects) {
+    for (let y = rect.y; y < rect.y + rect.h; y += 1) {
+      for (let x = rect.x; x < rect.x + rect.w; x += 1) {
+        const color = colorAt(image, x, y);
+        if (sameColor(color, exteriorKey)) {
+          continue;
+        }
+        const key = colorKey(color);
+        const entry = counts.get(key);
+        if (entry) {
+          entry.count += 1;
+        } else {
+          counts.set(key, { color, count: 1, firstIndex });
+        }
+        firstIndex += 1;
       }
-      const key = colorKey(color);
-      const entry = counts.get(key);
-      if (entry) {
-        entry.count += 1;
-      } else {
-        counts.set(key, { color, count: 1, firstIndex });
-      }
-      firstIndex += 1;
     }
   }
+  return [...counts.values()];
+}
 
-  return [...counts.values()]
-    .sort((a, b) => b.count - a.count || a.firstIndex - b.firstIndex)[0]?.color;
+function sampleBorderColor(image: IndexedPngImage, exteriorKey: RgbColor): RgbColor | undefined {
+  return modalNonKeyColor(image, WINDOW_FRAME_COLOR_RECTS, exteriorKey, (color) => !isDarkWindowInteriorColor(color));
 }
 
 function failInteriorColor(): never {
-  throw new Error("Window corner tile does not contain a non-key interior color.");
+  throw new Error("Window frame tiles do not contain a dark non-key interior fill color.");
 }
 
-function assertDistinctInteriorColors(flavors: WindowFlavor[]): void {
-  const unique = new Set(flavors.map((flavor) => colorKey(flavor.interiorColor)));
-  if (unique.size !== flavors.length) {
-    throw new Error(`Window interior color extraction expected ${flavors.length} distinct flavor colors; detected ${unique.size}.`);
+function assertWindowFlavorSanity(detections: WindowFlavorDetection[]): void {
+  assertDarkInteriorColors(detections.map((detection) => detection.flavor));
+  assertBorderColorsDiffer(detections);
+}
+
+function assertDarkInteriorColors(flavors: WindowFlavor[]): void {
+  const invalid = flavors.find((flavor) => !isDarkWindowInteriorColor(flavor.interiorColor));
+  if (invalid) {
+    throw new Error(`Windows1_${invalid.id}.png interior color must be dark near-black; detected ${colorKey(invalid.interiorColor)}.`);
   }
+}
+
+function assertBorderColorsDiffer(detections: WindowFlavorDetection[]): void {
+  if (detections.length <= 1) {
+    return;
+  }
+  const unique = new Set(detections.flatMap((detection) =>
+    detection.borderColor ? [colorKey(detection.borderColor)] : []
+  ));
+  if (unique.size < 2) {
+    throw new Error(`Window border color extraction expected flavor border variation; detected ${unique.size} border color.`);
+  }
+}
+
+function isDarkWindowInteriorColor(color: RgbColor): boolean {
+  return maxChannel(color) <= WINDOW_INTERIOR_DARK_MAX_CHANNEL && colorLuma(color) <= WINDOW_INTERIOR_DARK_MAX_LUMA;
+}
+
+function maxChannel(color: RgbColor): number {
+  return Math.max(color.r, color.g, color.b);
+}
+
+function colorLuma(color: RgbColor): number {
+  return (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
 }
 
 function sameColor(left: RgbColor, right: RgbColor): boolean {
