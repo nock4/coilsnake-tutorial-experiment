@@ -24,6 +24,11 @@ import {
   type CanvasRect,
   contentFitWindowRect
 } from "./windowLayout";
+import {
+  MENU_CURSOR_GUTTER_PX,
+  menuCursorVisible,
+  selectionArrowTriangle
+} from "./battleVisuals";
 
 const MONO = "Menlo, Consolas, monospace";
 const UI_LINE_SPACING = 2;
@@ -43,6 +48,11 @@ const MENU_TITLE_GAP = 8;
 const MENU_ITEM_LINE_HEIGHT = 18;
 const MENU_MAX_VISIBLE_ITEMS = 8;
 type GameText = Phaser.GameObjects.Text | BitmapFontText;
+type MenuCursorSlot = {
+  x: number;
+  rowTop: number;
+  rowHeight: number;
+};
 
 /**
  * Camera-independent overlay: dialogue window, interaction prompt, and the
@@ -65,8 +75,10 @@ export class UiScene extends Phaser.Scene {
   private panelText?: Phaser.GameObjects.Text;
   private badgeText?: Phaser.GameObjects.Text;
   private menuGraphics?: Phaser.GameObjects.Graphics;
+  private menuCursorGraphics?: Phaser.GameObjects.Graphics;
   private menuWindows: Phaser.GameObjects.Container[] = [];
   private menuTexts: GameText[] = [];
+  private menuCursorSlots: MenuCursorSlot[] = [];
   private windowFlavorListener?: () => void;
   private lastSignature = "";
 
@@ -142,6 +154,7 @@ export class UiScene extends Phaser.Scene {
       lineSpacing: 3
     }).setDepth(13);
     this.menuGraphics = this.add.graphics().setDepth(14);
+    this.menuCursorGraphics = this.add.graphics().setDepth(16);
   }
 
   private handleWindowFlavorChanged(): void {
@@ -172,6 +185,7 @@ export class UiScene extends Phaser.Scene {
     const menuScreens = world.menuRenderStack();
     const signature = `${open}|${text}|${footer}|${showAdvanceIndicator}|${world.prompt}|${panelVisible}|${runtimeLines.join("/")}|${JSON.stringify(menuScreens)}`;
     if (signature === this.lastSignature) {
+      this.renderMenuCursors();
       return;
     }
     this.lastSignature = signature;
@@ -180,6 +194,7 @@ export class UiScene extends Phaser.Scene {
     this.drawDialogue(open, text, footer, showAdvanceIndicator);
     this.drawPanel(panelVisible ? [...world.statusLines(), "", ...world.metadataLines(), "", ...runtimeLines] : []);
     this.drawMenu(menuScreens);
+    this.renderMenuCursors();
   }
 
   private drawDialogue(open: boolean, text: string, footer: string, showAdvanceIndicator: boolean): void {
@@ -279,7 +294,9 @@ export class UiScene extends Phaser.Scene {
       text.destroy();
     }
     this.menuTexts = [];
+    this.menuCursorSlots = [];
     if (screens.length === 0) {
+      this.menuCursorGraphics?.clear();
       return;
     }
 
@@ -316,17 +333,25 @@ export class UiScene extends Phaser.Scene {
       const visibleItems = screen.items.slice(start, start + maxItems);
       visibleItems.forEach((item, itemIndex) => {
         const selected = item.selected && item.enabled;
-        const prefix = selected ? ">" : " ";
-        const label = `${prefix} ${item.label}`;
-        this.menuTexts.push(this.createGameText(x + textInset, itemTop + itemIndex * lineHeight, label, {
+        const label = item.label;
+        const rowTop = itemTop + itemIndex * lineHeight;
+        if (selected) {
+          this.menuCursorSlots.push({
+            x: x + textInset + 1,
+            rowTop,
+            rowHeight: lineHeight
+          });
+        }
+        const textWidth = Math.max(1, boxWidth - textInset * 2 - MENU_CURSOR_GUTTER_PX);
+        this.menuTexts.push(this.createGameText(x + textInset + MENU_CURSOR_GUTTER_PX, rowTop, label, {
           fontFamily: MONO,
           fontSize,
           color: item.enabled ? "#f8fafc" : "#94a3b8",
-          fixedWidth: boxWidth - textInset * 2
+          fixedWidth: textWidth
         }, {
           scale: EB_BITMAP_TEXT_SCALE,
           tint: item.enabled ? 0xf8fafc : 0x94a3b8,
-          maxWidth: boxWidth - textInset * 2
+          maxWidth: textWidth
         }).setDepth(15));
       });
       nextX = Math.min(this.scale.width - MENU_RIGHT_MARGIN - 64, x + boxWidth + MENU_GAP);
@@ -364,7 +389,7 @@ export class UiScene extends Phaser.Scene {
     const titleHeight = showTitle ? lineHeight + MENU_TITLE_GAP : 0;
     const maxItemLines = Math.max(1, Math.floor((maxHeight - MENU_VERTICAL_PADDING * 2 - titleHeight) / lineHeight));
     const visibleItemCount = Math.min(screen.items.length, MENU_MAX_VISIBLE_ITEMS, maxItemLines);
-    const itemLabels = screen.items.map((item) => `> ${item.label}`);
+    const itemLabels = screen.items.map((item) => item.label);
     const labels = showTitle ? [screen.title, ...itemLabels] : itemLabels;
 
     return contentFitWindowRect({
@@ -375,7 +400,7 @@ export class UiScene extends Phaser.Scene {
       lineHeight,
       lineCount: visibleItemCount + (showTitle ? 1 : 0),
       extraHeight: showTitle ? MENU_TITLE_GAP : 0,
-      paddingX: MENU_HORIZONTAL_PADDING,
+      paddingX: MENU_HORIZONTAL_PADDING + MENU_CURSOR_GUTTER_PX,
       paddingY: MENU_VERTICAL_PADDING,
       minWidth: 64,
       maxWidth: Math.max(64, this.scale.width - x - MENU_RIGHT_MARGIN),
@@ -398,6 +423,28 @@ export class UiScene extends Phaser.Scene {
 
   private menuLineHeight(): number {
     return MENU_ITEM_LINE_HEIGHT;
+  }
+
+  private renderMenuCursors(): void {
+    const graphics = this.menuCursorGraphics;
+    if (!graphics) {
+      return;
+    }
+    graphics.clear();
+    if (!menuCursorVisible(this.time.now)) {
+      return;
+    }
+    for (const slot of this.menuCursorSlots) {
+      this.drawMenuCursorArrow(graphics, slot);
+    }
+  }
+
+  private drawMenuCursorArrow(graphics: Phaser.GameObjects.Graphics, slot: MenuCursorSlot): void {
+    const triangle = selectionArrowTriangle(slot.x, slot.rowTop, slot.rowHeight);
+    graphics.fillStyle(0xf8fafc, 1);
+    graphics.fillTriangle(triangle.x1, triangle.y1, triangle.x2, triangle.y2, triangle.x3, triangle.y3);
+    graphics.lineStyle(1, 0x111827, 1);
+    graphics.strokeTriangle(triangle.x1, triangle.y1, triangle.x2, triangle.y2, triangle.x3, triangle.y3);
   }
 
   private createGameText(
