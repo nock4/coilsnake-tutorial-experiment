@@ -3,6 +3,7 @@ import { loadGameData, parseManifest, type GameData } from "./loader";
 import { publishDebug } from "./state";
 import { ChunkedWorldScene } from "./chunkedWorldScene";
 import { IntroScene, isIntroDisabled, shouldStartIntro } from "./introScene";
+import { decideNewGameOpening, resolveNewGameOpeningStart } from "./newGameOpening";
 import { WorldScene } from "./worldScene";
 import { UiScene } from "./uiScene";
 import { FallbackScene } from "./fallbackScene";
@@ -63,20 +64,33 @@ class BootScene extends Phaser.Scene {
     const saveBlob = loadFromSlot(DEFAULT_SAVE_SLOT);
     const saveState = deserializeSaveState(saveBlob);
     if (data.world?.available && "mode" in data.world && data.world.mode === "full") {
+      const introDisabled = isIntroDisabled({
+        search: globalThis.location?.search,
+        registryFlag: this.registry.get("nointro")
+      });
+      const openingResolution = resolveNewGameOpeningStart(data.world, data.scripts);
+      const openingDecision = decideNewGameOpening({
+        newGame: saveBlob === null,
+        disabled: introDisabled,
+        resolvedStart: openingResolution.resolved ? openingResolution.start : undefined
+      });
+      if (saveBlob === null && !introDisabled && !openingResolution.resolved) {
+        console.warn("New-game opening unresolved; using fallback intro.", openingResolution.reason);
+      }
       const chunkedWorldData = {
         gameData: data,
         saveState,
         saveSlot: DEFAULT_SAVE_SLOT,
-        saveSlots: SAVE_SLOTS
+        saveSlots: SAVE_SLOTS,
+        ...(openingDecision.runOpening ? { newGameOpening: openingDecision.start } : {})
       };
       const introDecision = shouldStartIntro({
         hasSave: saveBlob !== null,
-        disabled: isIntroDisabled({
-          search: globalThis.location?.search,
-          registryFlag: this.registry.get("nointro")
-        })
+        disabled: introDisabled
       });
-      if (introDecision.startIntro) {
+      if (openingDecision.runOpening) {
+        this.scene.start("chunked-world", chunkedWorldData);
+      } else if (introDecision.startIntro) {
         this.scene.start("intro", {
           nextSceneKey: "chunked-world",
           nextSceneData: chunkedWorldData

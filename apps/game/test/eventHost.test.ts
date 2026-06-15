@@ -46,6 +46,10 @@ function unknown(file: string, raw: string, line: number): ScriptCommand {
   return { cmd: "unknown", raw, sourceLocation: location(file, line) };
 }
 
+function control(file: string, code: string, raw: string, line: number): ScriptCommand {
+  return { cmd: "control", code, raw, sourceLocation: location(file, line) };
+}
+
 function effect(file: string, line: number, segment: DialogueSegment): ScriptCommand {
   return {
     cmd: "control",
@@ -256,6 +260,42 @@ describe("RuntimeEventHost", () => {
       lastShopStoreId: 2,
       audio: 1,
       lastBattleGroup: 9
+    });
+  });
+
+  it("skips unsupported event ops without throwing or applying side effects", () => {
+    const file = "ccscript/gamma.ccs";
+    const skipped: string[] = [];
+    const collection = scripts({
+      [file]: [
+        label(file, "start", 1),
+        control(file, "show_actor", "show_actor(2)", 2),
+        effect(file, 3, { kind: "party", op: "add", char: 2, raw: "party_add(2)" }),
+        runtime(file, "end", 4)
+      ]
+    });
+    const partyState = new PartyState();
+    const host = new RuntimeEventHost({
+      dialogue: new DialogueController(),
+      flags: new GameFlags(),
+      partyState,
+      isEffectSupported: (eventEffect) => eventEffect.kind !== "control" && eventEffect.kind !== "party",
+      onUnsupportedEffect: (eventEffect) => skipped.push(eventEffect.kind)
+    });
+    const sequence = new RuntimeEventSequence(collection, host);
+
+    expect(sequence.start("gamma.start")).toBe(true);
+
+    expect(sequence.running).toBe(false);
+    expect(partyState.party()).toEqual([]);
+    expect(skipped).toEqual(["control", "party"]);
+    expect(host.debug().records).toMatchObject({
+      unsupported: 2,
+      unsupportedByKind: {
+        control: 1,
+        party: 1
+      },
+      lastUnsupportedKind: "party"
     });
   });
 

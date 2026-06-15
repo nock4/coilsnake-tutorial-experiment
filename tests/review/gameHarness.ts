@@ -154,11 +154,14 @@ export type FirstSceneDebug = {
       battleNoops: number;
       shops?: number;
       audio: number;
+      unsupported?: number;
+      unsupportedByKind?: Record<string, number>;
       lastWarpDest?: number;
       lastTeleportStyle?: number;
       lastBattleGroup?: number;
       lastShopStoreId?: number;
       lastAudioKind?: string;
+      lastUnsupportedKind?: string;
     };
   };
   newGameStartup?: {
@@ -181,11 +184,14 @@ export type FirstSceneDebug = {
       battleNoops: number;
       shops: number;
       audio: number;
+      unsupported?: number;
+      unsupportedByKind?: Record<string, number>;
       lastWarpDest?: number;
       lastTeleportStyle?: number;
       lastBattleGroup?: number;
       lastShopStoreId?: number;
       lastAudioKind?: string;
+      lastUnsupportedKind?: string;
     };
     initialPlayer?: { x: number; y: number };
     finalPlayer?: { x: number; y: number };

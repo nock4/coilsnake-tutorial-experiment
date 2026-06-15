@@ -59,11 +59,14 @@ export type EventHostDebug = {
     battleNoops: number;
     shops: number;
     audio: number;
+    unsupported: number;
+    unsupportedByKind: Partial<Record<EventEffectKind, number>>;
     lastWarpDest?: number;
     lastTeleportStyle?: number;
     lastBattleGroup?: number;
     lastShopStoreId?: number;
     lastAudioKind?: "music" | "sound" | "musicEffect";
+    lastUnsupportedKind?: EventEffectKind;
   };
 };
 
@@ -76,6 +79,8 @@ export type RuntimeEventHostOptions = {
   applyWarpDestination?: (destination: EventWarpDestination) => boolean | void;
   startBattle?: (group: number) => boolean;
   openShop?: (storeId: number) => boolean | void;
+  isEffectSupported?: (effect: EventEffect) => boolean;
+  onUnsupportedEffect?: (effect: EventEffect) => void;
 };
 
 export type EventSequenceOptions = {
@@ -138,6 +143,7 @@ export function resolveTeleportDestination(
 export class RuntimeEventHost implements EventExecutorHost {
   private executor?: EventExecutor;
   private readonly coveredConfirmIndexes = new Set<number>();
+  private readonly reportedUnsupportedEffectKeys = new Set<string>();
   private debugState: EventHostDebug = emptyDebug();
   private transitionRequested = false;
   private abortRequested = false;
@@ -159,6 +165,7 @@ export class RuntimeEventHost implements EventExecutorHost {
   begin(executor: EventExecutor): void {
     this.executor = executor;
     this.coveredConfirmIndexes.clear();
+    this.reportedUnsupportedEffectKeys.clear();
     this.transitionRequested = false;
     this.abortRequested = false;
     this.debugState = { ...emptyDebug(), running: true };
@@ -175,6 +182,7 @@ export class RuntimeEventHost implements EventExecutorHost {
     this.abortRequested = false;
     this.executor = undefined;
     this.coveredConfirmIndexes.clear();
+    this.reportedUnsupportedEffectKeys.clear();
   }
 
   recordEffect(effect: EventEffect): void {
@@ -234,46 +242,79 @@ export class RuntimeEventHost implements EventExecutorHost {
   }
 
   setFlag(flag: number): void {
+    if (this.skipUnsupported({ kind: "setFlag", flag })) {
+      return;
+    }
     this.options.flags.setNum(flag);
   }
 
   unsetFlag(flag: number): void {
+    if (this.skipUnsupported({ kind: "unsetFlag", flag })) {
+      return;
+    }
     this.options.flags.unsetNum(flag);
   }
 
   give(char: number, item: number): void {
+    if (this.skipUnsupported({ kind: "give", char, item })) {
+      return;
+    }
     this.options.partyState.give(char, item);
   }
 
   take(char: number, item: number): void {
+    if (this.skipUnsupported({ kind: "take", char, item })) {
+      return;
+    }
     this.options.partyState.take(char, item);
   }
 
   money(op: "give" | "take", amount: number): void {
+    if (this.skipUnsupported({ kind: "money", op, amount })) {
+      return;
+    }
     this.options.partyState.applyMoney(op, amount);
   }
 
   atm(op: "deposit" | "withdraw", amount: number): void {
+    if (this.skipUnsupported({ kind: "atm", op, amount })) {
+      return;
+    }
     this.options.partyState.applyAtm(op, amount);
   }
 
   party(op: "add" | "remove", char: number): void {
+    if (this.skipUnsupported({ kind: "party", op, char })) {
+      return;
+    }
     this.options.partyState.partyOp(op, char);
   }
 
   warp(dest: number): void {
+    if (this.skipUnsupported({ kind: "warp", dest })) {
+      return;
+    }
     this.applyWarp(dest);
   }
 
   teleport(dest: number, style: number): void {
+    if (this.skipUnsupported({ kind: "teleport", dest, style })) {
+      return;
+    }
     this.applyWarp(dest, style);
   }
 
   anchorWarp(): void {
+    if (this.skipUnsupported({ kind: "anchorWarp" })) {
+      return;
+    }
     this.recordWarpNoop(undefined);
   }
 
   startBattle(group: number): void {
+    if (this.skipUnsupported({ kind: "battle", group })) {
+      return;
+    }
     const started = this.options.startBattle?.(group) ?? false;
     this.debugState.records = {
       ...this.debugState.records,
@@ -285,6 +326,9 @@ export class RuntimeEventHost implements EventExecutorHost {
   }
 
   openShop(storeId: number): void {
+    if (this.skipUnsupported({ kind: "shop", storeId })) {
+      return;
+    }
     const opened = this.options.openShop?.(storeId) !== false;
     this.debugState.records = {
       ...this.debugState.records,
@@ -295,17 +339,50 @@ export class RuntimeEventHost implements EventExecutorHost {
   }
 
   music(effect: Extract<EventEffect, { kind: "music" }>): void {
+    if (this.skipUnsupported(effect)) {
+      return;
+    }
     // Audio playback is Phase 7; this slice records calls for debug only.
     void effect;
     this.recordAudio("music");
   }
 
-  sound(): void {
+  sound(id: number): void {
+    if (this.skipUnsupported({ kind: "sound", id })) {
+      return;
+    }
     this.recordAudio("sound");
   }
 
-  musicEffect(): void {
+  musicEffect(id: number): void {
+    if (this.skipUnsupported({ kind: "musicEffect", id })) {
+      return;
+    }
     this.recordAudio("musicEffect");
+  }
+
+  partyStat(op: Extract<EventEffect, { kind: "partyStat" }>["op"], char: number, amount: number): void {
+    this.skipUnsupported({ kind: "partyStat", op, char, amount });
+  }
+
+  inflict(char: number, status: number): void {
+    this.skipUnsupported({ kind: "inflict", char, status });
+  }
+
+  learnPsi(char: number, psi: number): void {
+    this.skipUnsupported({ kind: "learnPsi", char, psi });
+  }
+
+  event(id: number): void {
+    this.skipUnsupported({ kind: "event", id });
+  }
+
+  control(effect: Extract<EventEffect, { kind: "control" }>): void {
+    this.recordUnsupported(effect);
+  }
+
+  terminator(_code: "end" | "eob"): void {
+    // Script terminators end the executor flow; no host-side action is needed.
   }
 
   private startConfirmRun(): void {
@@ -393,6 +470,31 @@ export class RuntimeEventHost implements EventExecutorHost {
       ...this.debugState.records,
       audio: this.debugState.records.audio + 1,
       lastAudioKind: kind
+    };
+  }
+
+  private skipUnsupported(effect: EventEffect): boolean {
+    if (this.options.isEffectSupported?.(effect) !== false) {
+      return false;
+    }
+    this.recordUnsupported(effect);
+    return true;
+  }
+
+  private recordUnsupported(effect: EventEffect): void {
+    const key = unsupportedEffectKey(effect);
+    if (!this.reportedUnsupportedEffectKeys.has(key)) {
+      this.reportedUnsupportedEffectKeys.add(key);
+      this.options.onUnsupportedEffect?.(effect);
+    }
+    this.debugState.records = {
+      ...this.debugState.records,
+      unsupported: this.debugState.records.unsupported + 1,
+      unsupportedByKind: {
+        ...this.debugState.records.unsupportedByKind,
+        [effect.kind]: (this.debugState.records.unsupportedByKind[effect.kind] ?? 0) + 1
+      },
+      lastUnsupportedKind: effect.kind
     };
   }
 }
@@ -568,7 +670,16 @@ function emptyDebug(): EventHostDebug {
       battles: 0,
       battleNoops: 0,
       shops: 0,
-      audio: 0
+      audio: 0,
+      unsupported: 0,
+      unsupportedByKind: {}
     }
   };
+}
+
+function unsupportedEffectKey(effect: EventEffect): string {
+  if (effect.kind === "control") {
+    return `${effect.kind}:${effect.code ?? ""}:${effect.raw}`;
+  }
+  return effect.kind;
 }

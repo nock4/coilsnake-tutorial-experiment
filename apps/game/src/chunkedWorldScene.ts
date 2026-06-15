@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { isNpcVisibleForEventFlags, type ItemData, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
+import { isNpcVisibleForEventFlags, type EventEffect, type ItemData, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
 import { rollEncounter, sectorIndexForTile } from "./encounterLogic";
 import { createStatefulRng, seedFromSearch, type StatefulRng } from "./seededRng";
 import type { BattleReturnContext, BattleReturnSource, ChunkedWorldRestore } from "./battleReturn";
@@ -87,6 +87,7 @@ import {
   type NewGameStartupRunDebug
 } from "./state";
 import { createDialogueResolver, textSpeedCpsFromSearch } from "./dialogueRenderer";
+import type { NewGameOpeningStart } from "./newGameOpening";
 import { PartyState, type PartyStateSnapshot } from "./partyState";
 import {
   applySaveState,
@@ -239,8 +240,10 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private newGameStartupRecord?: NewGameStartupRunDebug;
   private startupRunActive = false;
   private startupRunFinalized = false;
+  private startupMode: "startup" | "opening" = "startup";
   private startupInitialSpawn?: { x: number; y: number };
   private startupFallbackReason?: string;
+  private newGameOpening?: NewGameOpeningStart;
   targetReference = TARGET_REFERENCE;
   prompt = "";
   assetsLoaded = false;
@@ -256,6 +259,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     saveSlot?: number;
     saveSlots?: SaveSlotPersistence;
     restore?: ChunkedWorldRestore;
+    newGameOpening?: NewGameOpeningStart;
   }): void {
     this.data_ = data.gameData;
     this.world_ = data.gameData.world as WorldChunked;
@@ -264,6 +268,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.saveSlot = Number.isInteger(data.saveSlot) && (data.saveSlot as number) >= 0 ? data.saveSlot as number : 0;
     this.saveSlots = data.saveSlots;
     this.restoreState = data.restore;
+    this.newGameOpening = data.newGameOpening;
     this.returnContextActive = Boolean(data.restore);
     this.hasSave = Boolean(this.bootSaveState) || Boolean(this.saveSlots?.hasSave(this.saveSlot));
     this.lastSavedAt = this.bootSaveState?.savedAt;
@@ -317,7 +322,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
 
     const restoredPlayer = this.restoreState ? undefined : this.applyInitialSave();
     const returnPlayer = this.applyReturnRestore();
-    const spawn = this.clampSpawn(returnPlayer ?? restoredPlayer ?? this.parseSpawnOverride() ?? world.player.spawnWorldPixel);
+    const spawn = this.clampSpawn(
+      returnPlayer ?? restoredPlayer ?? this.parseSpawnOverride() ?? this.newGameOpening?.spawn ?? world.player.spawnWorldPixel
+    );
     const playerFacing = returnPlayer?.facing ?? restoredPlayer?.facing ?? "down";
     this.playerFrames = this.framesForGroup(world.player.spriteGroup);
     this.playerState = createPlayerState(spawn.x, spawn.y, playerFacing, this.playerFrames);
@@ -477,8 +484,10 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.newGameStartupRecord = undefined;
     this.startupRunActive = false;
     this.startupRunFinalized = false;
+    this.startupMode = "startup";
     this.startupInitialSpawn = undefined;
     this.startupFallbackReason = undefined;
+    this.newGameOpening = undefined;
     this.prompt = "";
     this.assetsLoaded = false;
   }
@@ -1726,7 +1735,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
       resolveWarpDestination: (dest, style) => this.resolveEventWarpDestination(dest, style),
       applyWarpDestination: (destination) => this.applyEventWarpDestination(destination),
       startBattle: (group) => this.startEventBattleForCurrentMode(group),
-      openShop: (storeId) => this.openShopForCurrentMode(storeId)
+      openShop: (storeId) => this.openShopForCurrentMode(storeId),
+      isEffectSupported: (effect) => this.isEventEffectSupportedForCurrentMode(effect),
+      onUnsupportedEffect: (effect) => this.warnUnsupportedEventEffect(effect)
     });
     this.eventSequence = new RuntimeEventSequence(this.data_.scripts, host);
   }
@@ -1738,11 +1749,13 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private maybeStartNewGameStartup(spawn: { x: number; y: number }): void {
+    const opening = this.newGameOpening;
     const decision = shouldRunNewGameStartup({
       hasSave: this.hasSave,
-      startupRef: this.world_.player.newGameStartupRef
+      startupRef: opening?.eventRef ?? this.world_.player.newGameStartupRef
     });
     if (!decision.run) {
+      this.startupMode = "startup";
       this.newGameStartupRecord = this.startupRecord({
         attempted: false,
         started: false,
@@ -1758,6 +1771,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
 
     this.startupRunActive = true;
     this.startupRunFinalized = false;
+    this.startupMode = opening ? "opening" : "startup";
     this.startupInitialSpawn = spawn;
     this.startupFallbackReason = undefined;
     lockPlayer(this.playerState, this.playerFrames);
@@ -1776,6 +1790,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }) ?? false;
     if (!started) {
       this.startupRunActive = false;
+      this.startupMode = "startup";
       unlockPlayer(this.playerState);
       this.newGameStartupRecord = this.startupRecord({
         attempted: true,
@@ -1793,7 +1808,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return;
     }
 
-    if (this.startupRunActive && this.eventSequence?.running) {
+    if (this.startupRunActive && this.eventSequence?.running && this.startupMode === "startup") {
       this.abortStartupAtControlStart(decision.reference);
       return;
     }
@@ -1814,6 +1829,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       this.restoreStartupSpawn();
     }
     this.startupRunActive = false;
+    this.startupMode = "startup";
     if (this.dialogue.open && result.status === "aborted") {
       this.dialogue.close();
     }
@@ -1840,7 +1856,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private applyEventWarpDestination(destination: EventWarpDestination): boolean | void {
-    if (this.startupRunActive) {
+    if (this.startupRunActive && this.startupMode === "startup") {
       return this.applyStartupWarpDestination(destination);
     }
     this.applyDoorWarp(destination);
@@ -1861,6 +1877,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.startupRunFinalized = true;
     this.eventSequence?.abort("startup_control_start");
     this.startupRunActive = false;
+    this.startupMode = "startup";
     if (this.dialogue.open) {
       this.dialogue.close();
     }
@@ -1895,6 +1912,34 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return false;
     }
     this.openShopMenu(storeId);
+  }
+
+  private isEventEffectSupportedForCurrentMode(effect: EventEffect): boolean {
+    if (!this.startupRunActive || this.startupMode !== "opening") {
+      return true;
+    }
+    switch (effect.kind) {
+      case "text":
+      case "pause":
+      case "prompt":
+      case "setFlag":
+      case "unsetFlag":
+      case "warp":
+      case "teleport":
+      case "anchorWarp":
+      case "terminator":
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  private warnUnsupportedEventEffect(effect: EventEffect): void {
+    if (!this.startupRunActive || this.startupMode !== "opening") {
+      return;
+    }
+    const detail = effect.kind === "control" ? effect.code ?? "control" : effect.kind;
+    console.warn("Skipping unsupported new-game opening event op.", detail);
   }
 
   private handleEncounterStep(): boolean {
@@ -2093,7 +2138,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
       battles: 0,
       battleNoops: 0,
       shops: 0,
-      audio: 0
+      audio: 0,
+      unsupported: 0,
+      unsupportedByKind: {}
     };
     return {
       attempted: options.attempted,
