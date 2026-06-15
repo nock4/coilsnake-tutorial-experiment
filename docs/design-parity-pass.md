@@ -150,5 +150,6 @@ Hands-on note: "menus not at parity." Audited all four axes (colors, border, lay
   → equippable list per slot. Fixed Status label spacing (the "|" separator rendered as a music-note
   glyph in the EB font; now clean spaced fields).
 
-Open menu decision: vanilla EB's pause menu is exactly Talk/Goods/PSI/Equip/Check/Status; our
-ATM + Save entries are non-EB conveniences (kept for usability, pending a parity-vs-usability call).
+- **CU-MENU-4 [6c77961] — exact 6-item menu.** Per the parity call, dropped the non-EB ATM + Save
+  entries; the pause menu is now exactly Talk/Goods/PSI/Equip/Check/Status. Save stays on the P key
+  (keydown-P), and the ATM screen/save action code remain for ATM-machine/phone hookups later.
