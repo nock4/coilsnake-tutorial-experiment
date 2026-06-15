@@ -15,11 +15,11 @@ import {
   type WindowCollection
 } from "@eb/schemas";
 import {
-  BATTLE_COMMANDS,
   applyVictoryRewards,
   beginCombatantTurn,
   buildVictorySummaryViewModel,
   combatantAt,
+  commandsForCharId,
   createBattleState,
   firstLivingIndex,
   isCombatantAlive,
@@ -31,7 +31,10 @@ import {
   resolveDefendTurn,
   resolveEnemyActionTurn,
   resolveItemTurn,
+  resolveMirrorTurn,
   resolvePsiTurn,
+  resolvePrayTurn,
+  resolveSpyTurn,
   resolveTurn,
   shouldResetAutoFightRound,
   tickBattleMeters,
@@ -101,7 +104,7 @@ import { swirlMask, type SwirlMask } from "./transitions";
 
 const MONO = "Menlo, Consolas, monospace";
 const TAU = Math.PI * 2;
-export const COMMANDS = BATTLE_COMMANDS;
+export const COMMANDS = commandsForCharId(0);
 const STATUS_TOP = 288;
 const BATTLE_LINE_SPACING = 2;
 const BATTLE_BOTTOM_MARGIN = 8;
@@ -119,7 +122,7 @@ const ENTER_TRANSITION_MS = 650;
 const EXIT_TRANSITION_MS = 450;
 
 type BattleSubmenu = "command" | "psi" | "goods" | "target";
-type BattleTargetMode = "bash" | "psi-offense" | "psi-recovery" | "goods";
+type BattleTargetMode = "bash" | "spy" | "mirror" | "psi-offense" | "psi-recovery" | "goods";
 type PendingItemUse = {
   itemId: number;
   inventorySlot: number;
@@ -349,8 +352,9 @@ export class BattleScene extends Phaser.Scene {
     }
     this.menuMessage_ = "";
     if (this.submenu_ === "command") {
-      this.commandIndex_ = (this.commandIndex_ + direction + COMMANDS.length) % COMMANDS.length;
-      this.targetMode_ = this.currentCommand() === "BASH" ? "bash" : this.targetMode_;
+      const commands = this.commandsForCurrentActor();
+      this.commandIndex_ = (this.commandIndex_ + direction + commands.length) % commands.length;
+      this.targetMode_ = targetModeForCommand(this.currentCommand()) ?? this.targetMode_;
     } else if (this.submenu_ === "psi") {
       const count = this.learnedPsiForCurrentActor().length;
       if (count > 0) {
@@ -441,6 +445,41 @@ export class BattleScene extends Phaser.Scene {
         return;
       }
       this.applyTurnResult(result.state);
+      return;
+    }
+    if (command === "SPY") {
+      this.normalizeTargetIndex();
+      const result = resolveSpyTurn(this.battle_, this.currentActor_, { targetIndex: this.targetIndex_ });
+      if (result.skipped) {
+        this.menuMessage_ = result.message || messageForBlockedAction(result.blockedReason);
+        this.renderStatus();
+        this.publish();
+        return;
+      }
+      this.applyTurnResult(result.state, result.message);
+      return;
+    }
+    if (command === "PRAY") {
+      const result = resolvePrayTurn(this.battle_, this.currentActor_, this.rng_);
+      if (result.skipped) {
+        this.menuMessage_ = result.message || messageForBlockedAction(result.blockedReason);
+        this.renderStatus();
+        this.publish();
+        return;
+      }
+      this.applyTurnResult(result.state, result.message);
+      return;
+    }
+    if (command === "MIRROR") {
+      this.normalizeTargetIndex();
+      const result = resolveMirrorTurn(this.battle_, this.currentActor_, this.rng_, { targetIndex: this.targetIndex_ });
+      if (result.skipped) {
+        this.menuMessage_ = result.message || messageForBlockedAction(result.blockedReason);
+        this.renderStatus();
+        this.publish();
+        return;
+      }
+      this.applyTurnResult(result.state, result.message);
       return;
     }
     if (command === "PSI") {
@@ -614,7 +653,7 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private applyTurnResult(state: BattleState): void {
+  private applyTurnResult(state: BattleState, message = ""): void {
     const previousBattle = this.battle_;
     this.battle_ = state;
     this.recordEnemyDamageSignals(previousBattle, this.battle_, this.time.now);
@@ -623,7 +662,7 @@ export class BattleScene extends Phaser.Scene {
     this.pendingPsiId_ = null;
     this.pendingItem_ = null;
     this.targetMode_ = "bash";
-    this.menuMessage_ = "";
+    this.menuMessage_ = message;
     this.phase_ = "enemy-rolling";
     this.actionDelayMs_ = ACTION_ADVANCE_DELAY_MS;
     this.renderStatus();
@@ -1161,7 +1200,7 @@ export class BattleScene extends Phaser.Scene {
       commandLines = ["OK"];
       partyLines = ["Got away."];
     } else {
-      commandLines = menuVisible ? this.menuTextLines() : [];
+      commandLines = menuVisible ? this.menuTextLines() : this.menuMessage_ ? [this.menuMessage_] : [];
       partyLines = this.partyStatusLines();
     }
     const layout = this.layoutStatusWindows(commandLines, partyLines);
@@ -1426,7 +1465,7 @@ export class BattleScene extends Phaser.Scene {
 
   private menuTextLines(): string[] {
     if (this.submenu_ === "command") {
-      return menuRowTexts(COMMANDS.map((command, index) => ({
+      return menuRowTexts(this.commandsForCurrentActor().map((command, index) => ({
         label: command,
         selected: index === this.commandIndex_
       })));
@@ -1463,7 +1502,12 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private currentCommand(): BattleCommand {
-    return COMMANDS[this.commandIndex_] ?? "BASH";
+    return this.commandsForCurrentActor()[this.commandIndex_] ?? "BASH";
+  }
+
+  private commandsForCurrentActor(): BattleCommand[] {
+    const actor = this.currentActor_ ? combatantAt(this.battle_, this.currentActor_) : undefined;
+    return commandsForCharId(actor?.charId ?? 0);
   }
 
   private resetMenuForActor(): void {
@@ -1480,7 +1524,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.submenu_ === "target") {
       return this.targetMode_ === "psi-recovery" || this.targetMode_ === "goods" ? "party" : "enemy";
     }
-    if (this.submenu_ === "command" && this.currentCommand() === "BASH") {
+    if (this.submenu_ === "command" && targetModeForCommand(this.currentCommand())) {
       return "enemy";
     }
     return null;
@@ -1796,6 +1840,19 @@ function visibleMenuRowStart(rowCount: number, selectedIndex: number, message: s
     Math.max(0, selectedIndex - availableRows + 1),
     Math.max(0, rowCount - availableRows)
   );
+}
+
+function targetModeForCommand(command: BattleCommand): BattleTargetMode | null {
+  switch (command) {
+    case "BASH":
+      return "bash";
+    case "SPY":
+      return "spy";
+    case "MIRROR":
+      return "mirror";
+    default:
+      return null;
+  }
 }
 
 function messageForBlockedAction(reason: string | undefined): string {

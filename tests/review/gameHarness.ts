@@ -20,7 +20,7 @@ export type FirstSceneDebug = {
   transitionPhase?: "none" | "enter" | "summary" | "exit";
   menuIndex?: number;
   commandIndex?: number;
-  command?: "BASH" | "GOODS" | "AUTO" | "PSI" | "DEFEND" | "RUN";
+  command?: "BASH" | "GOODS" | "AUTO" | "PSI" | "SPY" | "PRAY" | "MIRROR" | "DEFEND" | "RUN";
   submenu?: "command" | "psi" | "goods" | "target";
   submenuIndex?: number;
   selection?: string;

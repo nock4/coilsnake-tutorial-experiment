@@ -5,6 +5,7 @@ import {
   beginCombatantTurn,
   buildEnemyCombatant,
   buildPlayerCombatant,
+  commandsForCharId,
   createBattleState,
   damage,
   defaultTargetIndexForActor,
@@ -16,7 +17,10 @@ import {
   resolveDefendTurn,
   resolveEnemyActionTurn,
   resolveItemTurn,
+  resolveMirrorTurn,
   resolvePsiTurn,
+  resolvePrayTurn,
+  resolveSpyTurn,
   resolveTurn,
   selectEnemyAction,
   shouldResetAutoFightRound,
@@ -36,8 +40,17 @@ const partyCharacterA: CharacterData = character(0, "PARTY_A", { speed: 7, maxHp
 const partyCharacterB: CharacterData = character(1, "PARTY_B", { speed: 4, maxHp: 48, maxPp: 10, offense: 16, defense: 6 });
 
 describe("battle command menu", () => {
-  it("uses the EarthBound battle command order", () => {
+  it("keeps the Ness/default EarthBound battle command order", () => {
     expect([...BATTLE_COMMANDS]).toEqual(["BASH", "GOODS", "AUTO", "PSI", "DEFEND", "RUN"]);
+  });
+
+  it("returns exact EarthBound command sets by party character id", () => {
+    expect(commandsForCharId(0)).toEqual(["BASH", "GOODS", "AUTO", "PSI", "DEFEND", "RUN"]);
+    expect(commandsForCharId(1)).toEqual(["BASH", "GOODS", "AUTO", "PSI", "PRAY", "DEFEND", "RUN"]);
+    expect(commandsForCharId(2)).toEqual(["BASH", "GOODS", "AUTO", "SPY", "DEFEND", "RUN"]);
+    expect(commandsForCharId(3)).toEqual(["BASH", "GOODS", "AUTO", "PSI", "MIRROR", "DEFEND", "RUN"]);
+    expect(commandsForCharId(99)).toEqual(["BASH", "GOODS", "AUTO", "PSI", "DEFEND", "RUN"]);
+    expect(commandsForCharId(2)).not.toContain("PSI");
   });
 });
 
@@ -474,6 +487,103 @@ describe("battle PSI and goods resolution", () => {
 
     expect(learnedPsiForCombatant(psiList, battle.party[0]).map((psi) => psi.id)).toEqual([110]);
     expect(learnedPsiForCombatant(psiList, battle.party[1]).map((psi) => psi.id)).toEqual([112]);
+  });
+});
+
+describe("battle character-specific command resolution", () => {
+  it("SPY reveals enemy HP and stats without changing HP and consumes the turn", () => {
+    const battle = createBattleState(opponentA, {
+      characters: characters([character(2, "JEFF_TEST", { maxHp: 44, maxPp: 0 })])
+    });
+
+    const result = resolveSpyTurn(battle, actor("party", 0), { targetIndex: 0 });
+
+    expect(result.skipped).toBe(false);
+    expect(result.target).toEqual(actor("enemy", 0));
+    expect(result.amount).toBe(0);
+    expect(result.message).toBe("OPPONENT_A HP 24/24 Off 8 Def 4.");
+    expect(result.state.party.map((member) => member.hp.target)).toEqual([44]);
+    expect(result.state.enemies.map((enemyCombatant) => enemyCombatant.hp.target)).toEqual([24]);
+  });
+
+  it("PRAY deterministically heals living party members with a bounded seeded outcome", () => {
+    let battle = createBattleState(opponentA, {
+      characters: characters([partyCharacterA, partyCharacterB])
+    });
+    battle = withCombatant(battle, actor("party", 0), {
+      ...battle.party[0],
+      hp: { ...battle.party[0].hp, displayed: 50, target: 50, isRolling: false }
+    });
+    battle = withCombatant(battle, actor("party", 1), {
+      ...battle.party[1],
+      hp: { ...battle.party[1].hp, displayed: 20, target: 20, isRolling: false }
+    });
+
+    const result = resolvePrayTurn(battle, actor("party", 1), () => 0.2);
+
+    expect(result.skipped).toBe(false);
+    expect(result.effect).toBe("healParty");
+    expect(result.targets).toEqual([actor("party", 0), actor("party", 1)]);
+    expect(result.amount).toBe(24);
+    expect(result.state.party[0].hp.target).toBe(62);
+    expect(result.state.party[1].hp.target).toBe(32);
+    expect(result.message).toContain("recovered 24 HP");
+  });
+
+  it("PRAY can deterministically do nothing without changing battle state", () => {
+    const battle = createBattleState(opponentA, {
+      characters: characters([partyCharacterA, partyCharacterB])
+    });
+
+    const result = resolvePrayTurn(battle, actor("party", 1), () => 0.95);
+
+    expect(result.skipped).toBe(false);
+    expect(result.effect).toBe("nothing");
+    expect(result.amount).toBe(0);
+    expect(result.state).toBe(battle);
+    expect(result.message).toBe("PARTY_B prayed. Nothing happened.");
+  });
+
+  it("PRAY damage outcome is bounded and safe after enemies are gone", () => {
+    const battle = createBattleState(opponentA, {
+      characters: characters([partyCharacterA, partyCharacterB])
+    });
+    const damageResult = resolvePrayTurn(battle, actor("party", 1), () => 0.7);
+    const emptyEnemyBattle = { ...battle, enemies: [] };
+    const emptyEnemyResult = resolvePrayTurn(emptyEnemyBattle, actor("party", 1), () => 0.7);
+
+    expect(damageResult.skipped).toBe(false);
+    expect(damageResult.effect).toBe("damageEnemies");
+    expect(damageResult.amount).toBe(8);
+    expect(damageResult.state.enemies[0].hp.target).toBe(16);
+    expect(emptyEnemyResult.skipped).toBe(true);
+    expect(emptyEnemyResult.state).toBe(emptyEnemyBattle);
+  });
+
+  it("MIRROR strikes with the target enemy offense against its own defense and consumes the turn", () => {
+    const battle = createBattleState(enemy(20, "MIRROR_TARGET", { hp: 30, offense: 20, defense: 4 }), {
+      characters: characters([character(3, "POO_TEST", { offense: 5 })])
+    });
+
+    const result = resolveMirrorTurn(battle, actor("party", 0), () => 0.5, { targetIndex: 0 });
+
+    expect(result.skipped).toBe(false);
+    expect(result.target).toEqual(actor("enemy", 0));
+    expect(result.amount).toBe(18);
+    expect(result.state.enemies[0].hp.target).toBe(12);
+    expect(result.message).toBe("POO_TEST mirrored MIRROR_TARGET for 18 damage.");
+  });
+
+  it("MIRROR safely skips when no enemy remains", () => {
+    const battle = createBattleState(opponentA, {
+      characters: characters([character(3, "POO_TEST")])
+    });
+    const emptyEnemyBattle = { ...battle, enemies: [] };
+
+    const result = resolveMirrorTurn(emptyEnemyBattle, actor("party", 0), () => 0.5, { targetIndex: 0 });
+
+    expect(result.skipped).toBe(true);
+    expect(result.state).toBe(emptyEnemyBattle);
   });
 });
 

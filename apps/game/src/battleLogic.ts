@@ -31,8 +31,12 @@ export type BattleActor = {
   index: number;
 };
 export type BattleOutcome = "ongoing" | "win" | "lose";
-export const BATTLE_COMMANDS = ["BASH", "GOODS", "AUTO", "PSI", "DEFEND", "RUN"] as const;
-export type BattleCommand = typeof BATTLE_COMMANDS[number];
+const ALL_BATTLE_COMMANDS = ["BASH", "GOODS", "AUTO", "PSI", "SPY", "PRAY", "MIRROR", "DEFEND", "RUN"] as const;
+export type BattleCommand = typeof ALL_BATTLE_COMMANDS[number];
+export const BATTLE_COMMANDS = ["BASH", "GOODS", "AUTO", "PSI", "DEFEND", "RUN"] as const satisfies readonly BattleCommand[];
+const PAULA_BATTLE_COMMANDS = ["BASH", "GOODS", "AUTO", "PSI", "PRAY", "DEFEND", "RUN"] as const satisfies readonly BattleCommand[];
+const JEFF_BATTLE_COMMANDS = ["BASH", "GOODS", "AUTO", "SPY", "DEFEND", "RUN"] as const satisfies readonly BattleCommand[];
+const POO_BATTLE_COMMANDS = ["BASH", "GOODS", "AUTO", "PSI", "MIRROR", "DEFEND", "RUN"] as const satisfies readonly BattleCommand[];
 
 export type Combatant = {
   charId: number;
@@ -137,6 +141,22 @@ export type BattleActionResolution = {
   itemConsumed?: boolean;
 };
 
+export type SpyResolution = BattleActionResolution & {
+  message: string;
+};
+
+export type PrayEffect = "healParty" | "restorePp" | "damageEnemies" | "nothing";
+
+export type PrayResolution = BattleActionResolution & {
+  effect: PrayEffect;
+  targets: BattleActor[];
+  message: string;
+};
+
+export type MirrorResolution = BattleActionResolution & {
+  message: string;
+};
+
 export type PsiBattleKind = "offense" | "recovery" | "assist" | "other";
 
 export type BattleDropSummary = {
@@ -202,6 +222,9 @@ const STRENGTH_PP_COST: Record<string, number> = {
   sigma: 18,
   omega: 24
 };
+const PRAY_HEAL_AMOUNT = 12;
+const PRAY_PP_RESTORE_AMOUNT = 4;
+const PRAY_DAMAGE_AMOUNT = 8;
 const NOOP_ENEMY_ACTION: BattleEnemy["actions"][number] = {
   id: 0,
   arg: 0,
@@ -317,6 +340,20 @@ export function createBattleState(enemies: BattleEnemy | BattleEnemy[], options:
   };
 }
 
+export function commandsForCharId(charId: number): BattleCommand[] {
+  switch (stat(charId)) {
+    case 1:
+      return [...PAULA_BATTLE_COMMANDS];
+    case 2:
+      return [...JEFF_BATTLE_COMMANDS];
+    case 3:
+      return [...POO_BATTLE_COMMANDS];
+    case 0:
+    default:
+      return [...BATTLE_COMMANDS];
+  }
+}
+
 export function damage(attacker: Combatant, defender: Combatant, rng: Rng): number {
   return applyDefendingDamageReduction(baseDamage(attacker, defender, rng), defender);
 }
@@ -422,6 +459,127 @@ export function resolveDefendTurn(
     amount: 0,
     outcome: outcome(nextState),
     skipped: false
+  };
+}
+
+export function resolveSpyTurn(
+  state: BattleState,
+  actorInput: BattleActor | "player",
+  options: { targetIndex?: number } = {}
+): SpyResolution {
+  const actor = normalizeActor(actorInput);
+  const currentOutcome = outcome(state);
+  if (currentOutcome !== "ongoing" || actor.side !== "party") {
+    return blockedSpecialAction(state, actor, currentOutcome, "invalidActor", "");
+  }
+
+  const user = combatantFor(state, actor);
+  if (!user || !isCombatantAlive(user)) {
+    return blockedSpecialAction(state, actor, currentOutcome, "invalidActor", "");
+  }
+
+  const target = livingTarget(state.enemies, "enemy", options.targetIndex);
+  if (!target) {
+    return blockedSpecialAction(state, actor, currentOutcome, "noTarget", "No target.");
+  }
+
+  const enemy = combatantFor(state, target);
+  if (!enemy) {
+    return blockedSpecialAction(state, actor, currentOutcome, "noTarget", "No target.");
+  }
+
+  return {
+    state,
+    actor,
+    target,
+    amount: 0,
+    outcome: currentOutcome,
+    skipped: false,
+    message: spyMessage(enemy)
+  };
+}
+
+export function resolvePrayTurn(
+  state: BattleState,
+  actorInput: BattleActor | "player",
+  rng: Rng
+): PrayResolution {
+  const actor = normalizeActor(actorInput);
+  const currentOutcome = outcome(state);
+  if (currentOutcome !== "ongoing" || actor.side !== "party") {
+    return blockedPrayAction(state, actor, currentOutcome, "invalidActor", "");
+  }
+
+  const user = combatantFor(state, actor);
+  if (!user || !isCombatantAlive(user)) {
+    return blockedPrayAction(state, actor, currentOutcome, "invalidActor", "");
+  }
+
+  // Bounded approximation: EarthBound Pray uses a large random effect table;
+  // this slice keeps it to modest party/enemy effects plus a no-op.
+  const roll = normalizedRoll(rng());
+  if (roll < 0.35) {
+    return applyPrayHeal(state, actor, user);
+  }
+  if (roll < 0.55) {
+    return applyPrayPpRestore(state, actor, user);
+  }
+  if (roll < 0.85) {
+    return applyPrayDamage(state, actor, user);
+  }
+  return {
+    state,
+    actor,
+    target: actor,
+    amount: 0,
+    outcome: currentOutcome,
+    skipped: false,
+    effect: "nothing",
+    targets: [],
+    message: `${user.name} prayed. Nothing happened.`
+  };
+}
+
+export function resolveMirrorTurn(
+  state: BattleState,
+  actorInput: BattleActor | "player",
+  rng: Rng,
+  options: { targetIndex?: number } = {}
+): MirrorResolution {
+  const actor = normalizeActor(actorInput);
+  const currentOutcome = outcome(state);
+  if (currentOutcome !== "ongoing" || actor.side !== "party") {
+    return blockedSpecialAction(state, actor, currentOutcome, "invalidActor", "");
+  }
+
+  const user = combatantFor(state, actor);
+  if (!user || !isCombatantAlive(user)) {
+    return blockedSpecialAction(state, actor, currentOutcome, "invalidActor", "");
+  }
+
+  const target = livingTarget(state.enemies, "enemy", options.targetIndex);
+  if (!target) {
+    return blockedSpecialAction(state, actor, currentOutcome, "noTarget", "No target.");
+  }
+
+  const enemy = combatantFor(state, target);
+  if (!enemy) {
+    return blockedSpecialAction(state, actor, currentOutcome, "noTarget", "No target.");
+  }
+
+  // Bounded approximation: EarthBound Mirror can copy an enemy form over
+  // multiple turns; this slice resolves it as one offense-mirrored strike.
+  const mirroredUser = { ...user, offense: enemy.offense };
+  const amount = damage(mirroredUser, enemy, rng);
+  const nextState = withCombatant(state, target, applyDamage(enemy, amount));
+  return {
+    state: nextState,
+    actor,
+    target,
+    amount,
+    outcome: outcome(nextState),
+    skipped: false,
+    message: `${user.name} mirrored ${enemy.name} for ${amount} damage.`
   };
 }
 
@@ -850,6 +1008,13 @@ function applyHeal(combatant: Combatant, amount: number): Combatant {
   };
 }
 
+function applyPpRestore(combatant: Combatant, amount: number): Combatant {
+  return {
+    ...combatant,
+    pp: Math.min(combatant.maxPp, combatant.pp + Math.max(0, Math.floor(amount)))
+  };
+}
+
 function combatantFor(state: BattleState, actor: BattleActor): Combatant | undefined {
   return actor.side === "party" ? state.party[actor.index] : state.enemies[actor.index];
 }
@@ -948,6 +1113,10 @@ function livingTarget(combatants: Combatant[], side: BattleSide, requestedIndex?
   return index >= 0 ? { side, index } : null;
 }
 
+function livingActors(combatants: Combatant[], side: BattleSide): BattleActor[] {
+  return combatants.flatMap((combatant, index) => (isCombatantAlive(combatant) ? [{ side, index }] : []));
+}
+
 function allActors(state: BattleState): BattleActor[] {
   return [
     ...state.party.map((_, index) => ({ side: "party" as const, index })),
@@ -966,6 +1135,83 @@ function replaceAt<T>(items: T[], index: number, item: T): T[] {
   return items.map((current, currentIndex) => (currentIndex === index ? item : current));
 }
 
+function applyPrayHeal(state: BattleState, actor: BattleActor, user: Combatant): PrayResolution {
+  const targets = livingActors(state.party, "party");
+  let nextState = state;
+  let totalAmount = 0;
+  for (const target of targets) {
+    const combatant = combatantFor(nextState, target);
+    if (!combatant) {
+      continue;
+    }
+    const nextCombatant = applyHeal(combatant, PRAY_HEAL_AMOUNT);
+    totalAmount += Math.max(0, nextCombatant.hp.target - combatant.hp.target);
+    nextState = withCombatant(nextState, target, nextCombatant);
+  }
+  return {
+    state: nextState,
+    actor,
+    target: actor,
+    amount: totalAmount,
+    outcome: outcome(nextState),
+    skipped: false,
+    effect: "healParty",
+    targets,
+    message: `${user.name} prayed. The party recovered ${totalAmount} HP.`
+  };
+}
+
+function applyPrayPpRestore(state: BattleState, actor: BattleActor, user: Combatant): PrayResolution {
+  const targets = livingActors(state.party, "party");
+  let nextState = state;
+  let totalAmount = 0;
+  for (const target of targets) {
+    const combatant = combatantFor(nextState, target);
+    if (!combatant) {
+      continue;
+    }
+    const nextCombatant = applyPpRestore(combatant, PRAY_PP_RESTORE_AMOUNT);
+    totalAmount += Math.max(0, nextCombatant.pp - combatant.pp);
+    nextState = withCombatant(nextState, target, nextCombatant);
+  }
+  return {
+    state: nextState,
+    actor,
+    target: actor,
+    amount: totalAmount,
+    outcome: outcome(nextState),
+    skipped: false,
+    effect: "restorePp",
+    targets,
+    message: `${user.name} prayed. The party recovered ${totalAmount} PP.`
+  };
+}
+
+function applyPrayDamage(state: BattleState, actor: BattleActor, user: Combatant): PrayResolution {
+  const targets = livingActors(state.enemies, "enemy");
+  let nextState = state;
+  let totalAmount = 0;
+  for (const target of targets) {
+    const combatant = combatantFor(nextState, target);
+    if (!combatant) {
+      continue;
+    }
+    totalAmount += PRAY_DAMAGE_AMOUNT;
+    nextState = withCombatant(nextState, target, applyDamage(combatant, PRAY_DAMAGE_AMOUNT));
+  }
+  return {
+    state: nextState,
+    actor,
+    target: actor,
+    amount: totalAmount,
+    outcome: outcome(nextState),
+    skipped: false,
+    effect: "damageEnemies",
+    targets,
+    message: `${user.name} prayed. The enemies took ${totalAmount} damage.`
+  };
+}
+
 function blockedAction(
   state: BattleState,
   actor: BattleActor,
@@ -981,6 +1227,38 @@ function blockedAction(
     skipped: true,
     blockedReason
   };
+}
+
+function blockedSpecialAction(
+  state: BattleState,
+  actor: BattleActor,
+  currentOutcome: BattleOutcome,
+  blockedReason: BattleActionBlockReason,
+  message: string
+): BattleActionResolution & { message: string } {
+  return {
+    ...blockedAction(state, actor, currentOutcome, blockedReason),
+    message
+  };
+}
+
+function blockedPrayAction(
+  state: BattleState,
+  actor: BattleActor,
+  currentOutcome: BattleOutcome,
+  blockedReason: BattleActionBlockReason,
+  message: string
+): PrayResolution {
+  return {
+    ...blockedAction(state, actor, currentOutcome, blockedReason),
+    effect: "nothing",
+    targets: [],
+    message
+  };
+}
+
+function spyMessage(enemy: Combatant): string {
+  return `${enemy.name} HP ${enemy.hp.target}/${enemy.maxHp} Off ${enemy.offense} Def ${enemy.defense}.`;
 }
 
 function skippedEnemyAction(

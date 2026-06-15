@@ -1,4 +1,5 @@
 import type { DialoguePage, TutorialStatus } from "@eb/schemas";
+import type { BattleCommand } from "./battleLogic";
 import type { MenuDebugState } from "./menuModel";
 import {
   DefaultResolver,
@@ -86,7 +87,7 @@ export type BattleDebug = {
   transitionPhase: BattleTransitionPhase;
   menuIndex: number;
   commandIndex: number;
-  command: "BASH" | "GOODS" | "AUTO" | "PSI" | "DEFEND" | "RUN";
+  command: BattleCommand;
   submenu: "command" | "psi" | "goods" | "target";
   submenuIndex: number;
   selection: string;
