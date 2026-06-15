@@ -6,11 +6,21 @@ export const EB_FULL_WORLD_PROJECT = "external/coilsnake-full";
 export const EB_FULL_WORLD_MODE = "full";
 export const EB_FULL_WORLD_OUT = DEFAULT_GENERATED_OUT;
 
+/**
+ * Canonical EB generated-data build: full world plus battle, party, item, font,
+ * window, encounter, PSI, and shop data in the shared generated output.
+ */
 export async function buildEbFullWorldDefault() {
   return convertProject({
     project: EB_FULL_WORLD_PROJECT,
     worldMode: EB_FULL_WORLD_MODE,
-    out: EB_FULL_WORLD_OUT
+    out: EB_FULL_WORLD_OUT,
+    battle: true,
+    characters: true,
+    items: true,
+    shops: true,
+    font: true,
+    window: true
   });
 }
 

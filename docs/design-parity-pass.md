@@ -2,7 +2,7 @@
 
 Method: read-only audit of the four runtime surfaces (overworld, main menu, field
 dialogue, battle) against vanilla EarthBound, backed by live screenshots captured
-from `pnpm dev` (full-world build) + a one-off battle build. Screenshots live under
+from `pnpm dev` (complete full-world build). Screenshots live under
 `.codex/screenshots/parity-*.png` (gitignored). No extracted prose/values committed
 here — descriptions and counts only.
 
@@ -57,8 +57,8 @@ Also closed: **window flavor switching** + 7 distinct per-flavor interior colors
 - ~~**Placeholder party stats:**~~ FIXED — real per-character starting vitals from
   `initial_stats.yml`. [5f926ef]
 - ~~**Menu order drift:**~~ FIXED — vanilla order Talk/Goods/PSI/Equip/Check/Status. [5f926ef]
-- **Battles not in the default boot:** battle data is still a separate opt-in build; a
-  default `pnpm dev` world has no roaming/contact encounters wired. (open — Batch 3)
+- ~~**Battles not in the default boot:**~~ FIXED — the canonical `pnpm dev` build now
+  emits battle, encounter, character, item, PSI, shop, font, window, and world data.
 - **Dev chrome on-screen:** the top instruction bar and `F1: debug` badge overlay the
   game (acceptable for dev; not part of EB). (open, low priority)
 
@@ -127,6 +127,5 @@ is a solid block directly NW of the start; the road goes *around* it, and you *e
   memory `door-destination-data-issue`.
 - **Battle command completeness:** EB's command menu includes Auto Fight + Defend (+ Spy/etc.);
   ours is BASH/PSI/GOODS/RUN. Adding them is *gameplay* (new behaviors), scoped separately.
-- **Build cleanup (CU7 candidate):** default `pnpm dev` (build:eb-fullworld) omits battle/character/
-  item data — only `pnpm dev:full` is complete, and `pnpm test` clobbers it (shared output dir).
-  Make the full build the default or split output dirs. See memory `build-clobber-gotcha`.
+- ~~**Build cleanup (CU7):**~~ DONE — `build:eb-fullworld` is the single complete build used by
+  `pnpm dev`, `pnpm build`, and pretest hooks. `build:eb-full` and `dev:full` remain aliases.
