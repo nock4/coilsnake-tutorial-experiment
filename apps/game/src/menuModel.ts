@@ -256,9 +256,9 @@ const MAIN_COMMANDS: Array<Omit<MenuItem, "enabled">> = [
   { id: PSI_MENU_ID, label: "PSI", childScreenId: PSI_MENU_ID },
   { id: EQUIP_MENU_ID, label: "Equip", childScreenId: EQUIP_MENU_ID },
   { id: "check", label: "Check", childScreenId: "check" },
-  { id: STATUS_MENU_ID, label: "Status", childScreenId: STATUS_MENU_ID },
-  { id: ATM_MENU_ID, label: "ATM", childScreenId: ATM_MENU_ID },
-  { id: SAVE_MENU_ACTION_ID, label: "Save", actionId: SAVE_MENU_ACTION_ID }
+  { id: STATUS_MENU_ID, label: "Status", childScreenId: STATUS_MENU_ID }
+  // Vanilla EB's pause menu is exactly these 6. ATM is reached at ATM machines and
+  // Save via phone (here: the P key, chunkedWorldScene keydown-P) - neither is a menu item.
 ];
 
 export function closedMenu(): MenuState {

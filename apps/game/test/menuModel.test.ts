@@ -117,7 +117,7 @@ describe("menuModel navigation", () => {
     expect(result.state).toEqual(state);
   });
 
-  it("exposes save as a concrete main-menu action", () => {
+  it("wires Talk and keeps the save action parseable (save is the P key, not a menu item)", () => {
     const screen = buildMainMenuScreen();
 
     expect(screen.items.find((item) => item.id === "talk")).toMatchObject({
@@ -125,15 +125,14 @@ describe("menuModel navigation", () => {
       enabled: true,
       actionId: TALK_MENU_ACTION_ID
     });
-    expect(screen.items.find((item) => item.id === "save")).toMatchObject({
-      label: "Save",
-      enabled: true,
-      actionId: "save"
-    });
+    // EB parity: Save + ATM are NOT pause-menu items
+    expect(screen.items.find((item) => item.id === "save")).toBeUndefined();
+    expect(screen.items.find((item) => item.id === "atm")).toBeUndefined();
+    // the save action itself still exists (triggered by the P key)
     expect(parseMenuAction("save")).toEqual({ kind: "save" });
   });
 
-  it("orders the main menu like vanilla EarthBound before local additions", () => {
+  it("is exactly vanilla EarthBound's 6-item pause menu", () => {
     const screen = buildMainMenuScreen();
 
     expect(screen.items.map((item) => item.label)).toEqual([
@@ -142,9 +141,7 @@ describe("menuModel navigation", () => {
       "PSI",
       "Equip",
       "Check",
-      "Status",
-      "ATM",
-      "Save"
+      "Status"
     ]);
   });
 });
