@@ -1,16 +1,18 @@
 {
   "schema": "swagbound.custom-dialogue.v1",
-  "comment": "First-slice placeholder mappings (npcId 1 + 78) to be re-authored. 78 is next to the bedroom spawn for proof.",
+  "comment": "Act-1 opening slice. npcId->character is a first pass to refine (esp. matching Biscuit to the dog NPC). MiFella inline; Guardian + Bosch Terminal via library refs. See docs/swagbound-eb-act1-arc-mapping.md.",
   "byNpcId": {
-    "1": {
+    "78": {
       "pages": [
-        "Bosch! Wake up. Your phone minted something at 4am, and it is signed with your name.",
-        "The payload just says 'Swag is eternal.' You didn't write that. Somebody beat you to being you."
+        "MiFella lets himself in like he owns the version of you that counts.",
+        "\"Bosch! Wake up. You're trending before breakfast. Congrats, I think?\"",
+        "\"There's already a you outside. Cleaner haircut, smoother story.\"",
+        "\"He signed a 4am mint: 'Swag is eternal.' The town's already calling him convenient.\"",
+        "\"Relax, it's free press. Come let it count. ...You're gonna make a face, aren't you. They love the face.\""
       ]
     },
-    "78": {
-      "ref": "interior:bosch-bedroom-v0"
-    }
+    "99": { "ref": "target:bosch-main-room-v0:guardian" },
+    "100": { "ref": "dialogue:archive-console-link" }
   },
   "byTextPointer": {}
 }
