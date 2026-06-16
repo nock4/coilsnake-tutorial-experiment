@@ -20,9 +20,13 @@ import {
 import { WINDOW_FLAVOR_CHANGE_EVENT, activeWindowFlavorId } from "./windowSettings";
 import {
   EB_BITMAP_TEXT_SCALE,
+  EB_TEXT_LINE_SPACING,
   EB_UI_SCALE,
   type CanvasRect,
-  contentFitWindowRect
+  dialogueTextWidth,
+  dialogueWindowRect,
+  ebTextLineHeight,
+  menuWindowRect
 } from "./windowLayout";
 import {
   MENU_CURSOR_GUTTER_PX,
@@ -31,21 +35,20 @@ import {
 } from "./battleVisuals";
 
 const MONO = "Menlo, Consolas, monospace";
-const UI_LINE_SPACING = 2;
-const DIALOGUE_HORIZONTAL_PADDING = 24;
-const DIALOGUE_VERTICAL_PADDING = 18;
+const UI_LINE_SPACING = EB_TEXT_LINE_SPACING;
+const DIALOGUE_HORIZONTAL_PADDING = 12 * EB_UI_SCALE;
+const DIALOGUE_VERTICAL_PADDING = 9 * EB_UI_SCALE;
 const DIALOGUE_VISIBLE_LINES = 4;
-const DIALOGUE_BOTTOM_MARGIN = 16;
-const DIALOGUE_SIDE_MARGIN = 16;
-const MENU_LEFT = 16;
-const MENU_TOP = 16;
-const MENU_RIGHT_MARGIN = 16;
-const MENU_BOTTOM_MARGIN = 16;
-const MENU_GAP = 8;
-const MENU_HORIZONTAL_PADDING = 16;
-const MENU_VERTICAL_PADDING = 14;
-const MENU_TITLE_GAP = 8;
-const MENU_ITEM_LINE_HEIGHT = 18;
+const DIALOGUE_BOTTOM_MARGIN = 8 * EB_UI_SCALE;
+const DIALOGUE_SIDE_MARGIN = 8 * EB_UI_SCALE;
+const MENU_LEFT = 8 * EB_UI_SCALE;
+const MENU_TOP = 8 * EB_UI_SCALE;
+const MENU_RIGHT_MARGIN = 8 * EB_UI_SCALE;
+const MENU_BOTTOM_MARGIN = 8 * EB_UI_SCALE;
+const MENU_GAP = 4 * EB_UI_SCALE;
+const MENU_HORIZONTAL_PADDING = 8 * EB_UI_SCALE;
+const MENU_VERTICAL_PADDING = 7 * EB_UI_SCALE;
+const MENU_TITLE_GAP = 4 * EB_UI_SCALE;
 const MENU_MAX_VISIBLE_ITEMS = 8;
 type GameText = Phaser.GameObjects.Text | BitmapFontText;
 type MenuCursorSlot = {
@@ -116,12 +119,13 @@ export class UiScene extends Phaser.Scene {
       fontFamily: MONO,
       fontSize: "15px",
       color: "#f8fafc",
-      lineSpacing: 6,
+      lineSpacing: UI_LINE_SPACING,
       wordWrap: { width: this.dialogueTextWidth() }
     }, {
       scale: EB_BITMAP_TEXT_SCALE,
       tint: 0xf8fafc,
       lineSpacing: UI_LINE_SPACING,
+      lineHeight: this.dialogueLineHeight(),
       maxWidth: this.dialogueTextWidth()
     }).setDepth(11);
     this.footerText = this.createGameText(0, 0, "", {
@@ -130,7 +134,8 @@ export class UiScene extends Phaser.Scene {
       color: "#cbd5e1"
     }, {
       scale: EB_BITMAP_TEXT_SCALE,
-      tint: 0xcbd5e1
+      tint: 0xcbd5e1,
+      lineHeight: this.dialogueLineHeight()
     }).setDepth(11);
     this.promptText = this.add.text(12, 10, "", {
       fontFamily: MONO,
@@ -222,7 +227,11 @@ export class UiScene extends Phaser.Scene {
     if (arrowShown) {
       this.footerText.setText("");
     } else {
-      this.footerText.setPosition(x + boxWidth - 148, y + boxHeight - DIALOGUE_VERTICAL_PADDING - 8);
+      const footerWidth = this.measureTextWidth(footer);
+      this.footerText.setPosition(
+        x + boxWidth - DIALOGUE_HORIZONTAL_PADDING - footerWidth,
+        y + boxHeight - DIALOGUE_VERTICAL_PADDING - this.dialogueLineHeight()
+      );
       this.footerText.setText(footer);
     }
   }
@@ -323,7 +332,8 @@ export class UiScene extends Phaser.Scene {
           color: "#f8fafc"
         }, {
           scale: EB_BITMAP_TEXT_SCALE,
-          tint: 0xf8fafc
+          tint: 0xf8fafc,
+          lineHeight: this.menuLineHeight()
         }).setDepth(15));
       }
 
@@ -351,6 +361,7 @@ export class UiScene extends Phaser.Scene {
         }, {
           scale: EB_BITMAP_TEXT_SCALE,
           tint: item.enabled ? 0xf8fafc : 0x94a3b8,
+          lineHeight: this.menuLineHeight(),
           maxWidth: textWidth
         }).setDepth(15));
       });
@@ -359,52 +370,43 @@ export class UiScene extends Phaser.Scene {
   }
 
   private dialogueRect(): CanvasRect {
-    const width = Math.max(1, this.scale.width - DIALOGUE_SIDE_MARGIN * 2);
-    const rect = contentFitWindowRect({
-      x: DIALOGUE_SIDE_MARGIN,
-      y: 0,
-      labels: [],
-      measureText: (label) => this.measureTextWidth(label),
-      lineHeight: this.dialogueLineHeight(),
-      lineCount: DIALOGUE_VISIBLE_LINES,
+    return dialogueWindowRect({
+      screen: { width: this.scale.width, height: this.scale.height },
+      sideMargin: DIALOGUE_SIDE_MARGIN,
+      bottomMargin: DIALOGUE_BOTTOM_MARGIN,
       paddingX: DIALOGUE_HORIZONTAL_PADDING,
       paddingY: DIALOGUE_VERTICAL_PADDING,
-      minWidth: width,
-      maxWidth: width
+      lineHeight: this.dialogueLineHeight(),
+      visibleLines: DIALOGUE_VISIBLE_LINES
     });
-    return {
-      ...rect,
-      y: Math.round(this.scale.height - rect.height - DIALOGUE_BOTTOM_MARGIN)
-    };
   }
 
   private dialogueTextWidth(): number {
-    return Math.max(1, this.dialogueRect().width - DIALOGUE_HORIZONTAL_PADDING * 2);
+    return dialogueTextWidth(this.dialogueRect(), DIALOGUE_HORIZONTAL_PADDING);
   }
 
   private menuRect(screen: MenuRenderScreen, x: number): CanvasRect {
     const showTitle = screen.id !== "main";
     const lineHeight = this.menuLineHeight();
-    const maxHeight = Math.max(lineHeight + MENU_VERTICAL_PADDING * 2, this.scale.height - MENU_TOP - MENU_BOTTOM_MARGIN);
-    const titleHeight = showTitle ? lineHeight + MENU_TITLE_GAP : 0;
-    const maxItemLines = Math.max(1, Math.floor((maxHeight - MENU_VERTICAL_PADDING * 2 - titleHeight) / lineHeight));
-    const visibleItemCount = Math.min(screen.items.length, MENU_MAX_VISIBLE_ITEMS, maxItemLines);
     const itemLabels = screen.items.map((item) => item.label);
     const labels = showTitle ? [screen.title, ...itemLabels] : itemLabels;
 
-    return contentFitWindowRect({
+    return menuWindowRect({
+      screen: { width: this.scale.width, height: this.scale.height },
       x,
       y: MENU_TOP,
       labels,
       measureText: (label) => this.measureTextWidth(label),
       lineHeight,
-      lineCount: visibleItemCount + (showTitle ? 1 : 0),
-      extraHeight: showTitle ? MENU_TITLE_GAP : 0,
       paddingX: MENU_HORIZONTAL_PADDING + MENU_CURSOR_GUTTER_PX,
       paddingY: MENU_VERTICAL_PADDING,
+      leftMargin: MENU_LEFT,
+      rightMargin: MENU_RIGHT_MARGIN,
+      bottomMargin: MENU_BOTTOM_MARGIN,
       minWidth: 64,
-      maxWidth: Math.max(64, this.scale.width - x - MENU_RIGHT_MARGIN),
-      maxHeight
+      maxVisibleItems: MENU_MAX_VISIBLE_ITEMS,
+      titleLines: showTitle ? 1 : 0,
+      titleGap: MENU_TITLE_GAP
     });
   }
 
@@ -418,11 +420,11 @@ export class UiScene extends Phaser.Scene {
   }
 
   private dialogueLineHeight(): number {
-    return (this.bitmapFont?.sheet.cellHeight ?? 16) * EB_BITMAP_TEXT_SCALE + UI_LINE_SPACING;
+    return ebTextLineHeight({ lineSpacing: UI_LINE_SPACING });
   }
 
   private menuLineHeight(): number {
-    return MENU_ITEM_LINE_HEIGHT;
+    return ebTextLineHeight({ lineSpacing: UI_LINE_SPACING });
   }
 
   private renderMenuCursors(): void {

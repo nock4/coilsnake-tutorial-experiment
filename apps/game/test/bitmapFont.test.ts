@@ -68,6 +68,17 @@ describe("bitmap font mapping", () => {
       ["B", 0, 19]
     ]);
   });
+
+  it("allows EB UI text to advance by visual glyph height instead of atlas cell height", () => {
+    const layout = layoutBitmapText(font, sheet, "A\nB", { scale: 2, lineHeight: 18 });
+
+    expect(layout.width).toBe(12);
+    expect(layout.height).toBe(50);
+    expect(layout.glyphs.map((glyph) => [glyph.char, glyph.dx, glyph.dy])).toEqual([
+      ["A", 0, 0],
+      ["B", 0, 18]
+    ]);
+  });
 });
 
 describe("bitmap font transparency keying", () => {

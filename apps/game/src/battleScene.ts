@@ -72,9 +72,11 @@ import {
 import { WINDOW_FLAVOR_CHANGE_EVENT, activeWindowFlavorId } from "./windowSettings";
 import {
   EB_BITMAP_TEXT_SCALE,
+  EB_TEXT_LINE_SPACING,
   EB_UI_SCALE,
   type CanvasRect,
-  contentFitWindowRect
+  battleWindowRect,
+  ebTextLineHeight
 } from "./windowLayout";
 import {
   CANCEL_KEY_NAMES,
@@ -106,11 +108,11 @@ const MONO = "Menlo, Consolas, monospace";
 const TAU = Math.PI * 2;
 export const COMMANDS = commandsForCharId(0);
 const STATUS_TOP = 288;
-const BATTLE_LINE_SPACING = 2;
+const BATTLE_LINE_SPACING = EB_TEXT_LINE_SPACING;
 const BATTLE_BOTTOM_MARGIN = 8;
 const BATTLE_LEFT_MARGIN = 16;
 const BATTLE_GAP = 8;
-const BATTLE_LINE_HEIGHT = 18;
+const BATTLE_LINE_HEIGHT = ebTextLineHeight({ lineSpacing: BATTLE_LINE_SPACING });
 const BATTLE_COMMAND_TEXT_PADDING_X = 16;
 const BATTLE_COMMAND_TEXT_PADDING_Y = 14;
 const BATTLE_STATUS_TEXT_PADDING_X = 20;
@@ -1066,12 +1068,13 @@ export class BattleScene extends Phaser.Scene {
           fontFamily: MONO,
           fontSize: "15px",
           color: "#f8fafc",
-          lineSpacing: 8
+          lineSpacing: BATTLE_LINE_SPACING
         },
         {
           scale: EB_BITMAP_TEXT_SCALE,
           tint: 0xf8fafc,
           lineSpacing: BATTLE_LINE_SPACING,
+          lineHeight: BATTLE_LINE_HEIGHT,
           maxWidth: Math.max(1, commandRect.width - BATTLE_COMMAND_TEXT_PADDING_X * 2 - MENU_CURSOR_GUTTER_PX)
         }
       ).setDepth(21);
@@ -1085,12 +1088,13 @@ export class BattleScene extends Phaser.Scene {
         fontFamily: MONO,
         fontSize: "14px",
         color: "#f8fafc",
-        lineSpacing: 7
+        lineSpacing: BATTLE_LINE_SPACING
       },
       {
         scale: EB_BITMAP_TEXT_SCALE,
         tint: 0xf8fafc,
         lineSpacing: BATTLE_LINE_SPACING,
+        lineHeight: BATTLE_LINE_HEIGHT,
         maxWidth: Math.max(1, statusRect.width - BATTLE_STATUS_TEXT_PADDING_X * 2 - MENU_CURSOR_GUTTER_PX)
       }
     ).setDepth(21);
@@ -1098,44 +1102,40 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private battleCommandRect(lines: string[]): CanvasRect {
-    const rect = contentFitWindowRect({
+    return battleWindowRect({
+      screen: { width: this.scale.width, height: this.scale.height },
       x: BATTLE_LEFT_MARGIN,
-      y: 0,
       labels: lines,
       measureText: (label) => this.measureTextWidth(label),
       lineHeight: BATTLE_LINE_HEIGHT,
-      lineCount: Math.max(1, lines.length),
       paddingX: BATTLE_COMMAND_TEXT_PADDING_X + MENU_CURSOR_GUTTER_PX,
       paddingY: BATTLE_COMMAND_TEXT_PADDING_Y,
+      bottomMargin: BATTLE_BOTTOM_MARGIN,
+      leftMargin: BATTLE_LEFT_MARGIN,
+      rightMargin: BATTLE_LEFT_MARGIN,
       minWidth: 80,
       maxWidth: 180,
       maxHeight: this.scale.height - STATUS_TOP - BATTLE_BOTTOM_MARGIN * 2
     });
-    return {
-      ...rect,
-      y: Math.round(this.scale.height - rect.height - BATTLE_BOTTOM_MARGIN)
-    };
   }
 
   private battleStatusRect(lines: string[], commandRect: CanvasRect | undefined): CanvasRect {
     const x = commandRect ? commandRect.x + commandRect.width + BATTLE_GAP : BATTLE_LEFT_MARGIN;
-    const rect = contentFitWindowRect({
+    return battleWindowRect({
+      screen: { width: this.scale.width, height: this.scale.height },
       x,
-      y: 0,
       labels: lines,
       measureText: (label) => this.measureTextWidth(label),
       lineHeight: BATTLE_LINE_HEIGHT,
-      lineCount: Math.max(1, lines.length),
       paddingX: BATTLE_STATUS_TEXT_PADDING_X + MENU_CURSOR_GUTTER_PX,
       paddingY: BATTLE_STATUS_TEXT_PADDING_Y,
-      minWidth: Math.min(160, this.scale.width - x - BATTLE_LEFT_MARGIN),
+      bottomMargin: BATTLE_BOTTOM_MARGIN,
+      leftMargin: BATTLE_LEFT_MARGIN,
+      rightMargin: BATTLE_LEFT_MARGIN,
+      minWidth: 160,
       maxWidth: Math.max(80, this.scale.width - x - BATTLE_LEFT_MARGIN),
       maxHeight: this.scale.height - STATUS_TOP - BATTLE_BOTTOM_MARGIN * 2
     });
-    return {
-      ...rect,
-      y: Math.round(this.scale.height - rect.height - BATTLE_BOTTOM_MARGIN)
-    };
   }
 
   private drawWindow(x: number, y: number, width: number, height: number): void {

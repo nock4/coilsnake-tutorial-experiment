@@ -43,6 +43,7 @@ export type BitmapTextOptions = {
   scale?: number;
   tint?: number;
   lineSpacing?: number;
+  lineHeight?: number;
   maxWidth?: number;
 };
 
@@ -122,7 +123,7 @@ export function layoutBitmapText(
 ): BitmapTextLayout {
   const scale = integerScale(options.scale);
   const lineSpacing = Math.max(0, options.lineSpacing ?? 0);
-  const lineHeight = sheet.cellHeight * scale + lineSpacing;
+  const lineHeight = normalizeLineHeight(options.lineHeight, sheet.cellHeight * scale + lineSpacing);
   const lines = wrapBitmapText(font, sheet, text, options.maxWidth, scale);
   const glyphs: GlyphLayout[] = [];
   let maxWidth = 0;
@@ -150,7 +151,7 @@ export function layoutBitmapText(
   return {
     glyphs,
     width: maxWidth,
-    height: lines.length > 0 ? lines.length * sheet.cellHeight * scale + Math.max(0, lines.length - 1) * lineSpacing : 0,
+    height: lines.length > 0 ? (lines.length - 1) * lineHeight + sheet.cellHeight * scale : 0,
     lineCount: lines.length
   };
 }
@@ -253,7 +254,8 @@ export function drawText(
 export class BitmapFontText {
   readonly container: Phaser.GameObjects.Container;
   private text = "";
-  private options: Required<Pick<BitmapTextOptions, "scale" | "tint" | "lineSpacing">> & Pick<BitmapTextOptions, "maxWidth">;
+  private options: Required<Pick<BitmapTextOptions, "scale" | "tint" | "lineSpacing">> &
+    Pick<BitmapTextOptions, "lineHeight" | "maxWidth">;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -413,15 +415,21 @@ function createProcessedTexture(
 
 function normalizeTextOptions(
   options: BitmapTextOptions
-): Required<Pick<BitmapTextOptions, "scale" | "tint" | "lineSpacing">> & Pick<BitmapTextOptions, "maxWidth"> {
+): Required<Pick<BitmapTextOptions, "scale" | "tint" | "lineSpacing">> &
+  Pick<BitmapTextOptions, "lineHeight" | "maxWidth"> {
   return {
     scale: integerScale(options.scale),
     tint: options.tint ?? DEFAULT_TINT,
     lineSpacing: Math.max(0, options.lineSpacing ?? 0),
+    ...(options.lineHeight !== undefined ? { lineHeight: normalizeLineHeight(options.lineHeight, 1) } : {}),
     ...(options.maxWidth !== undefined ? { maxWidth: options.maxWidth } : {})
   };
 }
 
 function integerScale(scale = 1): number {
   return Math.max(1, Math.round(scale));
+}
+
+function normalizeLineHeight(lineHeight: number | undefined, fallback: number): number {
+  return Math.max(1, Math.round(lineHeight ?? fallback));
 }
