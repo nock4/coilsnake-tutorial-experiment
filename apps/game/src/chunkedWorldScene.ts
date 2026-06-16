@@ -137,6 +137,7 @@ import {
 import { buildPartyMember, type PartyMember } from "./characterModel";
 import { activeWindowFlavorId } from "./windowSettings";
 import { walkableFootprintClear } from "./collisionFootprint";
+import { resolveConnectedRoomBounds, type ConnectedRoomBounds } from "./roomBounds";
 
 type ChunkLayer = "background" | "foreground";
 type WorldChunk = WorldChunked["chunks"][number];
@@ -204,6 +205,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private loadingTextureKeys = new Set<string>();
   private loadingSheetGroups = new Set<number>();
   private currentChunk?: ChunkCoord;
+  private activeRoomBounds?: ConnectedRoomBounds;
+  private cameraBoundsMode: "world" | "interior" = "world";
   private solidRows: string[] = [];
   private surfaceRows: string[] = [];
   private collisionCellSize = 8;
@@ -346,6 +349,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.cameras.main.setZoom(2);
     this.cameras.main.startFollow(this.player, true);
     this.cameras.main.roundPixels = true;
+    this.refreshRoomBounds(true);
     this.events.once("shutdown", () => {
       this.destroyDoorFadeOverlay();
       this.destroyCollisionOverlay();
@@ -388,6 +392,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     });
 
     this.refreshStreaming(true);
+    this.applyInteriorChunkCull();
     this.updateCollisionOverlay();
     this.updatePrompt();
     this.scene.launch("ui", { worldSceneKey: "chunked-world", font: this.data_.font, window: this.data_.window });
@@ -440,7 +445,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
       frames: this.playerFrames
     });
     this.syncPlayerObject();
+    this.refreshRoomBounds();
     this.refreshStreaming();
+    this.positionInteriorCamera();
     this.updateCollisionOverlay();
     if (this.maybeStartIntroMeteorBeat()) {
       return;
@@ -474,6 +481,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.loadingTextureKeys.clear();
     this.loadingSheetGroups.clear();
     this.currentChunk = undefined;
+    this.activeRoomBounds = undefined;
+    this.cameraBoundsMode = "world";
     this.cursors = undefined;
     this.keys = undefined;
     this.solidRows = [];
@@ -543,6 +552,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.despawnHiddenNpcs();
     this.spawnNpcsForActiveChunks(nextChunk);
     this.despawnNpcsOutsideRetain(nextChunk);
+    this.applyNpcRoomVisibility();
   }
 
   private requestActiveChunks(center: ChunkCoord): void {
@@ -615,6 +625,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       .setDepth(layer === "background" ? 0 : 100000);
     streamed[layer] = image;
     this.chunkObjects.set(key, streamed);
+    this.applyInteriorChunkCull();
   }
 
   private unloadChunksOutsideRetain(center: ChunkCoord): void {
@@ -630,6 +641,130 @@ export class ChunkedWorldScene extends Phaser.Scene {
 
   private isChunkRetained(chunk: WorldChunk, center: ChunkCoord): boolean {
     return Math.max(Math.abs(chunk.cx - center.cx), Math.abs(chunk.cy - center.cy)) <= RETAIN_CHUNK_RADIUS;
+  }
+
+  private refreshRoomBounds(force = false): void {
+    if (!force && this.playerInsideCachedRoomBounds()) {
+      return;
+    }
+    this.activeRoomBounds = resolveConnectedRoomBounds(this.solidRows, this.collisionGrid(), this.playerState);
+    this.applyCameraBoundsForActiveRoom();
+    this.applyInteriorChunkCull();
+    this.applyNpcRoomVisibility();
+  }
+
+  private playerInsideCachedRoomBounds(): boolean {
+    const room = this.activeRoomBounds;
+    const cell = worldPixelToCollisionCell(this.playerState, this.collisionCellSize);
+    if (!room || !cell) {
+      return false;
+    }
+    const bounds = room.walkableCellBounds;
+    return (
+      cell.cellX >= bounds.minCellX &&
+      cell.cellX <= bounds.maxCellX &&
+      cell.cellY >= bounds.minCellY &&
+      cell.cellY <= bounds.maxCellY
+    );
+  }
+
+  private applyCameraBoundsForActiveRoom(): void {
+    const room = this.activeInteriorRoom();
+    if (!room) {
+      this.applyWorldCameraBounds();
+      return;
+    }
+    this.cameraBoundsMode = "interior";
+    this.cameras.main.stopFollow();
+    this.positionInteriorCamera();
+  }
+
+  private applyWorldCameraBounds(): void {
+    const bounds = this.movementBounds();
+    this.cameras.main.setBounds(0, 0, bounds.maxX + 8, bounds.maxY + 1);
+    if (this.player && this.cameraBoundsMode !== "world") {
+      this.cameras.main.startFollow(this.player, true);
+    }
+    this.cameraBoundsMode = "world";
+  }
+
+  private positionInteriorCamera(): void {
+    const room = this.activeInteriorRoom();
+    if (!room) {
+      return;
+    }
+    const camera = this.cameras.main;
+    const viewport = this.cameraWorldViewportSize();
+    const scrollBounds = this.cameraScrollBoundsForRect(room.rect, viewport);
+    camera.setBounds(scrollBounds.x, scrollBounds.y, scrollBounds.width, scrollBounds.height);
+    camera.setScroll(
+      Math.round(scrollWithinRoom(this.playerState.x, room.rect.x, room.rect.width, viewport.width)),
+      Math.round(scrollWithinRoom(this.playerState.y, room.rect.y, room.rect.height, viewport.height))
+    );
+  }
+
+  private cameraWorldViewportSize(): { width: number; height: number } {
+    const camera = this.cameras.main;
+    const zoom = camera.zoom > 0 ? camera.zoom : 1;
+    return {
+      width: camera.width / zoom,
+      height: camera.height / zoom
+    };
+  }
+
+  private cameraScrollBoundsForRect(
+    rect: WorldRect,
+    viewport: { width: number; height: number }
+  ): WorldRect {
+    const width = Math.max(rect.width, viewport.width);
+    const height = Math.max(rect.height, viewport.height);
+    return {
+      x: rect.width < viewport.width ? rect.x + rect.width / 2 - viewport.width / 2 : rect.x,
+      y: rect.height < viewport.height ? rect.y + rect.height / 2 - viewport.height / 2 : rect.y,
+      width,
+      height
+    };
+  }
+
+  private activeInteriorRoom(): ConnectedRoomBounds | undefined {
+    return this.activeRoomBounds?.isInterior ? this.activeRoomBounds : undefined;
+  }
+
+  private applyInteriorChunkCull(): void {
+    const room = this.activeInteriorRoom();
+    for (const streamed of this.chunkObjects.values()) {
+      this.applyChunkLayerCull(streamed, streamed.background, room?.rect);
+      this.applyChunkLayerCull(streamed, streamed.foreground, room?.rect);
+    }
+  }
+
+  private applyChunkLayerCull(
+    streamed: StreamedChunk,
+    image: Phaser.GameObjects.Image | undefined,
+    rect: WorldRect | undefined
+  ): void {
+    if (!image || !isLiveGameObject(image)) {
+      return;
+    }
+    if (!rect) {
+      image.setVisible(true);
+      image.setCrop();
+      return;
+    }
+
+    const size = chunkPixelSize(this.grid());
+    const chunkX = streamed.chunk.cx * size;
+    const chunkY = streamed.chunk.cy * size;
+    const left = Math.max(rect.x, chunkX);
+    const top = Math.max(rect.y, chunkY);
+    const right = Math.min(rect.x + rect.width, chunkX + size);
+    const bottom = Math.min(rect.y + rect.height, chunkY + size);
+    if (right <= left || bottom <= top) {
+      image.setVisible(false);
+      return;
+    }
+    image.setVisible(true);
+    image.setCrop(left - chunkX, top - chunkY, right - left, bottom - top);
   }
 
   private chunkTextureKey(chunk: WorldChunk, layer: ChunkLayer): string {
@@ -787,6 +922,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
         this.npcRuntimes.set(placement.key, this.createNpcRuntime(placement));
       }
     }
+    this.applyNpcRoomVisibility();
     if (queued && !this.load.isLoading()) {
       this.load.start();
     }
@@ -865,6 +1001,18 @@ export class ChunkedWorldScene extends Phaser.Scene {
       actor.setFrame(npc.state.player.animFrame);
     }
     actor.setDepth(npc.state.player.y);
+    actor.setVisible(this.npcInsideActiveRoom(npc));
+  }
+
+  private applyNpcRoomVisibility(): void {
+    for (const npc of this.npcRuntimes.values()) {
+      npc.sprite?.setVisible(this.npcInsideActiveRoom(npc));
+    }
+  }
+
+  private npcInsideActiveRoom(npc: NpcRuntime): boolean {
+    const room = this.activeInteriorRoom();
+    return !room || pointInRect(npc.state.player, room.rect);
   }
 
   private refreshNpcSprites(): void {
@@ -969,6 +1117,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (options.includeNpcs ?? true) {
       for (const npc of this.npcRuntimes.values()) {
         if (npc.data.npcId === options.ignoreNpcId) {
+          continue;
+        }
+        if (!this.npcInsideActiveRoom(npc)) {
           continue;
         }
         if (this.actorBodyBlocked(x, y, npc.state.player.x, npc.state.player.y)) {
@@ -1123,9 +1274,13 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.playerState.animFrame = this.playerFrames[this.playerState.facing][0];
     this.lastDoor = { from, to };
     this.currentChunk = undefined;
+    this.activeRoomBounds = undefined;
     this.refreshStreaming(true);
     this.syncEncounterTileState();
-    this.cameras.main.centerOn(to.x, to.y);
+    this.refreshRoomBounds(true);
+    if (!this.activeInteriorRoom()) {
+      this.cameras.main.centerOn(to.x, to.y);
+    }
     if (this.player) {
       this.player.x = to.x;
       this.player.y = to.y;
@@ -1263,12 +1418,14 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   private interactionCandidates(): InteractionCandidate[] {
-    return [...this.npcRuntimes.values()].map((npc) => ({
-      id: npc.data.npcId,
-      x: npc.state.player.x,
-      y: npc.state.player.y,
-      interactable: npc.data.interactable
-    }));
+    return [...this.npcRuntimes.values()]
+      .filter((npc) => this.npcInsideActiveRoom(npc))
+      .map((npc) => ({
+        id: npc.data.npcId,
+        x: npc.state.player.x,
+        y: npc.state.player.y,
+        interactable: npc.data.interactable
+      }));
   }
 
   private interactionTarget(): InteractionCandidate | undefined {
@@ -2305,8 +2462,12 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.playerState.animKey = `idle-${this.playerState.facing}`;
     this.playerState.animFrame = this.playerFrames[this.playerState.facing][0];
     this.currentChunk = undefined;
+    this.activeRoomBounds = undefined;
     this.refreshStreaming(true);
-    this.cameras.main.centerOn(spawn.x, spawn.y);
+    this.refreshRoomBounds(true);
+    if (!this.activeInteriorRoom()) {
+      this.cameras.main.centerOn(spawn.x, spawn.y);
+    }
     if (this.player) {
       this.player.x = spawn.x;
       this.player.y = spawn.y;
@@ -2582,6 +2743,13 @@ function normalizeOptionalGroupId(value: number | undefined): number | undefined
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function scrollWithinRoom(playerCoordinate: number, roomStart: number, roomSize: number, viewportSize: number): number {
+  if (roomSize <= viewportSize) {
+    return roomStart + roomSize / 2 - viewportSize / 2;
+  }
+  return clamp(playerCoordinate - viewportSize / 2, roomStart, roomStart + roomSize - viewportSize);
 }
 
 function startupCoverageByKind(effectsByKind: Partial<Record<string, number>>): Partial<Record<string, number>> {
