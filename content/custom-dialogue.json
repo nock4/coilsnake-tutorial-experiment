@@ -1,19 +1,26 @@
 {
   "schema": "swagbound.custom-dialogue.v1",
-  "comment": "First-slice placeholder mappings (npcId 1 + 78) to be re-authored. 78 is next to the bedroom spawn for proof.",
+  "comment": "Act-1 opening-area placeholder distribution. npcId->character is a FIRST PASS to refine during the upcoming sprite work (e.g. Biscuit should land on the actual dog sprite). House beats wired here; town beats (neighbor Bonkle / corner-shop Sal / burger Morrow) are deferred to the town pass since those NPCs live in separate Onett buildings. See docs/swagbound-eb-act1-arc-mapping.md.",
   "byNpcId": {
-    "1": {
-      "pages": [
-        "Bosch! Wake up. Your phone minted something at 4am, and it is signed with your name.",
-        "The payload just says 'Swag is eternal.' You didn't write that. Somebody beat you to being you."
-      ]
-    },
     "78": {
       "pages": [
-        "Bosch! Wake up. Your phone minted something at 4am, and it is signed with your name.",
-        "The payload just says 'Swag is eternal.' You didn't write that. Somebody beat you to being you."
+        "MiFella lets himself in like he owns the version of you that counts.",
+        "\"Bosch! Wake up. You're trending before breakfast. Congrats, I think?\"",
+        "\"There's already a you outside. Cleaner haircut, smoother story.\"",
+        "\"He signed a 4am mint: 'Swag is eternal.' The town's already calling him convenient.\"",
+        "\"Relax, it's free press. Come let it count. ...You're gonna make a face, aren't you. They love the face.\""
       ]
-    }
+    },
+    "99": { "ref": "target:bosch-main-room-v0:guardian" },
+    "100": { "ref": "dialogue:archive-console-link" },
+    "3": { "ref": "target:bosch-main-room-v0:signal-pet-gate" },
+    "98": { "ref": "interior:home-hall-v0" },
+    "37": { "ref": "interior:bosch-main-room-v0" },
+    "85": { "ref": "interior:bosch-side-room-v0" },
+    "90": { "ref": "interior:bosch-upstairs-hall-v0" },
+    "33": { "ref": "target:bosch-main-room-v0:cousin" },
+    "35": { "ref": "target:bosch-main-room-v0:proof-token-bowl" },
+    "21": { "ref": "interior:bosch-bedroom-v0" }
   },
   "byTextPointer": {}
 }
