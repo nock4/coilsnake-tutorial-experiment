@@ -1,6 +1,6 @@
 {
   "schema": "swagbound.custom-dialogue.v1",
-  "comment": "Act-1 opening slice. npcId->character is a first pass to refine (esp. matching Biscuit to the dog NPC). MiFella inline; Guardian + Bosch Terminal via library refs. See docs/swagbound-eb-act1-arc-mapping.md.",
+  "comment": "Act-1 opening-area placeholder distribution. npcId->character is a FIRST PASS to refine during the upcoming sprite work (e.g. Biscuit should land on the actual dog sprite). House beats wired here; town beats (neighbor Bonkle / corner-shop Sal / burger Morrow) are deferred to the town pass since those NPCs live in separate Onett buildings. See docs/swagbound-eb-act1-arc-mapping.md.",
   "byNpcId": {
     "78": {
       "pages": [
@@ -12,7 +12,15 @@
       ]
     },
     "99": { "ref": "target:bosch-main-room-v0:guardian" },
-    "100": { "ref": "dialogue:archive-console-link" }
+    "100": { "ref": "dialogue:archive-console-link" },
+    "3": { "ref": "target:bosch-main-room-v0:signal-pet-gate" },
+    "98": { "ref": "interior:home-hall-v0" },
+    "37": { "ref": "interior:bosch-main-room-v0" },
+    "85": { "ref": "interior:bosch-side-room-v0" },
+    "90": { "ref": "interior:bosch-upstairs-hall-v0" },
+    "33": { "ref": "target:bosch-main-room-v0:cousin" },
+    "35": { "ref": "target:bosch-main-room-v0:proof-token-bowl" },
+    "21": { "ref": "interior:bosch-bedroom-v0" }
   },
   "byTextPointer": {}
 }
