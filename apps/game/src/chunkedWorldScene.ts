@@ -14,6 +14,7 @@ import {
 } from "./doorTriggers";
 import {
   buildDialogueForReference,
+  buildInlineDialoguePages,
   buildMetadataLines,
   buildStatusLines,
   chooseReference,
@@ -1985,7 +1986,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     this.pauseNpcForDialogue(npc);
     lockPlayer(this.playerState, this.playerFrames);
-    this.runEvents(interactionEvents(npc.data, this.targetReference, this.gameFlags));
+    this.runEvents(interactionEvents(npc.data, this.targetReference, this.gameFlags, this.data_.customDialogue));
     this.updatePrompt();
     this.publish();
   }
@@ -1994,7 +1995,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
     for (const event of events) {
       switch (event.kind) {
         case "dialogue":
-          if (!this.startEventSequence(event.reference)) {
+          if (event.pages) {
+            this.dialogue.start(buildInlineDialoguePages(event.pages));
+          } else if (!this.startEventSequence(event.reference)) {
             this.dialogue.start(buildDialogueForReference(this.data_.scripts, event.reference, this.gameFlags));
           }
           break;
