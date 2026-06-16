@@ -88,10 +88,16 @@ import {
 } from "./state";
 import { createDialogueResolver, textSpeedCpsFromSearch } from "./dialogueRenderer";
 import {
+  INTRO_ACTOR_VM_STUBS,
+  INTRO_BEDROOM_OPENING_DONE_FLAG,
+  INTRO_FIRST_BOSS_DONE_FLAG,
   INTRO_METEOR_BEAT_FIRED_FLAG,
+  decideIntroFirstBossBeatFire,
   decideIntroMeteorBattleTransition,
   decideIntroMeteorBeatFire,
+  resolveIntroFirstBossBeatStart,
   resolveIntroMeteorBeatStart,
+  type IntroFirstBossBeatStart,
   type IntroMeteorBeatStart,
   type NewGameOpeningStart
 } from "./newGameOpening";
@@ -260,7 +266,10 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private startupFallbackReason?: string;
   private newGameOpening?: NewGameOpeningStart;
   private introMeteorBeat?: IntroMeteorBeatStart;
+  private introFirstBossBeat?: IntroFirstBossBeatStart;
   private warnedIntroMeteorSkips = new Set<string>();
+  private warnedIntroFirstBossSkips = new Set<string>();
+  private warnedIntroActorVmStubs = new Set<string>();
   targetReference = TARGET_REFERENCE;
   prompt = "";
   assetsLoaded = false;
@@ -337,6 +346,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.collisionOverlayEnabled = this.initialCollisionOverlayEnabled();
     this.registerCollisionDebugGlobals();
     this.resolveIntroMeteorBeatForStart();
+    this.resolveIntroFirstBossBeatForStart();
 
     const restoredPlayer = this.restoreState ? undefined : this.applyInitialSave();
     const returnPlayer = this.applyReturnRestore();
@@ -457,6 +467,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (this.maybeStartIntroMeteorBeat()) {
       return;
     }
+    if (this.maybeStartIntroFirstBossBeat()) {
+      return;
+    }
     if (this.handleEncounterStep()) {
       return;
     }
@@ -516,7 +529,10 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.startupFallbackReason = undefined;
     this.newGameOpening = undefined;
     this.introMeteorBeat = undefined;
+    this.introFirstBossBeat = undefined;
     this.warnedIntroMeteorSkips.clear();
+    this.warnedIntroFirstBossSkips.clear();
+    this.warnedIntroActorVmStubs.clear();
     this.prompt = "";
     this.assetsLoaded = false;
   }
@@ -1968,6 +1984,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return;
     }
     this.startupRunFinalized = true;
+    const completedOpening = this.startupMode === "opening";
     const reference = this.newGameStartupRecord?.reference ?? this.world_.player.newGameStartupRef;
     let fallbackApplied = false;
     let fallbackReason = this.startupFallbackReason;
@@ -1978,6 +1995,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     this.startupRunActive = false;
     this.startupMode = "startup";
+    if (completedOpening) {
+      this.gameFlags.set(INTRO_BEDROOM_OPENING_DONE_FLAG);
+    }
     if (this.dialogue.open && result.status === "aborted") {
       this.dialogue.close();
     }
@@ -2023,9 +2043,13 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return;
     }
     this.startupRunFinalized = true;
+    const completedOpening = this.startupMode === "opening";
     this.eventSequence?.abort("startup_control_start");
     this.startupRunActive = false;
     this.startupMode = "startup";
+    if (completedOpening) {
+      this.gameFlags.set(INTRO_BEDROOM_OPENING_DONE_FLAG);
+    }
     if (this.dialogue.open) {
       this.dialogue.close();
     }
@@ -2068,6 +2092,16 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.warnIntroMeteorSkip(resolution.reason);
   }
 
+  private resolveIntroFirstBossBeatForStart(): void {
+    this.introFirstBossBeat = undefined;
+    const resolution = resolveIntroFirstBossBeatStart(this.world_, this.data_.scripts, this.data_.battle);
+    if (resolution.resolved) {
+      this.introFirstBossBeat = resolution.start;
+      return;
+    }
+    this.warnIntroFirstBossSkip(resolution.reason);
+  }
+
   private maybeStartIntroMeteorBeat(): boolean {
     const beat = this.introMeteorBeat;
     if (!beat || this.menuState.open || this.dialogue.open || this.eventSequence?.running || this.isDoorFadeActive()) {
@@ -2101,8 +2135,41 @@ export class ChunkedWorldScene extends Phaser.Scene {
     return true;
   }
 
+  private maybeStartIntroFirstBossBeat(): boolean {
+    const beat = this.introFirstBossBeat;
+    if (!beat || this.menuState.open || this.dialogue.open || this.eventSequence?.running || this.isDoorFadeActive()) {
+      return false;
+    }
+    if (this.playerState.inputLocked) {
+      return false;
+    }
+    const decision = decideIntroFirstBossBeatFire({
+      bedroomOpeningComplete: this.gameFlags.has(INTRO_BEDROOM_OPENING_DONE_FLAG),
+      meteorBeatComplete: this.gameFlags.has(INTRO_METEOR_BEAT_FIRED_FLAG) && !this.newGameOpening,
+      playerInTriggerRegion: pointInRect(this.playerState, beat.trigger),
+      alreadyDone: this.gameFlags.has(INTRO_FIRST_BOSS_DONE_FLAG)
+    });
+    if (!decision.fire) {
+      return false;
+    }
+
+    lockPlayer(this.playerState, this.playerFrames);
+    const started = this.eventSequence?.start(beat.dialogueRef, {
+      onComplete: () => this.completeIntroFirstBossDialogue(beat)
+    }) ?? false;
+    if (!started) {
+      this.warnIntroFirstBossSkip("dialogue_unavailable");
+      this.finishIntroFirstBossBeatWithoutBattle();
+      return true;
+    }
+    this.updatePrompt();
+    this.publish();
+    return true;
+  }
+
   private completeIntroMeteorDialogue(beat: IntroMeteorBeatStart): void {
     this.newGameOpening = undefined;
+    this.warnIntroActorVmStubs();
     this.ensureIntroSoloParty();
     const battleStarted = this.startEventBattle(beat.battleGroupId);
     const transition = decideIntroMeteorBattleTransition({
@@ -2114,6 +2181,22 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     this.warnIntroMeteorSkip(transition.reason);
     this.finishIntroMeteorBeatWithoutBattle();
+  }
+
+  private completeIntroFirstBossDialogue(beat: IntroFirstBossBeatStart): void {
+    if (!this.data_.battle || !this.battleGroupExists(beat.battleGroupId) || !this.player) {
+      this.warnIntroFirstBossSkip("battle_unavailable");
+      this.finishIntroFirstBossBeatWithoutBattle();
+      return;
+    }
+
+    this.gameFlags.set(INTRO_FIRST_BOSS_DONE_FLAG);
+    const battleStarted = this.startEventBattle(beat.battleGroupId);
+    if (battleStarted) {
+      return;
+    }
+    this.warnIntroFirstBossSkip("battle_start_failed");
+    this.finishIntroFirstBossBeatWithoutBattle();
   }
 
   private ensureIntroSoloParty(): void {
@@ -2135,12 +2218,40 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.publish();
   }
 
+  private finishIntroFirstBossBeatWithoutBattle(): void {
+    this.afterDialogueClosed();
+    this.updatePrompt();
+    this.publish();
+  }
+
   private warnIntroMeteorSkip(reason: string): void {
     if (this.warnedIntroMeteorSkips.has(reason)) {
       return;
     }
     this.warnedIntroMeteorSkips.add(reason);
     console.warn("Skipping new-game meteor intro beat.", reason);
+  }
+
+  private warnIntroFirstBossSkip(reason: string): void {
+    if (this.warnedIntroFirstBossSkips.has(reason)) {
+      return;
+    }
+    this.warnedIntroFirstBossSkips.add(reason);
+    console.warn("Skipping reconstructed first-boss story beat.", reason);
+  }
+
+  private warnIntroActorVmStubs(): void {
+    for (const stub of INTRO_ACTOR_VM_STUBS) {
+      if (this.warnedIntroActorVmStubs.has(stub.id)) {
+        continue;
+      }
+      this.warnedIntroActorVmStubs.add(stub.id);
+      console.warn("Stubbed EarthBound actor-VM cutscene.", {
+        id: stub.id,
+        beat: stub.beat,
+        reason: stub.reason
+      });
+    }
   }
 
   private openShopForCurrentMode(storeId: number): boolean | void {
