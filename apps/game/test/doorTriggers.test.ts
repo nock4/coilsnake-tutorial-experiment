@@ -11,6 +11,7 @@ import {
   type DoorTriggerState
 } from "../src/doorTriggers";
 import type { CollisionGrid } from "../src/collisionOverlay";
+import { PLAYER_FOOT_BOX } from "../src/collisionFootprint";
 
 const GRID: CollisionGrid = { cellSize: 8, width: 12, height: 12 };
 
@@ -280,6 +281,107 @@ describe("adjacent door movement intent", () => {
 
     expect(preferY.door).toBe(door);
     expect(preferX.door).toBe(leftDoor);
+  });
+
+  it("fires a set-back door when the pressed footprint can reach it through one gap cell", () => {
+    const setBackDoor: WorldDoor = {
+      ...door,
+      worldPixel: { x: 32, y: 32 }
+    };
+
+    const result = resolveAdjacentDoorIntentTrigger(
+      { x: 16, y: 32 },
+      { dx: 1, dy: 0 },
+      [setBackDoor],
+      { suppressUntilClear: false },
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+
+    expect(result.door).toBe(setBackDoor);
+    expect(result.suppressUntilClear).toBe(true);
+    expect(result.suppressedDoorCell).toEqual({ x: 4, y: 4 });
+  });
+
+  it("does not fire footprint-range doors to the side or behind", () => {
+    const sideDoor: WorldDoor = {
+      ...door,
+      worldPixel: { x: 32, y: 48 }
+    };
+    const behindDoor: WorldDoor = {
+      ...door,
+      worldPixel: { x: 0, y: 32 }
+    };
+
+    const side = resolveAdjacentDoorIntentTrigger(
+      { x: 16, y: 32 },
+      { dx: 1, dy: 0 },
+      [sideDoor],
+      { suppressUntilClear: false },
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+    const behind = resolveAdjacentDoorIntentTrigger(
+      { x: 16, y: 32 },
+      { dx: 1, dy: 0 },
+      [behindDoor],
+      { suppressUntilClear: false },
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+
+    expect(side.door).toBeUndefined();
+    expect(side.suppressUntilClear).toBe(false);
+    expect(behind.door).toBeUndefined();
+    expect(behind.suppressUntilClear).toBe(false);
+  });
+
+  it("does not fire a footprint-range door while idle", () => {
+    const setBackDoor: WorldDoor = {
+      ...door,
+      worldPixel: { x: 32, y: 32 }
+    };
+
+    const result = resolveAdjacentDoorIntentTrigger(
+      { x: 16, y: 32 },
+      { dx: 0, dy: 0 },
+      [setBackDoor],
+      { suppressUntilClear: false },
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+
+    expect(result.door).toBeUndefined();
+    expect(result.suppressUntilClear).toBe(false);
+  });
+
+  it("debounces footprint-range door intent while the same press is held", () => {
+    const setBackDoor: WorldDoor = {
+      ...door,
+      worldPixel: { x: 32, y: 32 }
+    };
+
+    const first = resolveAdjacentDoorIntentTrigger(
+      { x: 16, y: 32 },
+      { dx: 1, dy: 0 },
+      [setBackDoor],
+      { suppressUntilClear: false },
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+    const held = resolveAdjacentDoorIntentTrigger(
+      { x: 16, y: 32 },
+      { dx: 1, dy: 0 },
+      [setBackDoor],
+      stateFrom(first),
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+
+    expect(first.door).toBe(setBackDoor);
+    expect(held.door).toBeUndefined();
+    expect(held.suppressUntilClear).toBe(true);
+    expect(held.suppressedDoorCell).toEqual({ x: 4, y: 4 });
   });
 });
 

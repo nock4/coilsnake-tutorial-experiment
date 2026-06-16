@@ -136,7 +136,7 @@ import {
 } from "./inputModel";
 import { buildPartyMember, type PartyMember } from "./characterModel";
 import { activeWindowFlavorId } from "./windowSettings";
-import { walkableFootprintClear } from "./collisionFootprint";
+import { PLAYER_FOOT_BOX, walkableFootprintClear } from "./collisionFootprint";
 import {
   resolveConnectedRoomBounds,
   roomMaskContainsWorldPoint,
@@ -1128,7 +1128,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
       movement,
       this.world_.doors,
       this.doorTriggerState,
-      this.collisionCellSize
+      this.collisionCellSize,
+      { footBox: PLAYER_FOOT_BOX }
     );
     if (movement.dx === 0 && movement.dy === 0) {
       this.setDoorTriggerState(result);

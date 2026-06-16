@@ -21,6 +21,11 @@ export type DoorIntentDirection = {
   preferredAxis?: "x" | "y";
 };
 
+export type DoorIntentProbeOptions = {
+  footBox?: FootBox;
+  maxProbeCells?: number;
+};
+
 export type DoorWarpLanding = {
   point: { x: number; y: number };
   walkable: boolean;
@@ -66,14 +71,18 @@ export function resolveAdjacentDoorIntentTrigger(
   movement: DoorIntentDirection,
   doors: readonly WorldDoor[],
   state: DoorTriggerState,
-  cellSize: number
+  cellSize: number,
+  options: DoorIntentProbeOptions = {}
 ): DoorTriggerResult {
   const currentDoor = doorAtFeet(currentFeet, doors, cellSize);
   if (state.suppressUntilClear) {
     if (state.suppressedDoorCell) {
       const suppressedDoorCell = state.suppressedDoorCell;
-      const stillInSuppressedCell = sameCell(feetCell(currentFeet, cellSize), suppressedDoorCell);
-      const stillPressingSuppressedCell = adjacentProbeCells(currentFeet, movement, cellSize)
+      const stillInSuppressedCell = cellInBounds(
+        suppressedDoorCell,
+        footprintCellBounds(currentFeet, cellSize, options.footBox)
+      );
+      const stillPressingSuppressedCell = adjacentProbeCells(currentFeet, movement, cellSize, options)
         .some((cell) => sameCell(cell, suppressedDoorCell));
       return doorResult(stillInSuppressedCell || stillPressingSuppressedCell, undefined, suppressedDoorCell);
     }
@@ -84,7 +93,7 @@ export function resolveAdjacentDoorIntentTrigger(
     return doorResult(true, undefined, doorCell(currentDoor, cellSize));
   }
 
-  const adjacentDoor = adjacentProbeCells(currentFeet, movement, cellSize)
+  const adjacentDoor = adjacentProbeCells(currentFeet, movement, cellSize, options)
     .map((cell) => doorAtCell(cell, doors, cellSize))
     .find((door): door is WorldDoor => Boolean(door));
   if (!adjacentDoor) {
@@ -143,29 +152,131 @@ function sameDoorCell(
 function adjacentProbeCells(
   feet: { x: number; y: number },
   movement: DoorIntentDirection,
-  cellSize: number
+  cellSize: number,
+  options: DoorIntentProbeOptions = {}
 ): DoorCell[] {
   if (movement.dx === 0 && movement.dy === 0) {
     return [];
   }
 
-  const current = feetCell(feet, cellSize);
+  const bounds = footprintCellBounds(feet, cellSize, options.footBox);
+  const probeCells = resolveProbeCellRange(cellSize, options);
   if (movement.dx !== 0 && movement.dy === 0) {
-    return [{ x: current.x + movement.dx, y: current.y }];
+    return uniqueCells(xProbeCells(bounds, movement.dx, probeCells));
   }
   if (movement.dy !== 0 && movement.dx === 0) {
-    return [{ x: current.x, y: current.y + movement.dy }];
+    return uniqueCells(yProbeCells(bounds, movement.dy, probeCells));
   }
 
-  const xCell: DoorCell = { x: current.x + movement.dx, y: current.y };
-  const yCell: DoorCell = { x: current.x, y: current.y + movement.dy };
-  const diagonalCell: DoorCell = { x: current.x + movement.dx, y: current.y + movement.dy };
-  const axisCells = movement.preferredAxis === "y" ? [yCell, xCell] : [xCell, yCell];
-  return [...axisCells, diagonalCell];
+  const diagonalDx = movement.dx;
+  const diagonalDy = movement.dy;
+  if (diagonalDx === 0 || diagonalDy === 0) {
+    return [];
+  }
+  const xCells = xProbeCells(bounds, diagonalDx, probeCells);
+  const yCells = yProbeCells(bounds, diagonalDy, probeCells);
+  const diagonalCells = diagonalProbeCells(bounds, movement, probeCells);
+  return uniqueCells(movement.preferredAxis === "y"
+    ? [...yCells, ...xCells, ...diagonalCells]
+    : [...xCells, ...yCells, ...diagonalCells]);
 }
 
 function doorAtCell(cell: DoorCell, doors: readonly WorldDoor[], cellSize: number): WorldDoor | undefined {
   return doors.find((door) => sameCell(doorCell(door, cellSize), cell));
+}
+
+type CellBounds = {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+};
+
+function footprintCellBounds(
+  feet: { x: number; y: number },
+  cellSize: number,
+  footBox?: FootBox
+): CellBounds {
+  if (!footBox) {
+    const current = feetCell(feet, cellSize);
+    return { minX: current.x, maxX: current.x, minY: current.y, maxY: current.y };
+  }
+  return {
+    minX: Math.floor((feet.x + footBox.left) / cellSize),
+    maxX: Math.floor((feet.x + footBox.right) / cellSize),
+    minY: Math.floor((feet.y + footBox.top) / cellSize),
+    maxY: Math.floor((feet.y + footBox.bottom) / cellSize)
+  };
+}
+
+function resolveProbeCellRange(cellSize: number, options: DoorIntentProbeOptions): number {
+  if (options.maxProbeCells !== undefined) {
+    return Math.max(1, Math.floor(options.maxProbeCells));
+  }
+  if (!options.footBox || cellSize <= 0) {
+    return 1;
+  }
+  const footprintReachPixels = Math.max(
+    Math.abs(options.footBox.left),
+    Math.abs(options.footBox.right),
+    Math.abs(options.footBox.top),
+    Math.abs(options.footBox.bottom)
+  );
+  return 1 + Math.ceil(footprintReachPixels / cellSize) + 1;
+}
+
+function xProbeCells(bounds: CellBounds, dx: -1 | 1, maxDistanceCells: number): DoorCell[] {
+  const cells: DoorCell[] = [];
+  for (let distance = 1; distance <= maxDistanceCells; distance += 1) {
+    const x = dx > 0 ? bounds.maxX + distance : bounds.minX - distance;
+    for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
+      cells.push({ x, y });
+    }
+  }
+  return cells;
+}
+
+function yProbeCells(bounds: CellBounds, dy: -1 | 1, maxDistanceCells: number): DoorCell[] {
+  const cells: DoorCell[] = [];
+  for (let distance = 1; distance <= maxDistanceCells; distance += 1) {
+    const y = dy > 0 ? bounds.maxY + distance : bounds.minY - distance;
+    for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
+      cells.push({ x, y });
+    }
+  }
+  return cells;
+}
+
+function diagonalProbeCells(
+  bounds: CellBounds,
+  movement: DoorIntentDirection,
+  maxDistanceCells: number
+): DoorCell[] {
+  const cells: DoorCell[] = [];
+  for (let distance = 1; distance <= maxDistanceCells; distance += 1) {
+    const x = movement.dx > 0 ? bounds.maxX + distance : bounds.minX - distance;
+    const y = movement.dy > 0 ? bounds.maxY + distance : bounds.minY - distance;
+    cells.push({ x, y });
+  }
+  return cells;
+}
+
+function uniqueCells(cells: DoorCell[]): DoorCell[] {
+  const seen = new Set<string>();
+  const unique: DoorCell[] = [];
+  for (const cell of cells) {
+    const key = `${cell.x},${cell.y}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    unique.push(cell);
+  }
+  return unique;
+}
+
+function cellInBounds(cell: DoorCell, bounds: CellBounds): boolean {
+  return cell.x >= bounds.minX && cell.x <= bounds.maxX && cell.y >= bounds.minY && cell.y <= bounds.maxY;
 }
 
 function feetCell(feet: { x: number; y: number }, cellSize: number): DoorCell {
