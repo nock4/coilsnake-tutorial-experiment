@@ -46,7 +46,12 @@
         "y": 848
       },
       "spriteGroup": 68,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "The route clerk says you are early. The receipt says you are late. I trust the receipt."
+        ]
+      }
     },
     {
       "id": 100104,
@@ -55,7 +60,12 @@
         "y": 1000
       },
       "spriteGroup": 66,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "Your public version already waved at me. Very polite. Terrible shoes."
+        ]
+      }
     },
     {
       "id": 100105,
@@ -64,7 +74,12 @@
         "y": 1216
       },
       "spriteGroup": 59,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "I sell stamps, but lately the stamps sell me. Little VESSEL mark, big opinions."
+        ]
+      }
     },
     {
       "id": 100106,
@@ -73,7 +88,12 @@
         "y": 1368
       },
       "spriteGroup": 54,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "Swag is eternal. SOURCE? I used to hum it. Now the kiosk hums back."
+        ]
+      }
     },
     {
       "id": 100107,
@@ -82,7 +102,12 @@
         "y": 1472
       },
       "spriteGroup": 119,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "Keep your fit readable. The soft gate likes a clean outline and hates surprises."
+        ]
+      }
     },
     {
       "id": 100108,
@@ -91,7 +116,12 @@
         "y": 1632
       },
       "spriteGroup": 68,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "A witness note under the mat keeps the house from filing us as weather."
+        ]
+      }
     },
     {
       "id": 100109,
@@ -100,7 +130,12 @@
         "y": 1624
       },
       "spriteGroup": 66,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The rumor field is warm today. That means gossip can stand up without help."
+        ]
+      }
     },
     {
       "id": 100110,
@@ -109,7 +144,12 @@
         "y": 1720
       },
       "spriteGroup": 59,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "They asked me for proof-token change. I gave them two nickels and a posture."
+        ]
+      }
     },
     {
       "id": 100111,
@@ -118,7 +158,12 @@
         "y": 1976
       },
       "spriteGroup": 54,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "If the line moves without you, do not chase it. Lines love witnesses with tired feet."
+        ]
+      }
     },
     {
       "id": 100112,
@@ -127,7 +172,12 @@
         "y": 2120
       },
       "spriteGroup": 119,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "My kid drew the public version with a brighter smile. Fair. He gets more sunlight."
+        ]
+      }
     },
     {
       "id": 100113,
@@ -136,7 +186,12 @@
         "y": 2496
       },
       "spriteGroup": 68,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The gate opened because my cardigan matched the form. Civic magic, I guess."
+        ]
+      }
     },
     {
       "id": 100114,
@@ -145,7 +200,12 @@
         "y": 2504
       },
       "spriteGroup": 66,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "Receipt paper curls toward whoever it thinks is real. Mine keeps pointing at the alley."
+        ]
+      }
     },
     {
       "id": 100115,
@@ -154,7 +214,12 @@
         "y": 2520
       },
       "spriteGroup": 59,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "I saw your shortcut self at breakfast. Ordered toast, paid in perfect legibility."
+        ]
+      }
     },
     {
       "id": 100116,
@@ -163,7 +228,12 @@
         "y": 2496
       },
       "spriteGroup": 54,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "When the mark dries too fast, check your pockets. Something decided it belongs to you."
+        ]
+      }
     },
     {
       "id": 100117,
@@ -172,7 +242,12 @@
         "y": 2552
       },
       "spriteGroup": 119,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "Swag is eternal. SOURCE? Sorry, the chorus committee meets near my window."
+        ]
+      }
     },
     {
       "id": 100118,
@@ -181,7 +256,12 @@
         "y": 3272
       },
       "spriteGroup": 68,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "The scene changed overnight. Same benches, different permissions."
+        ]
+      }
     },
     {
       "id": 100119,
@@ -190,7 +270,12 @@
         "y": 3400
       },
       "spriteGroup": 66,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "I keep my charm in a teacup. It rattles when the house forgets my name."
+        ]
+      }
     },
     {
       "id": 100120,
@@ -199,7 +284,12 @@
         "y": 3432
       },
       "spriteGroup": 59,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "Every morning I initial the mirror. It has never countersigned."
+        ]
+      }
     },
     {
       "id": 100121,
@@ -208,7 +298,12 @@
         "y": 3496
       },
       "spriteGroup": 54,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "The clerk called me a reliable witness. I have been insufferable all week."
+        ]
+      }
     },
     {
       "id": 100122,
@@ -217,7 +312,12 @@
         "y": 3528
       },
       "spriteGroup": 119,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "Do not let a kiosk compliment your fit. That is how it starts a folder."
+        ]
+      }
     },
     {
       "id": 100123,
@@ -226,7 +326,12 @@
         "y": 3632
       },
       "spriteGroup": 68,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "A soft gate is still a gate. It just apologizes while counting you."
+        ]
+      }
     },
     {
       "id": 100124,
@@ -235,7 +340,12 @@
         "y": 4160
       },
       "spriteGroup": 66,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "My brother trades routes like recipes. None of them taste like arriving."
+        ]
+      }
     },
     {
       "id": 100125,
@@ -244,7 +354,12 @@
         "y": 4688
       },
       "spriteGroup": 59,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The VESSEL mark on the mailbox is new. The mailman says it always was."
+        ]
+      }
     },
     {
       "id": 100126,
@@ -253,7 +368,12 @@
         "y": 4840
       },
       "spriteGroup": 54,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "I like the real you better. More wrinkles in the proof."
+        ]
+      }
     },
     {
       "id": 100127,
@@ -262,7 +382,12 @@
         "y": 4952
       },
       "spriteGroup": 119,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The public version tipped a hat I do not own. Stylish, legally confusing."
+        ]
+      }
     },
     {
       "id": 100128,
@@ -271,7 +396,12 @@
         "y": 4960
       },
       "spriteGroup": 68,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "If you hear paper breathing, walk slower. It hates being noticed mid-decision."
+        ]
+      }
     },
     {
       "id": 100129,
@@ -280,7 +410,12 @@
         "y": 4904
       },
       "spriteGroup": 66,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "Swag is eternal. SOURCE? The toddlers say it before they can spell shoes."
+        ]
+      }
     },
     {
       "id": 100130,
@@ -289,7 +424,12 @@
         "y": 5080
       },
       "spriteGroup": 59,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "I run the lost-and-found. Mostly we find witnesses pretending to be umbrellas."
+        ]
+      }
     },
     {
       "id": 100131,
@@ -298,7 +438,12 @@
         "y": 5064
       },
       "spriteGroup": 54,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "This sidewalk has a preferred version of everyone. Mine is three inches taller."
+        ]
+      }
     },
     {
       "id": 100132,
@@ -307,7 +452,12 @@
         "y": 5168
       },
       "spriteGroup": 119,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "Do not sign a warm form. Let it cool. That advice cost me a mailbox."
+        ]
+      }
     },
     {
       "id": 100133,
@@ -316,7 +466,12 @@
         "y": 5208
       },
       "spriteGroup": 68,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "The rumor heat rose when you arrived. Nothing personal; the field likes arrivals."
+        ]
+      }
     },
     {
       "id": 100134,
@@ -325,7 +480,12 @@
         "y": 5336
       },
       "spriteGroup": 66,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "A good charm should feel like a key that forgot the door."
+        ]
+      }
     },
     {
       "id": 100135,
@@ -334,7 +494,12 @@
         "y": 5416
       },
       "spriteGroup": 59,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "I was stamped VESSEL at lunch and SOURCE by dinner. Busy day for my sleeves."
+        ]
+      }
     },
     {
       "id": 100136,
@@ -343,7 +508,12 @@
         "y": 5440
       },
       "spriteGroup": 54,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The town archive keeps my old posture on file. It was thinner and more cooperative."
+        ]
+      }
     },
     {
       "id": 100137,
@@ -352,7 +522,12 @@
         "y": 5576
       },
       "spriteGroup": 119,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "Your proof-token flickers near the bakery. Bread is a known auditor."
+        ]
+      }
     },
     {
       "id": 100138,
@@ -361,7 +536,12 @@
         "y": 5584
       },
       "spriteGroup": 68,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "Children call the gate polite because it crouches. Adults know it is measuring shoes."
+        ]
+      }
     },
     {
       "id": 100139,
@@ -370,7 +550,12 @@
         "y": 5696
       },
       "spriteGroup": 66,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The public version cuts through lines. I do not resent him. I invoice him."
+        ]
+      }
     },
     {
       "id": 100140,
@@ -379,7 +564,12 @@
         "y": 5720
       },
       "spriteGroup": 59,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "My receipt says I met you yesterday. I was home folding civic towels."
+        ]
+      }
     },
     {
       "id": 100141,
@@ -388,7 +578,12 @@
         "y": 5952
       },
       "spriteGroup": 54,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "If a route smiles, check for staples."
+        ]
+      }
     },
     {
       "id": 100142,
@@ -397,7 +592,12 @@
         "y": 6200
       },
       "spriteGroup": 119,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "The kiosk offered me a shortcut to myself. I declined. Too many stairs."
+        ]
+      }
     },
     {
       "id": 100143,
@@ -406,7 +606,12 @@
         "y": 6080
       },
       "spriteGroup": 68,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "Swag is eternal. SOURCE? It sounds nicer when the fountain says it."
+        ]
+      }
     },
     {
       "id": 100144,
@@ -415,7 +620,12 @@
         "y": 6240
       },
       "spriteGroup": 66,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "My aunt files clouds by witness quality. Today's sky is admissible but moody."
+        ]
+      }
     },
     {
       "id": 100145,
@@ -424,7 +634,12 @@
         "y": 6496
       },
       "spriteGroup": 59,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "The scene likes tidy entrances. Try not to make one too memorable."
+        ]
+      }
     },
     {
       "id": 100146,
@@ -433,7 +648,12 @@
         "y": 6488
       },
       "spriteGroup": 54,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "A mark on the hand washes off. A mark in the ledger wants a birthday."
+        ]
+      }
     },
     {
       "id": 100147,
@@ -442,7 +662,12 @@
         "y": 6616
       },
       "spriteGroup": 119,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "I sell charms for squeaky gates. Most customers need squeakier courage."
+        ]
+      }
     },
     {
       "id": 100148,
@@ -451,7 +676,12 @@
         "y": 7360
       },
       "spriteGroup": 68,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "The cleaner version of you already renewed a permit. We all clapped quietly."
+        ]
+      }
     },
     {
       "id": 100149,
@@ -460,7 +690,12 @@
         "y": 6744
       },
       "spriteGroup": 66,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "Rumor sticks to damp coats. Hang yours before the field learns your shape."
+        ]
+      }
     },
     {
       "id": 100150,
@@ -469,7 +704,12 @@
         "y": 6904
       },
       "spriteGroup": 59,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "My proof got rejected for being too personal. I took that as praise."
+        ]
+      }
     },
     {
       "id": 100151,
@@ -478,7 +718,12 @@
         "y": 6872
       },
       "spriteGroup": 54,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The gate knows a neat fit from a nervous one. Button twice, breathe once."
+        ]
+      }
     },
     {
       "id": 100152,
@@ -487,7 +732,12 @@
         "y": 6928
       },
       "spriteGroup": 119,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "I keep receipts in my hat. Makes my thoughts look official."
+        ]
+      }
     },
     {
       "id": 100153,
@@ -496,7 +746,12 @@
         "y": 7112
       },
       "spriteGroup": 68,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "Swag is eternal. SOURCE? Our choir director calls it municipal breathing."
+        ]
+      }
     },
     {
       "id": 100154,
@@ -505,7 +760,12 @@
         "y": 7376
       },
       "spriteGroup": 66,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "Someone moved my witness chair two inches left. Now my memories lean."
+        ]
+      }
     },
     {
       "id": 100155,
@@ -514,7 +774,12 @@
         "y": 7768
       },
       "spriteGroup": 59,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The public version never blinks in photos. Efficient fellow. Bad at soup."
+        ]
+      }
     },
     {
       "id": 100156,
@@ -523,7 +788,12 @@
         "y": 8112
       },
       "spriteGroup": 54,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "When the scene gets quiet, listen for the stamp pad. That is when names get softer."
+        ]
+      }
     },
     {
       "id": 100157,
@@ -532,7 +802,12 @@
         "y": 8032
       },
       "spriteGroup": 119,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "I am not afraid of paperwork. I am afraid of paperwork that remembers birthdays."
+        ]
+      }
     },
     {
       "id": 100158,
@@ -541,7 +816,12 @@
         "y": 8024
       },
       "spriteGroup": 68,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The route behind the clinic is closed unless the clerk likes your silhouette."
+        ]
+      }
     },
     {
       "id": 100159,
@@ -550,7 +830,12 @@
         "y": 8136
       },
       "spriteGroup": 66,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "A proof-token should clink. If it whispers, give it back."
+        ]
+      }
     },
     {
       "id": 100160,
@@ -559,7 +844,12 @@
         "y": 8152
       },
       "spriteGroup": 59,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "My charm warmed when you passed. Either you are you, or the house is optimistic."
+        ]
+      }
     },
     {
       "id": 100161,
@@ -568,7 +858,12 @@
         "y": 8168
       },
       "spriteGroup": 54,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "They say the shortcut version saves time. Whose time, exactly?"
+        ]
+      }
     },
     {
       "id": 100162,
@@ -577,7 +872,12 @@
         "y": 8352
       },
       "spriteGroup": 119,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "I once saw a receipt apologize. Beautiful penmanship. Horrible omen."
+        ]
+      }
     },
     {
       "id": 100163,
@@ -586,7 +886,12 @@
         "y": 8208
       },
       "spriteGroup": 68,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "The rumor field calls me an early adopter. I still use string for lists."
+        ]
+      }
     },
     {
       "id": 100164,
@@ -595,7 +900,12 @@
         "y": 8608
       },
       "spriteGroup": 66,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "A civic gate is just a question wearing hinges."
+        ]
+      }
     },
     {
       "id": 100165,
@@ -604,7 +914,12 @@
         "y": 8680
       },
       "spriteGroup": 59,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "Swag is eternal. SOURCE? Do not worry, I only say it on even-numbered errands."
+        ]
+      }
     },
     {
       "id": 100166,
@@ -613,7 +928,12 @@
         "y": 9048
       },
       "spriteGroup": 54,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "My mother says legibility is kindness. The forms say it is currency."
+        ]
+      }
     },
     {
       "id": 100167,
@@ -622,7 +942,12 @@
         "y": 9048
       },
       "spriteGroup": 119,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The mark VESSEL appeared on my soup spoon. I ate with a fork and felt powerful."
+        ]
+      }
     },
     {
       "id": 100168,
@@ -631,7 +956,12 @@
         "y": 9080
       },
       "spriteGroup": 68,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "If you meet the public version, ask him where he keeps the quiet parts."
+        ]
+      }
     },
     {
       "id": 100169,
@@ -640,7 +970,12 @@
         "y": 9304
       },
       "spriteGroup": 66,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "I witnessed the fountain process a coin. It came back as policy."
+        ]
+      }
     },
     {
       "id": 100170,
@@ -649,7 +984,12 @@
         "y": 9312
       },
       "spriteGroup": 59,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "Some routes are paved with permission. Some are paved with people saying probably."
+        ]
+      }
     },
     {
       "id": 100171,
@@ -658,7 +998,12 @@
         "y": 9432
       },
       "spriteGroup": 54,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "The kiosk knows my order, my shoe size, and my least favorite window."
+        ]
+      }
     },
     {
       "id": 100172,
@@ -667,7 +1012,12 @@
         "y": 9432
       },
       "spriteGroup": 119,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "Your fit has weather in it. That can pass, but only if the clerk likes rain."
+        ]
+      }
     },
     {
       "id": 100173,
@@ -676,7 +1026,12 @@
         "y": 9672
       },
       "spriteGroup": 68,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "I filed myself under temporary once. The drawer still sends postcards."
+        ]
+      }
     },
     {
       "id": 100174,
@@ -685,7 +1040,12 @@
         "y": 9616
       },
       "spriteGroup": 66,
-      "facing": "up"
+      "facing": "up",
+      "interaction": {
+        "pages": [
+          "A stamp is a tiny thunderclap. A mark is the weather that follows."
+        ]
+      }
     },
     {
       "id": 100175,
@@ -694,7 +1054,12 @@
         "y": 9696
       },
       "spriteGroup": 59,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "The soft gate asked for proof, then thanked my shadow for attending."
+        ]
+      }
     },
     {
       "id": 100176,
@@ -703,7 +1068,12 @@
         "y": 9816
       },
       "spriteGroup": 54,
-      "facing": "down"
+      "facing": "down",
+      "interaction": {
+        "pages": [
+          "I sell envelopes. Folks buy them to keep rumors from touching the letters."
+        ]
+      }
     },
     {
       "id": 100177,
@@ -712,7 +1082,12 @@
         "y": 9928
       },
       "spriteGroup": 119,
-      "facing": "right"
+      "facing": "right",
+      "interaction": {
+        "pages": [
+          "If the field gets too warm, stand near the old sign. It forgets on purpose."
+        ]
+      }
     },
     {
       "id": 100178,
@@ -721,7 +1096,12 @@
         "y": 9952
       },
       "spriteGroup": 68,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "Your public version signed the guestbook in pencil. Classy cowardice."
+        ]
+      }
     },
     {
       "id": 100179,
@@ -730,7 +1110,12 @@
         "y": 10056
       },
       "spriteGroup": 66,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "A receipt is just a memory with a payroll number."
+        ]
+      }
     },
     {
       "id": 100180,
@@ -739,7 +1124,12 @@
         "y": 10072
       },
       "spriteGroup": 59,
-      "facing": "left"
+      "facing": "left",
+      "interaction": {
+        "pages": [
+          "Go carefully. The town is kind, but kind things can still file you."
+        ]
+      }
     }
   ]
 }
