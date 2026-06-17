@@ -103,11 +103,12 @@ describe("shops & services QA (generated slice data)", () => {
     expect(missingOverride).toEqual([]);
     expect(zeroCost).toEqual([]);
 
-    // Overrides are scoped exactly to shop goods (no orphan overrides for unsold items).
-    const orphanOverrides = Object.keys(overrides)
+    // Extra overrides are allowed for starting/key items, but every override id must
+    // still resolve to a generated item.
+    const unresolvedOverrides = Object.keys(overrides)
       .map(Number)
-      .filter((id) => !stocked.has(id));
-    expect(orphanOverrides).toEqual([]);
+      .filter((id) => !byId.has(id));
+    expect(unresolvedOverrides).toEqual([]);
   });
 
   it("Swagbound shop names are unique (no two goods collapse to the same label)", async () => {

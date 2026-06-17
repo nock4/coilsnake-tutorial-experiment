@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ItemCollection, Manifest, ScriptCollection, ScriptCommand } from "@eb/schemas";
+import type { CharacterCollection, ItemCollection, Manifest, ScriptCollection, ScriptCommand } from "@eb/schemas";
 import { buildDialogueForReference, loadGameData } from "../src/loader";
 
 const file = "ccscript/alpha.ccs";
@@ -133,7 +133,72 @@ describe("loadGameData", () => {
 
     expect(data.items?.items.map((item) => item.name)).toEqual(["Practice Bat", "Source B"]);
   });
+
+  it("applies character override names after loading the characters collection", async () => {
+    const characters: CharacterCollection = {
+      schemaVersion: "test",
+      sourceProjectPath: "synthetic",
+      derivation: {
+        source: "synthetic",
+        baseStats: "synthetic",
+        statFormula: "synthetic",
+        hpPpFormula: "synthetic",
+        uncertainty: "synthetic"
+      },
+      characters: [
+        character(0, "SOURCE_HERO"),
+        character(1, "SOURCE_OTHER")
+      ],
+      counts: {
+        characters: 2,
+        statFieldsPopulated: 14
+      },
+      warnings: []
+    };
+
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown) => {
+      const path = String(url);
+      if (path.endsWith("/characters.json")) {
+        return jsonResponse(characters);
+      }
+      if (path.endsWith("/character-overrides.json")) {
+        return jsonResponse({
+          schema: "swagbound.character-overrides.v1",
+          byCharId: {
+            "0": { name: "Bosch" }
+          }
+        });
+      }
+      throw new Error(`No fixture for ${path}`);
+    }));
+
+    const manifest = syntheticManifest();
+    manifest.files.characters = "characters.json";
+    const data = await loadGameData(manifest);
+
+    expect(data.characters?.characters.map((entry) => entry.name)).toEqual(["Bosch", "SOURCE_OTHER"]);
+  });
 });
+
+function character(id: number, name: string): CharacterCollection["characters"][number] {
+  return {
+    id,
+    name,
+    level: 1,
+    experience: 0,
+    maxHp: 30,
+    maxPp: 10,
+    offense: 2,
+    defense: 2,
+    speed: 2,
+    guts: 2,
+    vitality: 2,
+    iq: 2,
+    luck: 2,
+    startingItems: [],
+    money: 0
+  };
+}
 
 function jsonResponse(value: unknown): Response {
   return {

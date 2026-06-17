@@ -1,0 +1,6 @@
+{
+  "schema": "swagbound.character-overrides.v1",
+  "byCharId": {
+    "0": { "name": "Bosch" }
+  }
+}
