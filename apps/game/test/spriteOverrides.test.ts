@@ -46,6 +46,8 @@ const SINGLE_FRAME_NPC_OVERRIDE: SpriteOverride = {
   originY: 1
 };
 
+const TOWNSFOLK_NPC_IDS = Array.from({ length: 78 }, (_, index) => 100103 + index);
+
 const SINGLE_IMAGE_ENEMY_OVERRIDE: SpriteOverride = {
   image: "assets/swagbound/enemy/ai-slop-battle-v0.png",
   displayHeight: 160,
@@ -245,5 +247,51 @@ describe("named NPC trio (Bonkle / Sal / Morrow)", () => {
       expect(npc?.interaction?.ref).toBe(t.ref);
       expect(npc?.interaction?.shop).toBe(t.shop);
     }
+  });
+});
+
+describe("added NPC interaction coverage", () => {
+  it("keeps the named NPC refs and gives every townsfolk placeholder short inline dialogue", async () => {
+    const added = AddedNpcsSchema.parse(JSON.parse(
+      await readFile(resolve("content/added-npcs.json"), "utf8")
+    ));
+    const npcById = new Map(added.npcs.map((n) => [n.id, n]));
+
+    expect(added.npcs.filter((npc) => npc.interaction === undefined).map((npc) => npc.id)).toEqual([]);
+
+    const named = [
+      { id: 100100, ref: "interior:burger-shop-v0", shop: 4 },
+      { id: 100101, ref: "interior:corner-shop-v0", shop: 1 },
+      { id: 100102, ref: "interior:neighbor-house-v0", shop: undefined }
+    ];
+    for (const t of named) {
+      const interaction = npcById.get(t.id)?.interaction;
+      expect(interaction?.ref).toBe(t.ref);
+      expect(interaction?.shop).toBe(t.shop);
+      expect(interaction?.pages).toBeUndefined();
+    }
+
+    expect(TOWNSFOLK_NPC_IDS).toHaveLength(78);
+    expect(TOWNSFOLK_NPC_IDS.filter((id) => !npcById.has(id))).toEqual([]);
+
+    const sourceQuestionNpcIds = new Set<number>();
+    for (const id of TOWNSFOLK_NPC_IDS) {
+      const interaction = npcById.get(id)?.interaction;
+      const pages = interaction?.pages ?? [];
+      expect(interaction?.ref).toBeUndefined();
+      expect(pages.length).toBeGreaterThan(0);
+      expect(pages.length).toBeLessThanOrEqual(2);
+      for (const page of pages) {
+        expect(page.trim()).toBe(page);
+        expect(page.length).toBeGreaterThan(0);
+        expect(page.length).toBeLessThanOrEqual(120);
+        expect(page).not.toContain("@");
+        expect(page).not.toContain("/Users/");
+      }
+      if (pages.some((page) => page.includes("SOURCE?"))) {
+        sourceQuestionNpcIds.add(id);
+      }
+    }
+    expect(sourceQuestionNpcIds.size).toBeLessThanOrEqual(8);
   });
 });
