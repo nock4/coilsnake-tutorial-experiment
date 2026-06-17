@@ -330,14 +330,16 @@ export const NpcInteractionSchema = z
   .object({
     pages: z.array(z.string()).min(1).optional(),
     ref: z.string().min(1).optional(),
-    shop: z.number().int().nonnegative().optional()
+    shop: z.number().int().nonnegative().optional(),
+    heal: z.union([z.literal("full"), z.literal(true)]).optional(),
+    save: z.literal(true).optional()
   })
   .strict()
   .superRefine((value, context) => {
-    if (!value.pages && !value.ref && value.shop === undefined) {
+    if (!value.pages && !value.ref && value.shop === undefined && value.heal === undefined && value.save !== true) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "interaction entry must include pages, ref, or shop"
+        message: "interaction entry must include pages, ref, shop, heal, or save"
       });
     }
     if (value.pages && value.ref) {

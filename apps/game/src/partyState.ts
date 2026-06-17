@@ -90,6 +90,13 @@ export type ItemUseResult =
       reason: "missingItem" | "notConsumable" | "unknownEffect";
     };
 
+export type PartyVitalsApplyResult = {
+  charId: number;
+  effect: ItemUseEffect;
+  previousValue: number;
+  nextValue: number;
+};
+
 export type EquipResult =
   | {
       ok: true;
@@ -240,9 +247,10 @@ export class PartyState {
       return { ok: false, itemId, ownerChar, targetChar, reason: "unknownEffect" };
     }
 
-    const vitals = this.ensureVitals(targetChar, options.targetVitals);
-    const applied = applyUseEffectToVitals(vitals, effect);
-    this.vitalsByChar.set(targetChar, applied.vitals);
+    const applied = this.applyEffectToChar(targetChar, effect, options.targetVitals);
+    if (!applied) {
+      return { ok: false, itemId, ownerChar, targetChar, reason: "unknownEffect" };
+    }
     this.take(ownerChar, itemId);
     return {
       ok: true,
@@ -253,6 +261,13 @@ export class PartyState {
       previousValue: applied.previousValue,
       nextValue: applied.nextValue
     };
+  }
+
+  applyPartyStat(char: number, effect: ItemUseEffect): PartyVitalsApplyResult[] {
+    const targetChars = char === 0 ? this.partyVitalTargetIds() : [normalizeId(char)];
+    return targetChars
+      .map((charId) => this.applyEffectToChar(charId, effect))
+      .filter((result): result is PartyVitalsApplyResult => Boolean(result));
   }
 
   equip(char: number, item: Pick<ItemData, "id" | "type">): EquipResult {
@@ -455,7 +470,14 @@ export class PartyState {
     };
   }
 
-  restore(snapshot: PartyStateSnapshot): void {
+  restore(): void;
+  restore(snapshot: PartyStateSnapshot): void;
+  restore(snapshot?: PartyStateSnapshot): void {
+    if (!snapshot) {
+      this.restorePartyVitals();
+      return;
+    }
+
     this.walletValue = stat(snapshot.wallet);
     this.bankValue = stat(snapshot.bank ?? 0);
     this.inventoryByChar.clear();
@@ -487,6 +509,84 @@ export class PartyState {
         maxPp: member.maxPp
       });
     }
+  }
+
+  private restorePartyVitals(): void {
+    for (const charId of this.partyVitalTargetIds()) {
+      const vitals = this.vitalsForKnownChar(charId);
+      const member = this.battleMembersByChar.get(charId);
+      if (!vitals && !member) {
+        continue;
+      }
+      const maxHp = positiveStat(vitals?.maxHp ?? member?.maxHp ?? 1);
+      const maxPp = stat(vitals?.maxPp ?? member?.maxPp ?? 0);
+      const ratePerSec = positiveStat(vitals?.hp.ratePerSec ?? HP_RATE_PER_SEC);
+      this.commitVitals(charId, {
+        hp: createRollingMeter(maxHp, ratePerSec),
+        maxHp,
+        pp: maxPp,
+        maxPp
+      });
+    }
+  }
+
+  private applyEffectToChar(
+    char: number,
+    effect: ItemUseEffect,
+    base?: PartyVitalsInput
+  ): PartyVitalsApplyResult | undefined {
+    const charId = normalizeId(char);
+    const vitals = base ? this.ensureVitals(charId, base) : this.vitalsForKnownChar(charId);
+    if (!vitals) {
+      return undefined;
+    }
+    const applied = applyUseEffectToVitals(vitals, effect);
+    this.commitVitals(charId, applied.vitals);
+    return {
+      charId,
+      effect,
+      previousValue: applied.previousValue,
+      nextValue: applied.nextValue
+    };
+  }
+
+  private vitalsForKnownChar(charId: number): PartyVitals | undefined {
+    const existing = this.vitalsByChar.get(charId);
+    if (existing) {
+      return existing;
+    }
+    const member = this.battleMembersByChar.get(charId);
+    return member ? {
+      hp: createRollingMeter(member.hp, HP_RATE_PER_SEC),
+      maxHp: member.maxHp,
+      pp: member.pp,
+      maxPp: member.maxPp
+    } : undefined;
+  }
+
+  private commitVitals(charId: number, vitals: PartyVitals): void {
+    this.vitalsByChar.set(charId, cloneVitals(vitals));
+    const member = this.battleMembersByChar.get(charId);
+    if (!member) {
+      return;
+    }
+    this.battleMembersByChar.set(charId, {
+      ...member,
+      hp: Math.min(positiveStat(vitals.maxHp), stat(vitals.hp.target)),
+      maxHp: positiveStat(vitals.maxHp),
+      pp: Math.min(stat(vitals.maxPp), stat(vitals.pp)),
+      maxPp: stat(vitals.maxPp)
+    });
+  }
+
+  private partyVitalTargetIds(): number[] {
+    if (this.partyIds.size > 0) {
+      return [...this.partyIds].sort((a, b) => a - b);
+    }
+    return [...new Set([
+      ...this.battleMembersByChar.keys(),
+      ...this.vitalsByChar.keys()
+    ])].sort((a, b) => a - b);
   }
 
   private ensureVitals(char: number, base: PartyVitalsInput): PartyVitals {

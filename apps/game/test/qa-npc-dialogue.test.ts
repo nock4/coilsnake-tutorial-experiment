@@ -127,6 +127,24 @@ describe("qa npc-dialogue: authored content resolution", () => {
     expect(morrowResolved.shopIds).toEqual([4]);
   });
 
+  it("wires the hospital and home-rest healers to heal/save service events", () => {
+    const hospital = world.npcs.find((npc) => npc.npcId === 115 && npc.interactable);
+    const home = world.npcs.find((npc) => npc.npcId === 148 && npc.interactable);
+    expect(hospital, "EB npc 115 (hospital greeter) missing/non-interactable").toBeDefined();
+    expect(home, "EB npc 148 (home guardian) missing/non-interactable").toBeDefined();
+
+    const hospitalEvents = interactionEvents(hospital!, FALLBACK_REFERENCE, unsetFlags, customLookup, libLookup);
+    const homeEvents = interactionEvents(home!, FALLBACK_REFERENCE, unsetFlags, customLookup, libLookup);
+
+    expect(describeDialogue(hospitalEvents).hasRenderableDialogue).toBe(true);
+    expect(hospitalEvents.map((event) => event.kind)).toEqual(["dialogue", "heal", "setFlag"]);
+    expect(hospitalEvents.find((event) => event.kind === "heal")).toEqual({ kind: "heal", scope: "full" });
+
+    expect(describeDialogue(homeEvents).hasRenderableDialogue).toBe(true);
+    expect(homeEvents.map((event) => event.kind)).toEqual(["dialogue", "heal", "save", "setFlag"]);
+    expect(homeEvents.find((event) => event.kind === "heal")).toEqual({ kind: "heal", scope: "full" });
+  });
+
   it("wires the named neighbor (added NPC 100102 / Bonkle) through a library ref", () => {
     const bonkle = addedNpcs.npcs.find((npc) => npc.id === 100102);
     expect(bonkle?.interaction?.ref).toBe("interior:neighbor-house-v0");

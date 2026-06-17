@@ -11,14 +11,18 @@ export type InlineDialogueEvent = { kind: "dialogue"; pages: string[]; reference
 export type DialogueEvent = ReferenceDialogueEvent | InlineDialogueEvent;
 export type SetFlagEvent = { kind: "setFlag"; flag: string };
 export type ShopEvent = { kind: "shop"; storeId: number };
+export type HealEvent = { kind: "heal"; scope: "full" };
+export type SaveEvent = { kind: "save" };
 
-export type GameEvent = DialogueEvent | SetFlagEvent | ShopEvent;
+export type GameEvent = DialogueEvent | SetFlagEvent | ShopEvent | HealEvent | SaveEvent;
 
 export type InteractionEventDispatcher = {
   startDialogue(event: DialogueEvent): void;
   setFlag(flag: string): void;
   openShop(storeId: number): void;
   deferShop(storeId: number): void;
+  heal(scope: HealEvent["scope"]): void;
+  save(): void;
   isDialogueActive(): boolean;
 };
 
@@ -55,6 +59,12 @@ export function interactionEntryEvents(
   if (entry.shop !== undefined) {
     events.push({ kind: "shop", storeId: entry.shop });
   }
+  if (entry.heal === true || entry.heal === "full") {
+    events.push({ kind: "heal", scope: "full" });
+  }
+  if (entry.save === true) {
+    events.push({ kind: "save" });
+  }
   return events;
 }
 
@@ -87,6 +97,12 @@ export function dispatchInteractionEvents(events: readonly GameEvent[], dispatch
         } else {
           dispatcher.openShop(event.storeId);
         }
+        break;
+      case "heal":
+        dispatcher.heal(event.scope);
+        break;
+      case "save":
+        dispatcher.save();
         break;
     }
   }
