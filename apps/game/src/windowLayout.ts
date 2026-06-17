@@ -134,6 +134,14 @@ export type BattleStatusDigitBoxRect = CanvasRect & {
   digit: string;
 };
 
+export type BattleStatusCardContentRectOptions = {
+  card: CanvasRect;
+  frameThickness: number;
+  paddingX: number;
+  paddingTop: number;
+  paddingBottom: number;
+};
+
 export type BattleStatusCardRectsOptions = {
   screen: ScreenSize;
   memberCount: number;
@@ -437,6 +445,31 @@ export function battleStatusCardRects(options: BattleStatusCardRectsOptions): Ba
       height: cardHeight
     };
   });
+}
+
+export function battleStatusCardContentRect(options: BattleStatusCardContentRectOptions): CanvasRect {
+  const frameThickness = Math.max(0, Math.ceil(options.frameThickness));
+  const paddingX = Math.max(0, Math.ceil(options.paddingX));
+  const paddingTop = Math.max(0, Math.ceil(options.paddingTop));
+  const paddingBottom = Math.max(0, Math.ceil(options.paddingBottom));
+  const insetX = Math.min(
+    Math.floor(Math.max(0, options.card.width - 1) / 2),
+    frameThickness + paddingX
+  );
+  const insetTop = Math.min(
+    Math.floor(Math.max(0, options.card.height - 1) / 2),
+    frameThickness + paddingTop
+  );
+  const insetBottom = Math.min(
+    Math.floor(Math.max(0, options.card.height - insetTop - 1)),
+    frameThickness + paddingBottom
+  );
+  return {
+    x: Math.round(options.card.x + insetX),
+    y: Math.round(options.card.y + insetTop),
+    width: Math.max(1, Math.floor(options.card.width - insetX * 2)),
+    height: Math.max(1, Math.floor(options.card.height - insetTop - insetBottom))
+  };
 }
 
 export function battleStatusDigitBoxRects(options: BattleStatusDigitBoxRectsOptions): BattleStatusDigitBoxRect[] {
