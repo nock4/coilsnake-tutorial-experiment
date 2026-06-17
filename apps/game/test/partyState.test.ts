@@ -216,6 +216,58 @@ describe("PartyState", () => {
       inventory: [10, 11]
     }]);
   });
+
+  it("restores the whole party to full HP/PP and revives KO'd members", () => {
+    const state = new PartyState();
+    state.restore({
+      wallet: 0,
+      bank: 0,
+      partyIds: [1, 2],
+      inventory: [],
+      equipped: [],
+      battleMembers: [
+        {
+          charId: 1,
+          level: 3,
+          experience: 120,
+          hp: 0,
+          maxHp: 80,
+          pp: 0,
+          maxPp: 25,
+          inventory: [],
+          stats: { offense: 10, defense: 9, speed: 8, guts: 7, vitality: 6, iq: 5, luck: 4 }
+        },
+        {
+          charId: 2,
+          level: 2,
+          experience: 40,
+          hp: 7,
+          maxHp: 30,
+          pp: 1,
+          maxPp: 8,
+          inventory: [],
+          stats: { offense: 5, defense: 5, speed: 5, guts: 5, vitality: 5, iq: 5, luck: 5 }
+        }
+      ]
+    });
+
+    state.restore();
+
+    expect(state.vitals(1)).toMatchObject({
+      maxHp: 80,
+      pp: 25,
+      maxPp: 25,
+      hp: { displayed: 80, target: 80, isRolling: false }
+    });
+    expect(state.battleMember(1)).toMatchObject({ hp: 80, maxHp: 80, pp: 25, maxPp: 25 });
+    expect(state.vitals(2)).toMatchObject({
+      maxHp: 30,
+      pp: 8,
+      maxPp: 8,
+      hp: { displayed: 30, target: 30, isRolling: false }
+    });
+    expect(state.battleMember(2)).toMatchObject({ hp: 30, maxHp: 30, pp: 8, maxPp: 8 });
+  });
 });
 
 function partyMember(id: number): PartyMember {

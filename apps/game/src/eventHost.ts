@@ -14,7 +14,7 @@ import {
 import { renderSegmentsToText } from "./dialogueRenderer";
 import { GameFlags } from "./gameFlags";
 import type { DialogueController } from "./state";
-import { PartyState, type PartyStateCounts } from "./partyState";
+import { PartyState, type ItemUseEffect, type PartyStateCounts } from "./partyState";
 
 type EventEffectKind = EventEffect["kind"];
 
@@ -362,7 +362,13 @@ export class RuntimeEventHost implements EventExecutorHost {
   }
 
   partyStat(op: Extract<EventEffect, { kind: "partyStat" }>["op"], char: number, amount: number): void {
-    this.skipUnsupported({ kind: "partyStat", op, char, amount });
+    if (this.skipUnsupported({ kind: "partyStat", op, char, amount })) {
+      return;
+    }
+    const effect = itemUseEffectForPartyStat(op, amount);
+    if (effect) {
+      this.options.partyState.applyPartyStat(char, effect);
+    }
   }
 
   inflict(char: number, status: number): void {
@@ -675,6 +681,24 @@ function emptyDebug(): EventHostDebug {
       unsupportedByKind: {}
     }
   };
+}
+
+function itemUseEffectForPartyStat(
+  op: Extract<EventEffect, { kind: "partyStat" }>["op"],
+  amount: number
+): ItemUseEffect | undefined {
+  switch (op) {
+    case "heal":
+      return { kind: "healHp", amount };
+    case "heal_percent":
+      return { kind: "healHpPercent", percent: amount };
+    case "recoverpp":
+      return { kind: "recoverPp", amount };
+    case "recoverpp_percent":
+      return { kind: "recoverPpPercent", percent: amount };
+    default:
+      return undefined;
+  }
 }
 
 function unsupportedEffectKey(effect: EventEffect): string {

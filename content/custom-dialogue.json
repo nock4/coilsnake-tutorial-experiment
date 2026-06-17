@@ -41,6 +41,21 @@
     "100": {
       "ref": "dialogue:archive-console-link"
     },
+    "115": {
+      "pages": [
+        "The intake printer blinks: ROUTE FATIGUE ACCEPTED.",
+        "\"Clean breath, Bosch. I can reset your meters, not your story.\""
+      ],
+      "heal": "full"
+    },
+    "148": {
+      "pages": [
+        "Guardian checks the door latch, then Bosch's pulse.",
+        "\"Rest here. The house will hold your place while the route tries to edit it.\""
+      ],
+      "heal": "full",
+      "save": true
+    },
     "404": {
       "ref": "interior:corner-shop-v0",
       "shop": 1

@@ -80,14 +80,16 @@ describe("AddedNpcsSchema", () => {
 });
 
 describe("CustomDialogueSchema shop entries", () => {
-  it("accepts pages, refs, shop-only, and pages plus shop entries", () => {
+  it("accepts pages, refs, shop-only, heal, save, and composed service entries", () => {
     const parsed = CustomDialogueSchema.parse({
       schema: "swagbound.custom-dialogue.v1",
       byNpcId: {
         "1": { pages: ["Inline."] },
         "2": { ref: "library:entry" },
         "3": { shop: 12 },
-        "4": { pages: ["Shopkeeper."], shop: 12 }
+        "4": { pages: ["Shopkeeper."], shop: 12 },
+        "5": { heal: "full" },
+        "6": { pages: ["Rest."], heal: true, save: true }
       },
       byTextPointer: {
         "data_00.l_0x1": { shop: 7 }
@@ -96,9 +98,11 @@ describe("CustomDialogueSchema shop entries", () => {
 
     expect(parsed.byNpcId["3"].shop).toBe(12);
     expect(parsed.byNpcId["4"]).toMatchObject({ pages: ["Shopkeeper."], shop: 12 });
+    expect(parsed.byNpcId["5"].heal).toBe("full");
+    expect(parsed.byNpcId["6"]).toMatchObject({ pages: ["Rest."], heal: true, save: true });
   });
 
-  it("rejects empty entries and entries with both pages and ref", () => {
+  it("rejects empty entries, entries with both pages and ref, and false service triggers", () => {
     expect(CustomDialogueSchema.safeParse({
       schema: "swagbound.custom-dialogue.v1",
       byNpcId: { "1": {} },
@@ -108,6 +112,12 @@ describe("CustomDialogueSchema shop entries", () => {
     expect(CustomDialogueSchema.safeParse({
       schema: "swagbound.custom-dialogue.v1",
       byNpcId: { "1": { pages: ["Inline."], ref: "library:entry" } },
+      byTextPointer: {}
+    }).success).toBe(false);
+
+    expect(CustomDialogueSchema.safeParse({
+      schema: "swagbound.custom-dialogue.v1",
+      byNpcId: { "1": { heal: false } },
       byTextPointer: {}
     }).success).toBe(false);
   });

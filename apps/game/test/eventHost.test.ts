@@ -263,6 +263,63 @@ describe("RuntimeEventHost", () => {
     });
   });
 
+  it("applies partyStat HP/PP recovery to one member or the whole active party", () => {
+    const partyState = new PartyState();
+    partyState.restore({
+      wallet: 0,
+      bank: 0,
+      partyIds: [1, 2],
+      inventory: [],
+      equipped: [],
+      battleMembers: [
+        {
+          charId: 1,
+          level: 3,
+          experience: 120,
+          hp: 10,
+          maxHp: 50,
+          pp: 0,
+          maxPp: 20,
+          inventory: [],
+          stats: { offense: 10, defense: 9, speed: 8, guts: 7, vitality: 6, iq: 5, luck: 4 }
+        },
+        {
+          charId: 2,
+          level: 2,
+          experience: 40,
+          hp: 0,
+          maxHp: 30,
+          pp: 1,
+          maxPp: 8,
+          inventory: [],
+          stats: { offense: 5, defense: 5, speed: 5, guts: 5, vitality: 5, iq: 5, luck: 5 }
+        }
+      ]
+    });
+    const host = new RuntimeEventHost({
+      dialogue: new DialogueController(),
+      flags: new GameFlags(),
+      partyState
+    });
+
+    host.partyStat("heal", 1, 15);
+    host.partyStat("recoverpp", 2, 3);
+    expect(partyState.vitals(1)?.hp.target).toBe(25);
+    expect(partyState.battleMember(1)?.hp).toBe(25);
+    expect(partyState.vitals(2)?.pp).toBe(4);
+    expect(partyState.battleMember(2)?.pp).toBe(4);
+
+    host.partyStat("heal_percent", 0, 100);
+    host.partyStat("recoverpp_percent", 0, 100);
+
+    expect(partyState.vitals(1)?.hp.target).toBe(50);
+    expect(partyState.vitals(1)?.pp).toBe(20);
+    expect(partyState.battleMember(1)).toMatchObject({ hp: 50, pp: 20 });
+    expect(partyState.vitals(2)?.hp.target).toBe(30);
+    expect(partyState.vitals(2)?.pp).toBe(8);
+    expect(partyState.battleMember(2)).toMatchObject({ hp: 30, pp: 8 });
+  });
+
   it("skips unsupported event ops without throwing or applying side effects", () => {
     const file = "ccscript/gamma.ccs";
     const skipped: string[] = [];

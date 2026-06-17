@@ -53,7 +53,8 @@ import {
   dispatchInteractionEvents,
   interactionEvents,
   type DialogueEvent,
-  type GameEvent
+  type GameEvent,
+  type HealEvent
 } from "./eventRunner";
 import {
   resolveScriptedDialoguePages,
@@ -2178,8 +2179,20 @@ export class ChunkedWorldScene extends Phaser.Scene {
       deferShop: (storeId) => {
         this.pendingInteractionShopStoreId = storeId;
       },
+      heal: (scope) => this.healParty(scope),
+      save: () => this.saveGame(false),
       isDialogueActive: () => this.dialogue.open || Boolean(this.eventSequence?.running)
     });
+  }
+
+  private healParty(scope: HealEvent["scope"]): void {
+    if (scope !== "full") {
+      return;
+    }
+    this.partyState.restore();
+    this.refreshMenuScreens();
+    this.updatePrompt();
+    this.publish();
   }
 
   private startInteractionDialogue(event: DialogueEvent): void {

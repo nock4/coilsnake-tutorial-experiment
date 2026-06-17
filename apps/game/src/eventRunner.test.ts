@@ -3,6 +3,7 @@ import type { DialogueEvent, GameEvent, InteractionEventDispatcher } from "./eve
 import {
   addedNpcInteractionEvents,
   dispatchInteractionEvents,
+  interactionEntryEvents,
   interactionEvents
 } from "./eventRunner";
 import { talkedFlag } from "./gameFlags";
@@ -50,6 +51,26 @@ describe("addedNpcInteractionEvents", () => {
       "defer-shop:9",
       `flag:${talkedFlag(100001)}`,
       "shop:9"
+    ]);
+  });
+
+  it("emits heal and save events from interaction entries", () => {
+    const events = interactionEntryEvents({
+      pages: ["Rest here."],
+      heal: "full",
+      save: true
+    });
+
+    expect(events).toEqual([
+      { kind: "dialogue", pages: ["Rest here."] },
+      { kind: "heal", scope: "full" },
+      { kind: "save" }
+    ]);
+
+    expect(dispatchWithMock(events)).toEqual([
+      "dialogue:Rest here.",
+      "heal:full",
+      "save"
     ]);
   });
 });
@@ -108,6 +129,8 @@ function dispatchWithMock(events: readonly GameEvent[]): string[] {
       deferredShop = storeId;
       log.push(`defer-shop:${storeId}`);
     },
+    heal: (scope) => log.push(`heal:${scope}`),
+    save: () => log.push("save"),
     isDialogueActive: () => dialogueActive
   };
 
