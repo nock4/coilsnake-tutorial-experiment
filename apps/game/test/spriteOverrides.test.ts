@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AddedNpcsSchema, SpriteOverridesSchema, type SpriteOverride, type SpriteOverrides } from "@eb/schemas";
 import {
+  resolveSpriteOverrideImageFrame,
+  spriteOverrideEnemyEntries,
+  spriteOverrideEnemyImageKey,
+  spriteOverrideForEnemyId,
   spriteOverrideForNpcId,
   spriteOverrideDirectionFrames,
   spriteOverrideFrame,
@@ -42,6 +46,13 @@ const SINGLE_FRAME_NPC_OVERRIDE: SpriteOverride = {
   originY: 1
 };
 
+const SINGLE_IMAGE_ENEMY_OVERRIDE: SpriteOverride = {
+  image: "assets/swagbound/enemy/ai-slop-battle-v0.png",
+  displayHeight: 160,
+  originX: 0.5,
+  originY: 0.5
+};
+
 describe("sprite override helpers", () => {
   it("maps facing and walk step into the override frame sequence", () => {
     expect(spriteOverrideFrame("down", 1, HERO_OVERRIDE)).toBe(1);
@@ -62,6 +73,22 @@ describe("sprite override helpers", () => {
   it("computes a uniform display-height scale from the source frame height", () => {
     expect(spriteOverrideScale(24, 192)).toBe(0.125);
     expect(spriteOverrideScale(undefined, 192)).toBe(1);
+  });
+
+  it("resolves single-image overrides as one whole-image frame fitted to a battle box", () => {
+    const resolved = resolveSpriteOverrideImageFrame(
+      SINGLE_IMAGE_ENEMY_OVERRIDE,
+      { width: 260, height: 260 },
+      { maxWidth: 420, maxHeight: 160, maxScale: 2 }
+    );
+
+    expect(resolved).toEqual({
+      frameWidth: 260,
+      frameHeight: 260,
+      displayWidth: 160,
+      displayHeight: 160,
+      scale: 160 / 260
+    });
   });
 
   it("keeps single-frame NPC overrides static at frame 0 for every facing", () => {
@@ -92,6 +119,23 @@ describe("sprite override helpers", () => {
     expect(spriteOverrideNpcSheetKey(100100)).toBe("sprite-override-npc-100100");
     expect(spriteOverrideNpcIdFromSheetKey("sprite-override-npc-100100")).toBe(100100);
     expect(spriteOverrideNpcIdFromSheetKey("sheet-100100")).toBeUndefined();
+  });
+
+  it("selects enemy overrides by numeric enemy id and exposes stable image keys", () => {
+    const overrides: SpriteOverrides = {
+      schema: "swagbound.sprite-overrides.v1",
+      byEnemyId: {
+        "37": SINGLE_IMAGE_ENEMY_OVERRIDE
+      }
+    };
+
+    expect(spriteOverrideForEnemyId(overrides, 37)).toBe(SINGLE_IMAGE_ENEMY_OVERRIDE);
+    expect(spriteOverrideForEnemyId(overrides, 159)).toBeUndefined();
+    expect(spriteOverrideEnemyEntries(overrides)).toEqual([[37, SINGLE_IMAGE_ENEMY_OVERRIDE]]);
+    expect(spriteOverrideEnemyImageKey(37)).toBe("sprite-override-enemy-37");
+    expect(spriteOverrideEnemyImageKey(37, "assets/swagbound/enemy/one.png")).not.toBe(
+      spriteOverrideEnemyImageKey(37, "assets/swagbound/enemy/two.png")
+    );
   });
 
   it("covers all generated placeholder NPC ids with neighbor/kid single-frame skins", async () => {
@@ -128,5 +172,36 @@ describe("sprite override helpers", () => {
       });
     });
     expect(new Set(Object.values(byNpcId).map((override) => override.image))).toEqual(new Set(allowedImages));
+  });
+
+  it("authors the first enemy battle override slice as single-image mappings", async () => {
+    const overrides = SpriteOverridesSchema.parse(JSON.parse(
+      await readFile(resolve("content/sprite-overrides.json"), "utf8")
+    ));
+    const expected = {
+      "37": "assets/swagbound/enemy/pfp-malady-battle-v1.png",
+      "159": "assets/swagbound/enemy/ai-slop-battle-v0.png",
+      "55": "assets/swagbound/enemy/lsw-signal-stutter-battle-v0.png",
+      "121": "assets/swagbound/enemy/lsw-sawtooth-bun-battle-v0.png",
+      "64": "assets/swagbound/enemy/lsw-cinder-cap-battle-v0.png",
+      "134": "assets/swagbound/enemy/lsw-question-marketeer-battle-v0.png",
+      "81": "assets/swagbound/enemy/lsw-ushanka-shade-battle-v0.png"
+    } as const;
+
+    expect(Object.keys(overrides.byEnemyId ?? {}).sort((a, b) => Number(a) - Number(b))).toEqual(
+      Object.keys(expected).sort((a, b) => Number(a) - Number(b))
+    );
+    for (const [enemyId, image] of Object.entries(expected)) {
+      const override = overrides.byEnemyId?.[enemyId];
+      expect(override).toMatchObject({
+        image,
+        displayHeight: 160,
+        originX: 0.5,
+        originY: 0.5
+      });
+      expect(override?.frameWidth).toBeUndefined();
+      expect(override?.frameHeight).toBeUndefined();
+      expect(override?.animations).toBeUndefined();
+    }
   });
 });

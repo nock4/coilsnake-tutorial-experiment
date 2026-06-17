@@ -251,18 +251,31 @@ const SpriteOverrideFrameSequenceSchema = z.array(z.number().int().nonnegative()
 
 export const SpriteOverrideSchema = z.object({
   image: PublicAssetPathSchema,
-  frameWidth: z.number().int().positive(),
-  frameHeight: z.number().int().positive(),
+  frameWidth: z.number().int().positive().optional(),
+  frameHeight: z.number().int().positive().optional(),
   animations: z.object({
     down: SpriteOverrideFrameSequenceSchema,
     left: SpriteOverrideFrameSequenceSchema,
     right: SpriteOverrideFrameSequenceSchema,
     up: SpriteOverrideFrameSequenceSchema
-  }).strict(),
+  }).strict().optional(),
+  displayWidth: z.number().positive().optional(),
   displayHeight: z.number().positive().optional(),
   originX: z.number().optional(),
   originY: z.number().optional()
-}).strict();
+}).strict().superRefine((override, ctx) => {
+  const sheetFields = [
+    override.frameWidth !== undefined,
+    override.frameHeight !== undefined,
+    override.animations !== undefined
+  ];
+  if (sheetFields.some(Boolean) && !sheetFields.every(Boolean)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "sheet overrides must include frameWidth, frameHeight, and animations together"
+    });
+  }
+});
 
 export const SpriteOverridesSchema = z.object({
   schema: z.literal("swagbound.sprite-overrides.v1"),

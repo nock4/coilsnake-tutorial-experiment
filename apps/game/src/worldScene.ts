@@ -941,7 +941,8 @@ export class WorldScene extends Phaser.Scene {
       items: this.data_.items,
       psi: this.data_.psi,
       font: this.data_.font,
-      window: this.data_.window
+      window: this.data_.window,
+      spriteOverrides: this.data_.spriteOverrides
     });
     return true;
   }

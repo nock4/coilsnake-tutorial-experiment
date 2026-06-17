@@ -1,17 +1,39 @@
 import type { SpriteOverride, SpriteOverrides } from "@eb/schemas";
 import type { DirectionFrameSequence, Facing } from "./playerController";
 
+export type SpriteOverrideSheet = SpriteOverride & {
+  animations: NonNullable<SpriteOverride["animations"]>;
+  frameHeight: number;
+  frameWidth: number;
+};
 type SpriteOverrideFrameSource = Pick<SpriteOverride, "animations">;
+type SpriteOverrideImageSize = {
+  width: number;
+  height: number;
+};
+type SpriteOverrideFitBox = {
+  maxWidth: number;
+  maxHeight: number;
+  maxScale?: number;
+};
+export type ResolvedSpriteOverrideImage = {
+  frameWidth: number;
+  frameHeight: number;
+  displayWidth: number;
+  displayHeight: number;
+  scale: number;
+};
 
 export const PLAYER_SPRITE_OVERRIDE_SHEET_KEY = "sprite-override-player";
 const NPC_SPRITE_OVERRIDE_SHEET_KEY_PREFIX = "sprite-override-npc-";
+const ENEMY_SPRITE_OVERRIDE_IMAGE_KEY_PREFIX = "sprite-override-enemy-";
 
 export function spriteOverrideFrame(
   facing: Facing,
   step: number,
   override: SpriteOverrideFrameSource
 ): number {
-  const frames = override.animations[facing];
+  const frames = override.animations?.[facing] ?? [0];
   const index = Math.max(0, Math.floor(step)) % frames.length;
   return frames[index] ?? 0;
 }
@@ -25,15 +47,21 @@ export function spriteOverrideScale(displayHeight: number | undefined, frameHeig
 
 export function spriteOverrideDirectionFrames(override: SpriteOverrideFrameSource): DirectionFrameSequence {
   return {
-    up: nonEmptyFrames(override.animations.up),
-    right: nonEmptyFrames(override.animations.right),
-    down: nonEmptyFrames(override.animations.down),
-    left: nonEmptyFrames(override.animations.left)
+    up: nonEmptyFrames(override.animations?.up),
+    right: nonEmptyFrames(override.animations?.right),
+    down: nonEmptyFrames(override.animations?.down),
+    left: nonEmptyFrames(override.animations?.left)
   };
 }
 
 export function spriteOverrideAssetUrl(image: string): string {
   return `/${image.replace(/^\/+/, "")}`;
+}
+
+export function spriteOverrideSheet(override: SpriteOverride | undefined): SpriteOverrideSheet | undefined {
+  return override && override.frameWidth !== undefined && override.frameHeight !== undefined && override.animations
+    ? override as SpriteOverrideSheet
+    : undefined;
 }
 
 export function spriteOverrideForNpcId(
@@ -65,6 +93,80 @@ export function spriteOverrideNpcIdFromSheetKey(key: string): number | undefined
   return Number.isSafeInteger(npcId) && String(npcId) === rawNpcId ? npcId : undefined;
 }
 
-function nonEmptyFrames(frames: readonly number[]): readonly [number, ...number[]] {
-  return frames.length > 0 ? frames as [number, ...number[]] : [0];
+export function spriteOverrideForEnemyId(
+  overrides: Pick<SpriteOverrides, "byEnemyId"> | undefined,
+  enemyId: number
+): SpriteOverride | undefined {
+  return overrides?.byEnemyId?.[String(enemyId)];
+}
+
+export function spriteOverrideEnemyEntries(
+  overrides: Pick<SpriteOverrides, "byEnemyId"> | undefined
+): Array<[number, SpriteOverride]> {
+  return Object.entries(overrides?.byEnemyId ?? {}).flatMap(([rawEnemyId, override]) => {
+    const enemyId = Number.parseInt(rawEnemyId, 10);
+    return Number.isSafeInteger(enemyId) && String(enemyId) === rawEnemyId
+      ? [[enemyId, override] as [number, SpriteOverride]]
+      : [];
+  });
+}
+
+export function spriteOverrideEnemyImageKey(enemyId: number, image?: string): string {
+  const imageHash = image ? `-${stableAssetPathHash(image)}` : "";
+  return `${ENEMY_SPRITE_OVERRIDE_IMAGE_KEY_PREFIX}${enemyId}${imageHash}`;
+}
+
+export function resolveSpriteOverrideImageFrame(
+  override: Pick<SpriteOverride, "displayHeight" | "displayWidth" | "frameHeight" | "frameWidth">,
+  source: SpriteOverrideImageSize,
+  fitBox: SpriteOverrideFitBox
+): ResolvedSpriteOverrideImage {
+  const frameWidth = positiveDimension(override.frameWidth) ?? source.width;
+  const frameHeight = positiveDimension(override.frameHeight) ?? source.height;
+  const maxScale = Math.min(
+    positiveDimension(fitBox.maxScale) ?? Number.POSITIVE_INFINITY,
+    fitBox.maxWidth / frameWidth,
+    fitBox.maxHeight / frameHeight
+  );
+  const desiredScale = requestedDisplayScale(override, frameWidth, frameHeight) ?? maxScale;
+  const scale = Math.max(0, Math.min(desiredScale, maxScale));
+  return {
+    frameWidth,
+    frameHeight,
+    displayWidth: frameWidth * scale,
+    displayHeight: frameHeight * scale,
+    scale
+  };
+}
+
+function requestedDisplayScale(
+  override: Pick<SpriteOverride, "displayHeight" | "displayWidth">,
+  frameWidth: number,
+  frameHeight: number
+): number | undefined {
+  const displayWidth = positiveDimension(override.displayWidth);
+  const displayHeight = positiveDimension(override.displayHeight);
+  const widthScale = displayWidth === undefined ? undefined : displayWidth / frameWidth;
+  const heightScale = displayHeight === undefined ? undefined : displayHeight / frameHeight;
+  if (widthScale !== undefined && heightScale !== undefined) {
+    return Math.min(widthScale, heightScale);
+  }
+  return widthScale ?? heightScale;
+}
+
+function positiveDimension(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function stableAssetPathHash(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function nonEmptyFrames(frames: readonly number[] | undefined): readonly [number, ...number[]] {
+  return frames && frames.length > 0 ? frames as [number, ...number[]] : [0];
 }

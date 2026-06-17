@@ -38,3 +38,6 @@ playwright-report/
 *.state
 *.state*
 *.zst
+
+# External Swagbound source filepath bundle (local-only, references external project)
+swagbound-dialogue-lore-story-filepaths.txt
