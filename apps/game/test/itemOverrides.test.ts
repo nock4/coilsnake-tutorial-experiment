@@ -19,10 +19,14 @@ describe("item override content", () => {
       .filter((id) => id !== 0 && itemById.has(id))
       .sort((a, b) => a - b);
 
-    expect(Object.keys(overrides.byItemId).map(Number).sort((a, b) => a - b)).toEqual(requiredIds);
+    const overrideIds = Object.keys(overrides.byItemId).map(Number).sort((a, b) => a - b);
+    expect(overrideIds).toEqual(expect.arrayContaining(requiredIds));
+    expect(overrides.byItemId["177"]).toBeDefined();
+    expect(overrides.byItemId["208"]).toBeDefined();
 
-    for (const id of requiredIds) {
+    for (const id of overrideIds) {
       const override = overrides.byItemId[String(id)];
+      expect(itemById.has(id), `override item ${id} must resolve`).toBe(true);
       expect(override).toBeDefined();
       expect(override.name.trim()).toBe(override.name);
       expect(override.name.length).toBeGreaterThan(0);
@@ -31,6 +35,9 @@ describe("item override content", () => {
       expect(override.name).not.toContain("/Users/");
       expect(override.name).not.toBe(itemById.get(id)?.name);
     }
+
+    expect(overrides.byItemId["177"].name.length).toBeLessThanOrEqual(18);
+    expect(overrides.byItemId["208"].name.length).toBeLessThanOrEqual(18);
   });
 
   it("keeps corpus anchor names on expected item categories", async () => {

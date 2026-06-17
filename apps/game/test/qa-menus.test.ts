@@ -3,16 +3,20 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CharacterCollectionSchema,
+  CharacterOverridesSchema,
   FontCollectionSchema,
   ItemCollectionSchema,
   ItemOverridesSchema,
   PsiCollectionSchema,
   ShopDataSchema,
+  type CharacterCollection,
+  type CharacterOverrides,
   type ItemCollection,
   type ItemOverrides
 } from "@eb/schemas";
 import {
   buildAtmScreen,
+  buildCheckViewModel,
   buildGoodsViewModel,
   buildMainMenuScreen,
   buildMenuScreens,
@@ -61,10 +65,23 @@ function applyItemOverrides(items: ItemCollection, overrides: ItemOverrides): It
   return resolved;
 }
 
+function applyCharacterOverrides(characters: CharacterCollection, overrides: CharacterOverrides): CharacterCollection {
+  const resolved: CharacterCollection = JSON.parse(JSON.stringify(characters));
+  for (const character of resolved.characters) {
+    const override = overrides.byCharId[String(character.id)];
+    if (override) {
+      character.name = override.name;
+    }
+  }
+  return resolved;
+}
+
 const itemsRaw = readGenerated("items.json", ItemCollectionSchema);
 const itemOverrides = readGenerated("item-overrides.json", ItemOverridesSchema);
 const resolvedItems = applyItemOverrides(itemsRaw, itemOverrides);
-const characters = readGenerated("characters.json", CharacterCollectionSchema);
+const charactersRaw = readGenerated("characters.json", CharacterCollectionSchema);
+const characterOverrides = readGenerated("character-overrides.json", CharacterOverridesSchema);
+const characters = applyCharacterOverrides(charactersRaw, characterOverrides);
 const psi = readGenerated("psi.json", PsiCollectionSchema);
 const shops = readGenerated("shops.json", ShopDataSchema);
 const font = readGenerated("font.json", FontCollectionSchema);
@@ -253,11 +270,32 @@ describe("qa-menus: labels fit the native 512x448 menu window", () => {
 });
 
 describe("qa-menus: Goods view model reflects real party data", () => {
-  it("builds Ness's Goods list from generated starting inventory and uses resolved names", () => {
+  it("uses the resolved in-slice hero name across party menu models", () => {
+    const input = inSliceShopInput(1);
+    const partyMembers = input.partyMembers;
+    const status = buildStatusViewModel({ partyMembers });
+    const goods = buildGoodsViewModel(input);
+    const check = buildCheckViewModel(input);
+
+    expect(status.members[0].name).toBe("Bosch");
+    expect(goods.member.name).toBe("Bosch");
+    expect(check.member.name).toBe("Bosch");
+
+    const screens = buildMenuScreens(status, {
+      ...input,
+      partyMembers
+    });
+    const memberSelectLabels = screens
+      .filter((screen) => ["goods", "equip", "status"].includes(screen.id))
+      .flatMap((screen) => screen.items.map((item) => item.label));
+    expect(memberSelectLabels).toContain("Bosch");
+  });
+
+  it("builds the hero Goods list from generated starting inventory and uses resolved names", () => {
     const goods = buildGoodsViewModel(inSliceShopInput(1));
     expect(goods.member.id).toBe(0);
-    const ness = characters.characters.find((character) => character.id === 0)!;
-    expect(goods.entries.map((entry) => entry.itemId)).toEqual(ness.startingItems);
+    const hero = characters.characters.find((character) => character.id === 0)!;
+    expect(goods.entries.map((entry) => entry.itemId)).toEqual(hero.startingItems);
     for (const entry of goods.entries) {
       // Label resolves through the same resolver the dialogue layer uses.
       expect(entry.label).toBe(resolver.itemName(entry.itemId));

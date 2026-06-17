@@ -4,6 +4,7 @@ import {
   AddedNpcsSchema,
   BattleDataSchema,
   CharacterCollectionSchema,
+  CharacterOverridesSchema,
   CustomDialogueSchema,
   EncountersSchema,
   FontCollectionSchema,
@@ -30,6 +31,7 @@ import {
   type AddedNpcs,
   type BattleData,
   type CharacterCollection,
+  type CharacterOverrides,
   type CustomDialogue,
   type Encounters,
   type FontCollection,
@@ -59,6 +61,7 @@ const CUSTOM_DIALOGUE_FILE = "custom-dialogue.json";
 const SWAGBOUND_DIALOGUE_LIBRARY_FILE = "swagbound-dialogue-library.json";
 const SPRITE_OVERRIDES_FILE = "sprite-overrides.json";
 const ITEM_OVERRIDES_FILE = "item-overrides.json";
+const CHARACTER_OVERRIDES_FILE = "character-overrides.json";
 
 export type GameData = {
   manifest: Manifest;
@@ -138,6 +141,7 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     font,
     window,
     characters,
+    characterOverrides,
     items,
     itemOverrides,
     psi,
@@ -172,6 +176,7 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     manifest.files.characters
       ? loadJson(`/generated/${manifest.files.characters}`, CharacterCollectionSchema)
       : Promise.resolve(undefined),
+    loadJson(`/generated/${CHARACTER_OVERRIDES_FILE}`, CharacterOverridesSchema),
     manifest.files.items
       ? loadJson(`/generated/${manifest.files.items}`, ItemCollectionSchema)
       : Promise.resolve(undefined),
@@ -186,6 +191,7 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     loadJson(`/generated/${CUSTOM_DIALOGUE_FILE}`, CustomDialogueSchema),
     loadJson(`/generated/${SWAGBOUND_DIALOGUE_LIBRARY_FILE}`, SwagboundDialogueLibrarySchema)
   ]);
+  const resolvedCharacters = applyCharacterOverrides(characters, characterOverrides);
   const resolvedItems = applyItemOverrides(items, itemOverrides);
 
   return {
@@ -206,7 +212,7 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     battle,
     font,
     window,
-    characters,
+    characters: resolvedCharacters,
     items: resolvedItems,
     psi,
     shops
@@ -224,6 +230,22 @@ function applyItemOverrides(items: ItemCollection | undefined, overrides: ItemOv
     }
   }
   return items;
+}
+
+function applyCharacterOverrides(
+  characters: CharacterCollection | undefined,
+  overrides: CharacterOverrides | undefined
+): CharacterCollection | undefined {
+  if (!characters || !overrides) {
+    return characters;
+  }
+  for (const character of characters.characters) {
+    const override = overrides.byCharId[String(character.id)];
+    if (override) {
+      character.name = override.name;
+    }
+  }
+  return characters;
 }
 
 export function addedNpcSpawnEligible(
