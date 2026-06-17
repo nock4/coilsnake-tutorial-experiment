@@ -74,8 +74,10 @@ import { WINDOW_FLAVOR_CHANGE_EVENT, activeWindowFlavorId } from "./windowSettin
 import {
   EB_BITMAP_TEXT_SCALE,
   EB_UI_SCALE,
+  EB_WINDOW_TILE_PX,
   type CanvasRect,
   battleMenuCascadeLayout,
+  battleStatusCardContentRect,
   battleStatusDigitBoxRects,
   battleStatusCardRects,
   type BattleMenuListRect,
@@ -143,24 +145,28 @@ const BATTLE_DESCRIPTION_MAX_WIDTH = 260;
 const BATTLE_DESCRIPTION_TEXT_PADDING_X = 16;
 const BATTLE_DESCRIPTION_TEXT_PADDING_Y = 8;
 const BATTLE_STATUS_WINDOW_FLAVOR_ID = 0;
-const BATTLE_STATUS_CARD_SIDE_MARGIN = 16;
+const BATTLE_STATUS_CARD_SIDE_MARGIN = 0;
 const BATTLE_STATUS_CARD_BOTTOM_MARGIN = 8;
-const BATTLE_STATUS_CARD_GAP = 6;
-const BATTLE_STATUS_CARD_HEIGHT = 86;
-const BATTLE_STATUS_CARD_MIN_WIDTH = 96;
+const BATTLE_STATUS_CARD_GAP = 0;
+const BATTLE_STATUS_CARD_HEIGHT = 104;
+const BATTLE_STATUS_CARD_MIN_WIDTH = 112;
 const BATTLE_STATUS_CARD_MAX_WIDTH = 128;
 const BATTLE_STATUS_CARD_ACTIVE_LIFT = 6;
-const BATTLE_STATUS_CARD_TEXT_PADDING_X = 10;
-const BATTLE_STATUS_CARD_NAME_Y = 8;
-const BATTLE_STATUS_HP_ROW_Y = 31;
-const BATTLE_STATUS_PP_ROW_Y = 54;
+const BATTLE_STATUS_FRAME_THICKNESS = EB_WINDOW_TILE_PX * EB_UI_SCALE;
+const BATTLE_STATUS_CONTENT_PADDING_X = 3;
+const BATTLE_STATUS_CONTENT_PADDING_TOP = 5;
+const BATTLE_STATUS_CONTENT_PADDING_BOTTOM = 3;
+const BATTLE_STATUS_NAME_Y = 0;
+const BATTLE_STATUS_HP_ROW_Y = 20;
+const BATTLE_STATUS_PP_ROW_Y = 42;
 const BATTLE_STATUS_DIGIT_COUNT = 3;
-const BATTLE_STATUS_DIGIT_WIDTH = 14;
-const BATTLE_STATUS_DIGIT_HEIGHT = 18;
+const BATTLE_STATUS_DIGIT_WIDTH = 18;
+const BATTLE_STATUS_DIGIT_HEIGHT = 22;
 const BATTLE_STATUS_DIGIT_GAP = 2;
-const BATTLE_STATUS_DIGIT_RIGHT_PADDING = 10;
+const BATTLE_STATUS_DIGIT_RIGHT_PADDING = 0;
 const BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET = 1;
 const BATTLE_STATUS_FIELD_INSET = 16;
+const BATTLE_STATUS_LABEL_DIGIT_GAP = 6;
 const BATTLE_PP_RATE_PER_SEC = 36;
 const ACTION_ADVANCE_DELAY_MS = 350;
 const ENTER_TRANSITION_MS = 650;
@@ -1553,31 +1559,33 @@ export class BattleScene extends Phaser.Scene {
     return Math.max(1, rect.width - paddingX * 2 - gutter);
   }
 
-  private statusCardNameWidth(rect: Pick<CanvasRect, "width">): number {
-    return Math.max(1, rect.width - BATTLE_STATUS_CARD_TEXT_PADDING_X * 2);
+  private statusCardNameWidth(rect: CanvasRect): number {
+    return this.statusCardContentRect(rect).width;
   }
 
   private createStatusCardTexts(card: BattleStatusCardLayout): BattleStatusCardTextSet {
+    const content = this.statusCardContentRect(card);
     const hpBoxes = this.statusDigitBoxes(card, 0, "hp");
     const ppBoxes = this.statusDigitBoxes(card, 0, "pp");
+    const labelWidth = this.statusLabelWidth();
     return {
       name: this.createStatusText(
-        card.x + BATTLE_STATUS_CARD_TEXT_PADDING_X,
-        card.y + BATTLE_STATUS_CARD_NAME_Y,
+        content.x,
+        content.y + BATTLE_STATUS_NAME_Y,
         "",
-        this.statusCardNameWidth(card)
+        content.width
       ).setDepth(22),
       hpLabel: this.createStatusText(
-        card.x + BATTLE_STATUS_CARD_TEXT_PADDING_X,
-        card.y + BATTLE_STATUS_HP_ROW_Y + BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET,
+        content.x,
+        content.y + BATTLE_STATUS_HP_ROW_Y + BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET,
         "HP",
-        28
+        labelWidth
       ).setDepth(22),
       ppLabel: this.createStatusText(
-        card.x + BATTLE_STATUS_CARD_TEXT_PADDING_X,
-        card.y + BATTLE_STATUS_PP_ROW_Y + BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET,
+        content.x,
+        content.y + BATTLE_STATUS_PP_ROW_Y + BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET,
         "PP",
-        28
+        labelWidth
       ).setDepth(22),
       hpDigits: hpBoxes.map((box) => this.createDigitText(box).setDepth(22)),
       ppDigits: ppBoxes.map((box) => this.createDigitText(box).setDepth(22))
@@ -1646,17 +1654,36 @@ export class BattleScene extends Phaser.Scene {
     value: number,
     row: "hp" | "pp"
   ): BattleStatusDigitBoxRect[] {
+    const content = this.statusCardContentRect(card);
     return battleStatusDigitBoxRects({
-      card,
+      card: content,
       value,
       digitCount: BATTLE_STATUS_DIGIT_COUNT,
-      digitWidth: BATTLE_STATUS_DIGIT_WIDTH,
+      digitWidth: this.statusDigitBoxWidth(),
       digitHeight: BATTLE_STATUS_DIGIT_HEIGHT,
       gap: BATTLE_STATUS_DIGIT_GAP,
       rightPadding: BATTLE_STATUS_DIGIT_RIGHT_PADDING,
-      y: card.y + (row === "hp" ? BATTLE_STATUS_HP_ROW_Y : BATTLE_STATUS_PP_ROW_Y),
-      leftPadding: BATTLE_STATUS_CARD_TEXT_PADDING_X + 30
+      y: content.y + (row === "hp" ? BATTLE_STATUS_HP_ROW_Y : BATTLE_STATUS_PP_ROW_Y),
+      leftPadding: this.statusLabelWidth() + BATTLE_STATUS_LABEL_DIGIT_GAP
     });
+  }
+
+  private statusCardContentRect(card: CanvasRect): CanvasRect {
+    return battleStatusCardContentRect({
+      card,
+      frameThickness: BATTLE_STATUS_FRAME_THICKNESS,
+      paddingX: BATTLE_STATUS_CONTENT_PADDING_X,
+      paddingTop: BATTLE_STATUS_CONTENT_PADDING_TOP,
+      paddingBottom: BATTLE_STATUS_CONTENT_PADDING_BOTTOM
+    });
+  }
+
+  private statusLabelWidth(): number {
+    return Math.max(this.measureTextWidth("HP"), this.measureTextWidth("PP"));
+  }
+
+  private statusDigitBoxWidth(): number {
+    return Math.max(BATTLE_STATUS_DIGIT_WIDTH, this.measureTextWidth("8") + 2);
   }
 
   private fitMeasuredText(text: string, maxWidth: number): string {

@@ -4,7 +4,9 @@ import {
   EB_BITMAP_TEXT_SCALE,
   EB_TEXT_LINE_SPACING,
   EB_UI_SCALE,
+  EB_WINDOW_TILE_PX,
   battleMenuCascadeLayout,
+  battleStatusCardContentRect,
   battleStatusDigitBoxRects,
   battleStatusCardRects,
   battleWindowRect,
@@ -339,6 +341,61 @@ describe("EB window layouts", () => {
       expect(box.x + box.width).toBeLessThanOrEqual(card.x + card.width);
       expect(box.y + box.height).toBeLessThanOrEqual(card.y + card.height);
     }
+  });
+
+  it("keeps battle status-card glyphs and digit boxes inside the padded content rect", () => {
+    const card = { x: 0, y: 336, width: 128, height: 104 };
+    const inner = battleStatusCardContentRect({
+      card,
+      frameThickness: EB_WINDOW_TILE_PX * EB_UI_SCALE,
+      paddingX: 3,
+      paddingTop: 5,
+      paddingBottom: 3
+    });
+    const labelWidth = 20;
+    const labelGap = 6;
+    const nameGlyph = { x: inner.x, y: inner.y, width: 46, height: 16 };
+    const hpLabelGlyph = { x: inner.x, y: inner.y + 21, width: labelWidth, height: 16 };
+    const ppLabelGlyph = { x: inner.x, y: inner.y + 43, width: labelWidth, height: 16 };
+    const hpBoxes = battleStatusDigitBoxRects({
+      card: inner,
+      value: 123,
+      digitCount: 3,
+      digitWidth: 18,
+      digitHeight: 22,
+      gap: 2,
+      rightPadding: 0,
+      leftPadding: labelWidth + labelGap,
+      y: inner.y + 20
+    });
+    const ppBoxes = battleStatusDigitBoxRects({
+      card: inner,
+      value: 7,
+      digitCount: 3,
+      digitWidth: 18,
+      digitHeight: 22,
+      gap: 2,
+      rightPadding: 0,
+      leftPadding: labelWidth + labelGap,
+      y: inner.y + 42
+    });
+
+    expect(inner).toEqual({ x: 19, y: 357, width: 90, height: 64 });
+    for (const glyph of [nameGlyph, hpLabelGlyph, ppLabelGlyph]) {
+      expect(glyph.x).toBeGreaterThanOrEqual(inner.x);
+      expect(glyph.y).toBeGreaterThanOrEqual(inner.y);
+      expect(glyph.x + glyph.width).toBeLessThanOrEqual(inner.x + inner.width);
+      expect(glyph.y + glyph.height).toBeLessThanOrEqual(inner.y + inner.height);
+    }
+    for (const box of [...hpBoxes, ...ppBoxes]) {
+      expect(box.x).toBeGreaterThanOrEqual(inner.x);
+      expect(box.y).toBeGreaterThanOrEqual(inner.y);
+      expect(box.x + box.width).toBeLessThanOrEqual(inner.x + inner.width);
+      expect(box.y + box.height).toBeLessThanOrEqual(inner.y + inner.height);
+    }
+    expect(hpBoxes[0].x).toBeGreaterThanOrEqual(inner.x + labelWidth + labelGap);
+    expect(hpBoxes[2].x + hpBoxes[2].width).toBe(inner.x + inner.width);
+    expect(ppBoxes[2].x + ppBoxes[2].width).toBe(inner.x + inner.width);
   });
 
   it("clips status odometer values to the fixed digit count", () => {
