@@ -12,6 +12,7 @@ import {
   type ItemData,
   type PsiCollection,
   type PsiData,
+  type SpriteOverrides,
   type WindowCollection
 } from "@eb/schemas";
 import {
@@ -103,6 +104,12 @@ import {
   selectionArrowTriangle
 } from "./battleVisuals";
 import { swirlMask, type SwirlMask } from "./transitions";
+import {
+  resolveSpriteOverrideImageFrame,
+  spriteOverrideAssetUrl,
+  spriteOverrideEnemyImageKey,
+  spriteOverrideForEnemyId
+} from "./spriteOverrides";
 
 const MONO = "Menlo, Consolas, monospace";
 const TAU = Math.PI * 2;
@@ -122,6 +129,9 @@ const ACTION_ADVANCE_DELAY_MS = 350;
 const MENU_MAX_ROWS = 4;
 const ENTER_TRANSITION_MS = 650;
 const EXIT_TRANSITION_MS = 450;
+const ENEMY_SPRITE_MAX_HEIGHT = 160;
+const ENEMY_SPRITE_REDRAW_RETRY_MS = 50;
+const MAX_ENEMY_SPRITE_REDRAW_ATTEMPTS = 5;
 
 type BattleSubmenu = "command" | "psi" | "goods" | "target";
 type BattleTargetMode = "bash" | "spy" | "mirror" | "psi-offense" | "psi-recovery" | "goods";
@@ -144,6 +154,11 @@ type EnemyEffectDebug = {
   flashIntensity: number;
   wobble: WobbleDebugOffset;
 };
+type EnemySpriteTexturePlan = {
+  key: string;
+  url: string;
+  override: ReturnType<typeof spriteOverrideForEnemyId>;
+};
 type BattleStatusLayout = {
   commandRect?: CanvasRect;
   statusRect: CanvasRect;
@@ -157,6 +172,7 @@ export class BattleScene extends Phaser.Scene {
   private psi_?: PsiCollection;
   private font_?: FontCollection;
   private window_?: WindowCollection;
+  private spriteOverrides_?: SpriteOverrides;
   private bitmapFont?: PreparedBitmapFont;
   private windowFrames?: PreparedWindowFrames;
   private rng_: Rng = () => 0.5;
@@ -189,6 +205,9 @@ export class BattleScene extends Phaser.Scene {
   private transitionGraphics?: Phaser.GameObjects.Graphics;
   private enemySprites: Phaser.GameObjects.Image[] = [];
   private enemySpriteBasePoints: Array<SpritePoint | undefined> = [];
+  private enemySpriteRedrawScheduled = false;
+  private enemySpriteRedrawAttempts = 0;
+  private enemySpriteRetryQueuedKeys = new Set<string>();
   private enemyLastHitAt: Array<number | null> = [];
   private enemyDefeatedAt: Array<number | null> = [];
   private backgroundAnimation?: AnimatedBattleBackgroundHandle;
@@ -209,6 +228,7 @@ export class BattleScene extends Phaser.Scene {
     psi?: PsiCollection;
     font?: FontCollection;
     window?: WindowCollection;
+    spriteOverrides?: SpriteOverrides;
     partyMembers?: PartyMember[];
     wallet?: number;
     returnTo?: BattleReturnContext;
@@ -219,6 +239,7 @@ export class BattleScene extends Phaser.Scene {
     this.psi_ = data.psi;
     this.font_ = data.font;
     this.window_ = data.window;
+    this.spriteOverrides_ = data.spriteOverrides ?? data.returnTo?.gameData.spriteOverrides;
     const enemies = enemiesForGroup(data.battleData, this.group_);
     if (enemies.length === 0) {
       throw new Error(`Battle group ${this.group_.id} has no matching runtime enemy.`);
@@ -232,6 +253,9 @@ export class BattleScene extends Phaser.Scene {
     this.enemyLastHitAt = enemies.map(() => null);
     this.enemyDefeatedAt = enemies.map(() => null);
     this.enemySpriteBasePoints = [];
+    this.enemySpriteRedrawScheduled = false;
+    this.enemySpriteRedrawAttempts = 0;
+    this.enemySpriteRetryQueuedKeys.clear();
     this.rng_ = createSeededRng((this.group_.id + 1) * 65537 + enemies.reduce((sum, enemy) => sum + enemy.id, 0));
     this.phase_ = "enter-transition";
     this.transitionPhase_ = "enter";
@@ -263,7 +287,10 @@ export class BattleScene extends Phaser.Scene {
       this.load.image(backgroundKey(backgroundId), generatedAssetUrl(this.battleData_.assetLayout.backgroundDir, backgroundId));
     }
     for (const enemy of enemiesForGroup(this.battleData_, this.group_)) {
-      this.load.image(spriteKey(enemy.spriteId), generatedAssetUrl(this.battleData_.assetLayout.spriteDir, enemy.spriteId));
+      const texture = this.enemySpriteTexturePlan(enemy);
+      if (!this.textures.exists(texture.key)) {
+        this.load.image(texture.key, texture.url);
+      }
     }
     queueBitmapFontAssets(this, this.font_);
     queueWindowFrameAssets(this, this.window_);
@@ -1002,20 +1029,107 @@ export class BattleScene extends Phaser.Scene {
   private drawEnemySprites(): void {
     const enemies = enemiesForGroup(this.battleData_, this.group_);
     const count = Math.max(1, enemies.length);
+    for (const sprite of this.enemySprites) {
+      sprite?.destroy();
+    }
     this.enemySprites = [];
     this.enemySpriteBasePoints = [];
+    const missingTextures: EnemySpriteTexturePlan[] = [];
     enemies.forEach((enemy, index) => {
-      const key = spriteKey(enemy.spriteId);
-      if (!this.textures.exists(key)) {
+      const texture = this.enemySpriteTexturePlan(enemy);
+      if (!this.enemySpriteTextureReady(texture)) {
+        missingTextures.push(texture);
         return;
       }
-      const frame = this.textures.getFrame(key);
+      const frame = this.textures.getFrame(texture.key);
       const widthBudget = Math.max(64, 420 / count);
-      const scale = Math.min(2, widthBudget / frame.width, 160 / frame.height);
+      const scale = texture.override
+        ? resolveSpriteOverrideImageFrame(
+          texture.override,
+          { width: frame.width, height: frame.height },
+          { maxWidth: widthBudget, maxHeight: ENEMY_SPRITE_MAX_HEIGHT, maxScale: 2 }
+        ).scale
+        : Math.min(2, widthBudget / frame.width, ENEMY_SPRITE_MAX_HEIGHT / frame.height);
       const point = enemySpritePoint(this.scale.width, count, index, widthBudget);
       this.enemySpriteBasePoints[index] = point;
-      this.enemySprites[index] = this.add.image(point.x, point.y, key).setOrigin(0.5, 0.5).setScale(scale).setDepth(10);
+      this.enemySprites[index] = this.add.image(point.x, point.y, texture.key)
+        .setOrigin(texture.override?.originX ?? 0.5, texture.override?.originY ?? 0.5)
+        .setScale(scale)
+        .setDepth(10);
     });
+    if (missingTextures.length > 0) {
+      this.scheduleEnemySpriteRedraw(missingTextures);
+      return;
+    }
+    this.enemySpriteRedrawAttempts = 0;
+  }
+
+  private enemySpriteOverride(enemyId: number) {
+    return spriteOverrideForEnemyId(this.spriteOverrides_, enemyId);
+  }
+
+  private enemySpriteTexturePlan(enemy: BattleEnemy): EnemySpriteTexturePlan {
+    const override = this.enemySpriteOverride(enemy.id);
+    return override
+      ? {
+        key: spriteOverrideEnemyImageKey(enemy.id, override.image),
+        url: spriteOverrideAssetUrl(override.image),
+        override
+      }
+      : {
+        key: spriteKey(enemy.spriteId),
+        url: generatedAssetUrl(this.battleData_.assetLayout.spriteDir, enemy.spriteId),
+        override
+      };
+  }
+
+  private enemySpriteTextureReady(texture: EnemySpriteTexturePlan): boolean {
+    if (!this.textures.exists(texture.key)) {
+      return false;
+    }
+    const frame = this.textures.getFrame(texture.key);
+    if (!frame || frame.width <= 0 || frame.height <= 0) {
+      if (texture.override) {
+        this.textures.remove(texture.key);
+      }
+      return false;
+    }
+    return true;
+  }
+
+  private scheduleEnemySpriteRedraw(missingTextures: EnemySpriteTexturePlan[]): void {
+    if (this.enemySpriteRedrawScheduled || this.enemySpriteRedrawAttempts >= MAX_ENEMY_SPRITE_REDRAW_ATTEMPTS) {
+      return;
+    }
+    this.enemySpriteRedrawScheduled = true;
+    this.enemySpriteRedrawAttempts += 1;
+
+    let queued = false;
+    for (const texture of missingTextures) {
+      if (this.textures.exists(texture.key) || this.enemySpriteRetryQueuedKeys.has(texture.key)) {
+        continue;
+      }
+      this.enemySpriteRetryQueuedKeys.add(texture.key);
+      this.load.image(texture.key, texture.url);
+      queued = true;
+    }
+
+    const redraw = () => {
+      this.enemySpriteRedrawScheduled = false;
+      this.enemySpriteRetryQueuedKeys.clear();
+      this.drawEnemySprites();
+      this.renderStatus();
+      this.publish();
+    };
+
+    if (queued) {
+      this.load.once("complete", redraw);
+      if (!this.load.isLoading()) {
+        this.load.start();
+      }
+      return;
+    }
+    this.time.delayedCall(ENEMY_SPRITE_REDRAW_RETRY_MS, redraw);
   }
 
   private createStatusWindow(): void {

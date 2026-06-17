@@ -57,7 +57,8 @@ class BootScene extends Phaser.Scene {
         items: data.items,
         psi: data.psi,
         font: data.font,
-        window: data.window
+        window: data.window,
+        spriteOverrides: data.spriteOverrides
       });
       return;
     }

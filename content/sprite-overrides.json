@@ -1818,5 +1818,48 @@
       "originY": 1
     }
   },
-  "byEnemyId": {}
+  "byEnemyId": {
+    "37": {
+      "image": "assets/swagbound/enemy/pfp-malady-battle-v1.png",
+      "displayHeight": 160,
+      "originX": 0.5,
+      "originY": 0.5
+    },
+    "55": {
+      "image": "assets/swagbound/enemy/lsw-signal-stutter-battle-v0.png",
+      "displayHeight": 160,
+      "originX": 0.5,
+      "originY": 0.5
+    },
+    "64": {
+      "image": "assets/swagbound/enemy/lsw-cinder-cap-battle-v0.png",
+      "displayHeight": 160,
+      "originX": 0.5,
+      "originY": 0.5
+    },
+    "81": {
+      "image": "assets/swagbound/enemy/lsw-ushanka-shade-battle-v0.png",
+      "displayHeight": 160,
+      "originX": 0.5,
+      "originY": 0.5
+    },
+    "121": {
+      "image": "assets/swagbound/enemy/lsw-sawtooth-bun-battle-v0.png",
+      "displayHeight": 160,
+      "originX": 0.5,
+      "originY": 0.5
+    },
+    "134": {
+      "image": "assets/swagbound/enemy/lsw-question-marketeer-battle-v0.png",
+      "displayHeight": 160,
+      "originX": 0.5,
+      "originY": 0.5
+    },
+    "159": {
+      "image": "assets/swagbound/enemy/ai-slop-battle-v0.png",
+      "displayHeight": 160,
+      "originX": 0.5,
+      "originY": 0.5
+    }
+  }
 }

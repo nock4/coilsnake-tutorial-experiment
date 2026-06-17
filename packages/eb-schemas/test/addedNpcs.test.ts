@@ -147,8 +147,31 @@ describe("SpriteOverridesSchema", () => {
       byEnemyId: {}
     });
 
-    expect(parsed.player?.animations.down).toEqual([0, 1, 2, 3]);
-    expect(parsed.byNpcId?.["744"].animations.left).toEqual([4]);
+    expect(parsed.player?.animations?.down).toEqual([0, 1, 2, 3]);
+    expect(parsed.byNpcId?.["744"].animations?.left).toEqual([4]);
+  });
+
+  it("accepts single-image enemy overrides without sheet frame fields", () => {
+    const parsed = SpriteOverridesSchema.parse({
+      schema: "swagbound.sprite-overrides.v1",
+      byEnemyId: {
+        "37": {
+          image: "assets/swagbound/enemy/malady-battle-v1-alpha-extracted-source-size.png",
+          displayHeight: 160,
+          displayWidth: 200,
+          originX: 0.5,
+          originY: 0.5
+        }
+      }
+    });
+
+    expect(parsed.byEnemyId?.["37"]).toMatchObject({
+      image: "assets/swagbound/enemy/malady-battle-v1-alpha-extracted-source-size.png",
+      displayHeight: 160,
+      displayWidth: 200
+    });
+    expect(parsed.byEnemyId?.["37"].frameWidth).toBeUndefined();
+    expect(parsed.byEnemyId?.["37"].animations).toBeUndefined();
   });
 
   it("accepts a single-frame static NPC sprite override", () => {
@@ -207,6 +230,16 @@ describe("SpriteOverridesSchema", () => {
           left: [4],
           right: [8],
           up: [12]
+        }
+      }
+    }).success).toBe(false);
+
+    expect(SpriteOverridesSchema.safeParse({
+      schema: "swagbound.sprite-overrides.v1",
+      byEnemyId: {
+        "37": {
+          image: "assets/swagbound/enemy/malady-battle-v1-alpha-extracted-source-size.png",
+          frameWidth: 260
         }
       }
     }).success).toBe(false);
