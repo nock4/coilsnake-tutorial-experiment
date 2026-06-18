@@ -1,66 +1,90 @@
 import type { BattleSfxCue } from "./audio/battleSfx";
 import type { BattleRoundStepNarrationDetails } from "./battleRound";
+import {
+  battleEventsHaveEnemyDefeated,
+  battleEventsHaveMiss,
+  battleEventsHaveRecovery,
+  battleEventsHaveSmash,
+  battleStepEvents,
+  firstBattleAction,
+  firstBattleDamage,
+  type BattleEvent
+} from "./battleEvents";
 
 export const BIG_DAMAGE_SFX_THRESHOLD = 60;
 
-export function battleStepSfx(details: BattleRoundStepNarrationDetails): BattleSfxCue[] {
+export function battleStepSfx(events: readonly BattleEvent[]): BattleSfxCue[];
+export function battleStepSfx(details: BattleRoundStepNarrationDetails): BattleSfxCue[];
+export function battleStepSfx(input: readonly BattleEvent[] | BattleRoundStepNarrationDetails): BattleSfxCue[] {
+  const events = isBattleEventList(input) ? input : battleStepEvents(input);
   const cues: BattleSfxCue[] = [];
+  const runEvent = events.find((event) => event.kind === "runSucceeded" || event.kind === "runFailed");
+  if (runEvent) {
+    cues.push(runEvent.kind === "runSucceeded" ? "run" : "miss");
+    appendEnemyDownCue(cues, events);
+    return cues;
+  }
 
-  switch (details.kind) {
-    case "skip":
-    case "defend":
+  const action = firstBattleAction(events);
+  const recovery = battleEventsHaveRecovery(events);
+  if (!action && recovery) {
+    cues.push("heal");
+    appendEnemyDownCue(cues, events);
+    return cues;
+  }
+
+  switch (action?.action) {
+    case undefined:
     case "spy":
-      break;
-    case "run":
-      if (details.fled) {
-        cues.push("run");
-      } else {
-        cues.push("miss");
-      }
       break;
     case "attack":
     case "mirror":
-      cues.push("swing", impactCue(details));
+      cues.push("swing", impactCue(events));
       break;
     case "psi":
-      if (isRecovery(details)) {
+      if (recovery) {
         cues.push("heal");
       } else {
-        cues.push("psi", impactCue(details));
+        cues.push("psi", impactCue(events));
       }
       break;
     case "pray":
-      if (isRecovery(details)) {
+      if (recovery) {
         cues.push("heal");
-      } else if ((details.damage ?? 0) > 0) {
-        cues.push("psi", impactCue(details));
+      } else if (firstBattleDamage(events)) {
+        cues.push("psi", impactCue(events));
       }
       break;
     case "item":
-      if (isRecovery(details)) {
+      if (recovery) {
         cues.push("heal");
-      } else if ((details.damage ?? 0) > 0) {
-        cues.push(impactCue(details));
+      } else if (firstBattleDamage(events)) {
+        cues.push(impactCue(events));
       }
       break;
   }
 
-  if (details.targetDied) {
-    cues.push("enemyDown");
-  }
+  appendEnemyDownCue(cues, events);
   return cues;
 }
 
-function impactCue(details: Pick<BattleRoundStepNarrationDetails, "damage" | "missed" | "smash">): BattleSfxCue {
-  if (details.missed || (details.damage ?? 0) <= 0) {
+function impactCue(events: readonly BattleEvent[]): BattleSfxCue {
+  const damage = firstBattleDamage(events)?.amount ?? 0;
+  if (battleEventsHaveMiss(events) || damage <= 0) {
     return "miss";
   }
-  if (details.smash) {
+  if (battleEventsHaveSmash(events)) {
     return "smash";
   }
-  return (details.damage ?? 0) >= BIG_DAMAGE_SFX_THRESHOLD ? "smash" : "hit";
+  return damage >= BIG_DAMAGE_SFX_THRESHOLD ? "smash" : "hit";
 }
 
-function isRecovery(details: Pick<BattleRoundStepNarrationDetails, "healed" | "ppRestored">): boolean {
-  return (details.healed ?? 0) > 0 || (details.ppRestored ?? 0) > 0;
+function appendEnemyDownCue(cues: BattleSfxCue[], events: readonly BattleEvent[]): void {
+  if (battleEventsHaveEnemyDefeated(events)) {
+    cues.push("enemyDown");
+  }
+}
+
+function isBattleEventList(input: readonly BattleEvent[] | BattleRoundStepNarrationDetails): input is readonly BattleEvent[] {
+  return Array.isArray(input);
 }

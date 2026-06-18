@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { composeBattleStepLines } from "../src/battleMessages";
+import { battleStepEvents } from "../src/battleEvents";
+import type { BattleRoundStepNarrationDetails } from "../src/battleRound";
+
+function lines(details: BattleRoundStepNarrationDetails): string[] {
+  return composeBattleStepLines(battleStepEvents(details));
+}
 
 describe("composeBattleStepLines", () => {
   it("composes attack damage and miss lines", () => {
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "attack",
       attackerName: "Bosch",
       targetName: "Spiteful Crow",
@@ -13,7 +19,7 @@ describe("composeBattleStepLines", () => {
       "12 HP of damage to Spiteful Crow!"
     ]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "attack",
       attackerName: "Bosch",
       targetName: "Spiteful Crow",
@@ -26,7 +32,7 @@ describe("composeBattleStepLines", () => {
   });
 
   it("composes SMAAAASH and Guts survival attack beats", () => {
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "attack",
       attackerName: "Bosch",
       targetName: "Spiteful Crow",
@@ -38,7 +44,7 @@ describe("composeBattleStepLines", () => {
       "80 HP of damage to Spiteful Crow!"
     ]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "attack",
       attackerName: "Shark",
       targetName: "Bosch",
@@ -52,7 +58,7 @@ describe("composeBattleStepLines", () => {
   });
 
   it("composes PSI offense and recovery lines", () => {
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "psi",
       attackerName: "Bosch",
       targetName: "Runaway Dog",
@@ -63,7 +69,7 @@ describe("composeBattleStepLines", () => {
       "42 HP of damage to Runaway Dog!"
     ]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "psi",
       attackerName: "Bosch",
       targetName: "Bosch",
@@ -74,7 +80,7 @@ describe("composeBattleStepLines", () => {
   });
 
   it("composes item, defend, pray, spy, mirror, and run lines", () => {
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "item",
       attackerName: "Bosch",
       targetName: "Rook",
@@ -85,26 +91,26 @@ describe("composeBattleStepLines", () => {
       "Rook recovered 6 HP!"
     ]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "defend",
       attackerName: "Bosch",
       defended: true
     })).toEqual(["Bosch took a defensive stance."]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "pray",
       attackerName: "Glimmer",
       ppRestored: 4
     })).toEqual(["Glimmer recovered 4 PP!"]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "spy",
       attackerName: "Scout",
       targetName: "Mushroom",
       message: "Mushroom HP 30/30 Off 12 Def 4."
     })).toEqual(["Mushroom HP 30/30 Off 12 Def 4."]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "mirror",
       attackerName: "Trace",
       targetName: "Mole",
@@ -112,13 +118,13 @@ describe("composeBattleStepLines", () => {
       message: "Trace mirrored Mole for 18 damage."
     })).toEqual(["Trace mirrored Mole for 18 damage."]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "run",
       attackerName: "Bosch",
       fled: true
     })).toEqual(["Bosch ran away!"]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "run",
       attackerName: "Bosch",
       fled: false
@@ -126,12 +132,12 @@ describe("composeBattleStepLines", () => {
   });
 
   it("omits skipped steps", () => {
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "skip",
       attackerName: "Bosch"
     })).toEqual([]);
 
-    expect(composeBattleStepLines({
+    expect(lines({
       kind: "skip",
       attackerName: "Bosch",
       message: "There was no target.",

@@ -36,6 +36,7 @@ import {
 } from "./battleLogic";
 import { autoCommandForMember } from "./battleAutoPolicy";
 import { commandTargetSelectionPlan } from "./battleMenuFlow";
+import { battleStepEvents, type BattleEvent } from "./battleEvents";
 
 export type QueuedCommandTarget = {
   side: BattleSide;
@@ -105,6 +106,7 @@ export type BattleRoundStepResult = {
   fled?: boolean;
   resolution?: BattleRoundStepResolution;
   details: BattleRoundStepNarrationDetails;
+  events: BattleEvent[];
 };
 
 export type BattleRoundRules = {
@@ -281,19 +283,18 @@ export function resolveRoundStartPriority(
   return {
     state: guardedState,
     queued: [],
-    priorityStep: {
+    priorityStep: roundStepResultWithDetails({
       state: guardedState,
       message,
       actor: runActor,
       skipped: false,
-      fled: success,
-      details: {
-        kind: "run",
-        attackerName: runner?.name ?? "Someone",
-        message,
-        fled: success
-      }
-    },
+      fled: success
+    }, {
+      kind: "run",
+      attackerName: runner?.name ?? "Someone",
+      message,
+      fled: success
+    }),
     runAttempt: {
       attempted: true,
       actor: runActor,
@@ -736,14 +737,14 @@ function fromResolution(
     item?: BattleRoundItemData;
   }
 ): BattleRoundStepResult {
-  return {
+  const details = narrationDetailsForResolution(previousState, resolution, context);
+  return roundStepResultWithDetails({
     state: resolution.state,
     message: resolutionMessage(resolution),
     actor: resolution.actor,
     skipped: resolution.skipped,
-    resolution,
-    details: narrationDetailsForResolution(previousState, resolution, context)
-  };
+    resolution
+  }, details);
 }
 
 function resolutionMessage(resolution: BattleRoundStepResolution): string {
@@ -895,35 +896,33 @@ function skippedRoundStep(
   actor: BattleActor,
   message = ""
 ): BattleRoundStepResult {
-  return {
+  return roundStepResultWithDetails({
     state,
     message,
     actor,
-    skipped: true,
-    details: {
-      kind: "skip",
-      attackerName: combatantName(state, actor),
-      message
-    }
-  };
+    skipped: true
+  }, {
+    kind: "skip",
+    attackerName: combatantName(state, actor),
+    message
+  });
 }
 
 function noTargetRoundStep(
   state: BattleState,
   actor: BattleActor
 ): BattleRoundStepResult {
-  return {
+  return roundStepResultWithDetails({
     state,
     message: NO_TARGET_MESSAGE,
     actor,
-    skipped: true,
-    details: {
-      kind: "skip",
-      attackerName: combatantName(state, actor),
-      message: NO_TARGET_MESSAGE,
-      noTarget: true
-    }
-  };
+    skipped: true
+  }, {
+    kind: "skip",
+    attackerName: combatantName(state, actor),
+    message: NO_TARGET_MESSAGE,
+    noTarget: true
+  });
 }
 
 function defendAnnouncementRoundStep(
@@ -932,18 +931,28 @@ function defendAnnouncementRoundStep(
   name: string
 ): BattleRoundStepResult {
   const message = `${name} took a defensive stance.`;
-  return {
+  return roundStepResultWithDetails({
     state,
     message,
     actor,
-    skipped: false,
-    details: {
-      kind: "defend",
-      attackerName: name,
-      targetName: name,
-      message,
-      defended: true
-    }
+    skipped: false
+  }, {
+    kind: "defend",
+    attackerName: name,
+    targetName: name,
+    message,
+    defended: true
+  });
+}
+
+function roundStepResultWithDetails(
+  result: Omit<BattleRoundStepResult, "details" | "events">,
+  details: BattleRoundStepNarrationDetails
+): BattleRoundStepResult {
+  return {
+    ...result,
+    details,
+    events: battleStepEvents(details)
   };
 }
 
