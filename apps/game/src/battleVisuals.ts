@@ -5,6 +5,50 @@ export const MENU_CURSOR_ARROW_HEIGHT_PX = 10;
 export const ENEMY_DEFEAT_FADE_MS = 420;
 export const ENEMY_DEFEAT_FLASH_INTERVAL_MS = 54;
 
+/** Drop-shadow tuning for battle sprites (depth cue under each enemy). */
+export const ENEMY_SHADOW_ALPHA = 0.38;
+export const ENEMY_SHADOW_WIDTH_FRACTION = 0.58;
+export const ENEMY_SHADOW_FLATNESS = 0.3;
+export const ENEMY_SHADOW_BASE_FRACTION = 0.46;
+
+export type EnemyShadowEllipse = {
+  x: number;
+  y: number;
+  radiusX: number;
+  radiusY: number;
+};
+
+/**
+ * Ground-shadow ellipse for a battle sprite. Centered horizontally on the
+ * sprite and offset below its center by a fraction of its display height, so a
+ * bobbing/wobbling sprite floats over a steady shadow. Sizes derive from the
+ * sprite's on-screen display box.
+ */
+export function enemyShadowEllipse(
+  centerX: number,
+  centerY: number,
+  displayWidth: number,
+  displayHeight: number,
+  widthFraction = ENEMY_SHADOW_WIDTH_FRACTION,
+  flatness = ENEMY_SHADOW_FLATNESS,
+  baseFraction = ENEMY_SHADOW_BASE_FRACTION
+): EnemyShadowEllipse {
+  const width = Math.max(1, Math.abs(finiteOrZero(displayWidth)));
+  const height = Math.max(1, Math.abs(finiteOrZero(displayHeight)));
+  const radiusX = Math.max(1, (width * widthFraction) / 2);
+  const radiusY = Math.max(1, radiusX * flatness);
+  return {
+    x: finiteOrZero(centerX),
+    y: finiteOrZero(centerY) + height * baseFraction,
+    radiusX,
+    radiusY
+  };
+}
+
+function finiteOrZero(value: number): number {
+  return Number.isFinite(value) ? value : 0;
+}
+
 export type MenuTextRow = {
   label: string;
   selected: boolean;

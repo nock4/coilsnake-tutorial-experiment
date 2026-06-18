@@ -3,12 +3,34 @@ import {
   ENEMY_DEFEAT_FADE_MS,
   MENU_CURSOR_BLINK_PERIOD_MS,
   enemyDefeatVisualState,
+  enemyShadowEllipse,
   menuCursorVisible,
   menuRowTexts,
   selectionArrowTriangle
 } from "../src/battleVisuals";
 
 describe("battleVisuals", () => {
+  describe("enemyShadowEllipse", () => {
+    it("centers under the sprite and sits below its center", () => {
+      const shadow = enemyShadowEllipse(100, 80, 64, 96);
+      expect(shadow.x).toBe(100);
+      expect(shadow.y).toBeGreaterThan(80);
+      expect(shadow.radiusY).toBeLessThan(shadow.radiusX);
+    });
+
+    it("scales the ellipse width with the sprite display width", () => {
+      const small = enemyShadowEllipse(0, 0, 40, 40);
+      const big = enemyShadowEllipse(0, 0, 120, 40);
+      expect(big.radiusX).toBeGreaterThan(small.radiusX);
+    });
+
+    it("clamps degenerate sizes to a minimum and tolerates non-finite input", () => {
+      const shadow = enemyShadowEllipse(Number.NaN, Number.NaN, 0, 0);
+      expect(shadow.x).toBe(0);
+      expect(shadow.radiusX).toBeGreaterThanOrEqual(1);
+      expect(shadow.radiusY).toBeGreaterThanOrEqual(1);
+    });
+  });
   describe("menuCursorVisible", () => {
     it("toggles visibility at the EB-style cursor blink cadence", () => {
       expect(menuCursorVisible(0)).toBe(true);
