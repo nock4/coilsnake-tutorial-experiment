@@ -114,8 +114,14 @@ function prayEvents(details: BattleRoundStepNarrationDetails): BattleEvent[] {
 }
 
 function spyEvents(details: BattleRoundStepNarrationDetails): BattleEvent[] {
+  // Spy reveals info; it deals no damage, so it must not run the attack-impact
+  // path (which would otherwise emit a spurious "missed" beat).
+  const events: BattleEvent[] = [actionStarted("spy", details)];
   const message = preferredMessageEvent(details);
-  return actionImpactEvents(details, actionStarted("spy", details), message);
+  if (message) {
+    events.push(message);
+  }
+  return events;
 }
 
 function recoveryEvents(

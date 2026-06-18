@@ -138,8 +138,9 @@ function legacyBattleStepLines(details: BattleRoundStepNarrationDetails): string
     case "pray":
       return legacyRecoveryOrMessageLines(details, "prayed");
     case "spy":
+      return preferredMessageLines(details) || [`${details.attackerName} sizes up the foe!`];
     case "mirror":
-      return preferredMessageLines(details) || legacyAttackLines(details);
+      return preferredMessageLines(details) || legacyMirrorLines(details);
     case "run":
       return [details.fled ? `${details.attackerName} ran away!` : `${details.attackerName} couldn't escape!`];
   }
@@ -159,6 +160,11 @@ function legacyAttackLines(details: BattleRoundStepNarrationDetails): string[] {
     lines.push(`${details.targetName ?? "The target"} endured the blow!`);
   }
   return lines;
+}
+
+function legacyMirrorLines(details: BattleRoundStepNarrationDetails): string[] {
+  const [, ...rest] = legacyAttackLines(details);
+  return [`${details.attackerName} mirrors the foe!`, ...rest];
 }
 
 function legacyPsiLines(details: BattleRoundStepNarrationDetails): string[] {

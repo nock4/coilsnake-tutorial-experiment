@@ -101,7 +101,34 @@ describe("autoCommandForMember", () => {
       target: queuedTarget(battle, "enemy", 0)
     });
   });
+
+  it("prioritizes a mortally-rolling ally (target 0, displayed still high) over a low-but-stable ally", () => {
+    let battle = createBattleState(opponent, {
+      characters: characters([healer, allyA, allyB])
+    });
+    // allyA (slot 1): healthy display but a fatal pending target -> mortal, mid-roll.
+    battle = setMortalHp(battle, actor("party", 1), 40);
+    // allyB (slot 2): genuinely low but not mortal.
+    battle = setDisplayedHp(battle, actor("party", 2), 8);
+    const alpha = syntheticPsi(100, "recovery", "alpha", [{ charId: 0, level: 1 }]);
+
+    // displayed-only scoring would skip allyA (40/50 = 0.8); the mortal target must win.
+    expect(autoCommandForMember(battle, 0, [alpha])).toEqual({
+      partySlot: 0,
+      command: "PSI",
+      psiId: 100,
+      target: queuedTarget(battle, "party", 1)
+    });
+  });
 });
+
+function setMortalHp(battle: BattleState, target: BattleActor, displayed: number): BattleState {
+  const combatant = target.side === "party" ? battle.party[target.index] : battle.enemies[target.index];
+  return withCombatant(battle, target, {
+    ...combatant,
+    hp: { ...combatant.hp, displayed, target: 0, isRolling: true, stepRemainder: 0 }
+  });
+}
 
 function setDisplayedHp(battle: BattleState, target: BattleActor, displayed: number): BattleState {
   const combatant = target.side === "party" ? battle.party[target.index] : battle.enemies[target.index];

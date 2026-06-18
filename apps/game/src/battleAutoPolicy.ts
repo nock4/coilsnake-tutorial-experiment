@@ -19,6 +19,7 @@ type EndangeredAlly = {
   index: number;
   hpFraction: number;
   missingHp: number;
+  mortal: boolean;
 };
 
 type RecoveryPsiOption = {
@@ -61,17 +62,27 @@ function mostEndangeredAlly(state: BattleState): EndangeredAlly | undefined {
       if (!isCombatantAlive(combatant) || combatant.maxHp <= 0) {
         return [];
       }
-      const hpFraction = combatant.hp.displayed / combatant.maxHp;
-      if (hpFraction >= AUTO_HEAL_HP_FRACTION) {
+      // Use the pending value too: a member taking lethal rolling damage has a
+      // high `displayed` but a `target` of 0 (mortal, mid-roll). Score on the
+      // worse of the two so mortal damage is caught before the meter finishes.
+      const effectiveHp = Math.min(combatant.hp.displayed, combatant.hp.target);
+      const mortal = combatant.hp.target <= 0 && combatant.hp.displayed > 0;
+      const hpFraction = effectiveHp / combatant.maxHp;
+      if (!mortal && hpFraction >= AUTO_HEAL_HP_FRACTION) {
         return [];
       }
       return [{
         index,
         hpFraction,
-        missingHp: Math.max(0, combatant.maxHp - combatant.hp.displayed)
+        missingHp: Math.max(0, combatant.maxHp - effectiveHp),
+        mortal
       }];
     })
     .sort((left, right) => {
+      // Mortal (rolling-to-death) allies are the top healing priority.
+      if (left.mortal !== right.mortal) {
+        return left.mortal ? -1 : 1;
+      }
       const hpDelta = left.hpFraction - right.hpFraction;
       return hpDelta !== 0 ? hpDelta : left.index - right.index;
     })[0];
