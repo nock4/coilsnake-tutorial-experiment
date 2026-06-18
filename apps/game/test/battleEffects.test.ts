@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { flashState, wobbleOffset } from "../src/battleEffects";
+import {
+  attackerLungeOffset,
+  flashOverlayState,
+  flashState,
+  hitSparkState,
+  screenShakeOffset,
+  wobbleOffset
+} from "../src/battleEffects";
 
 describe("battleEffects", () => {
   describe("flashState", () => {
@@ -43,6 +50,86 @@ describe("battleEffects", () => {
 
     it("phase-offsets different enemy indexes", () => {
       expect(wobbleOffset(1_000, 0, 1.5, 1600)).not.toEqual(wobbleOffset(1_000, 1, 1.5, 1600));
+    });
+  });
+
+  describe("screenShakeOffset", () => {
+    it("is inactive outside the shake window", () => {
+      expect(screenShakeOffset(90, 100, 4, 220)).toEqual({ dx: 0, dy: 0 });
+      expect(screenShakeOffset(320, 100, 4, 220)).toEqual({ dx: 0, dy: 0 });
+      expect(screenShakeOffset(120, null, 4, 220)).toEqual({ dx: 0, dy: 0 });
+    });
+
+    it("decays while staying bounded by intensity", () => {
+      const early = screenShakeOffset(120, 100, 4, 220);
+      const late = screenShakeOffset(290, 100, 4, 220);
+
+      expect(Math.hypot(early.dx, early.dy)).toBeGreaterThan(Math.hypot(late.dx, late.dy));
+      for (const offset of [early, late]) {
+        expect(Math.abs(offset.dx)).toBeLessThanOrEqual(4);
+        expect(Math.abs(offset.dy)).toBeLessThanOrEqual(4);
+      }
+    });
+  });
+
+  describe("hitSparkState", () => {
+    it("expands and fades during the active window", () => {
+      const start = hitSparkState(100, 100, 240);
+      const mid = hitSparkState(180, 100, 240);
+
+      expect(start.active).toBe(true);
+      expect(mid.active).toBe(true);
+      expect(mid.progress).toBeGreaterThan(start.progress);
+      expect(mid.radius).toBeGreaterThan(start.radius);
+      expect(mid.alpha).toBeLessThan(start.alpha);
+      expect(mid.radius).toBeGreaterThanOrEqual(5);
+      expect(mid.radius).toBeLessThanOrEqual(34);
+      expect(mid.alpha).toBeGreaterThanOrEqual(0);
+      expect(mid.alpha).toBeLessThanOrEqual(1);
+    });
+
+    it("is inactive after the spark window", () => {
+      expect(hitSparkState(341, 100, 240)).toEqual({ active: false, progress: 1, radius: 0, alpha: 0 });
+    });
+  });
+
+  describe("flashOverlayState", () => {
+    it("rises quickly, then falls within the configured alpha", () => {
+      const rising = flashOverlayState(116, 100, 180, 0.32);
+      const peak = flashOverlayState(140, 100, 180, 0.32);
+      const falling = flashOverlayState(230, 100, 180, 0.32);
+
+      expect(rising.active).toBe(true);
+      expect(peak.active).toBe(true);
+      expect(falling.active).toBe(true);
+      expect(peak.alpha).toBeGreaterThan(rising.alpha);
+      expect(peak.alpha).toBeGreaterThan(falling.alpha);
+      expect(peak.alpha).toBeLessThanOrEqual(0.32);
+    });
+
+    it("is inactive outside the flash window", () => {
+      expect(flashOverlayState(99, 100, 180, 0.32)).toEqual({ active: false, alpha: 0 });
+      expect(flashOverlayState(280, 100, 180, 0.32)).toEqual({ active: false, alpha: 0 });
+    });
+  });
+
+  describe("attackerLungeOffset", () => {
+    it("nudges toward the supplied direction and returns", () => {
+      const start = attackerLungeOffset(100, 100, 260, { dx: 4, dy: 12 });
+      const peak = attackerLungeOffset(230, 100, 260, { dx: 4, dy: 12 });
+      const late = attackerLungeOffset(348, 100, 260, { dx: 4, dy: 12 });
+
+      expect(start).toEqual({ dx: 0, dy: 0 });
+      expect(peak.dx).toBeGreaterThan(3.9);
+      expect(peak.dy).toBeGreaterThan(11.9);
+      expect(late.dx).toBeGreaterThan(0);
+      expect(late.dx).toBeLessThan(peak.dx);
+      expect(late.dy).toBeGreaterThan(0);
+      expect(late.dy).toBeLessThan(peak.dy);
+    });
+
+    it("is inactive after the lunge window", () => {
+      expect(attackerLungeOffset(361, 100, 260, { dx: 4, dy: 12 })).toEqual({ dx: 0, dy: 0 });
     });
   });
 });

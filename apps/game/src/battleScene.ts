@@ -42,6 +42,7 @@ import {
   partyInputOrder,
   resolveRoundStep,
   type BattleRoundStepNarrationDetails,
+  type BattleRoundStepResult,
   type BattleRoundInputState,
   type QueuedCommand
 } from "./battleRound";
@@ -51,7 +52,12 @@ import {
   DEFAULT_DAMAGE_FLASH_MS,
   DEFAULT_ENEMY_WOBBLE_AMP_PX,
   DEFAULT_ENEMY_WOBBLE_PERIOD_MS,
+  attackerLungeOffset,
+  flashOverlayState,
   flashState,
+  hitSparkState,
+  screenShakeOffset,
+  type EffectDirection,
   wobbleOffset
 } from "./battleEffects";
 import { publishBattleDebug, type BattlePhase, type BattleTransitionPhase } from "./state";
@@ -193,6 +199,23 @@ const EXIT_TRANSITION_MS = 450;
 const ENEMY_SPRITE_MAX_HEIGHT = 160;
 const ENEMY_SPRITE_REDRAW_RETRY_MS = 50;
 const MAX_ENEMY_SPRITE_REDRAW_ATTEMPTS = 5;
+const BATTLE_FX_SPARK_DEPTH = 13;
+const BATTLE_FX_FLASH_DEPTH = 12;
+const BATTLE_FX_SCREEN_SHAKE_MS = 260;
+const BATTLE_FX_HIT_SPARK_MS = 280;
+const BATTLE_FX_ATTACK_FLASH_MS = 120;
+const BATTLE_FX_PSI_FLASH_MS = 230;
+const BATTLE_FX_VICTORY_FLASH_MS = 360;
+const BATTLE_FX_ENEMY_LUNGE_MS = 260;
+const BATTLE_FX_MIN_SHAKE_PX = 1.6;
+const BATTLE_FX_MAX_SHAKE_PX = 4.8;
+const BATTLE_FX_ATTACK_FLASH_ALPHA = 0.13;
+const BATTLE_FX_PSI_FLASH_ALPHA = 0.26;
+const BATTLE_FX_VICTORY_FLASH_ALPHA = 0.22;
+const BATTLE_FX_ATTACK_FLASH_COLOR = 0xffffff;
+const BATTLE_FX_PSI_FLASH_COLOR = 0x9ee7ff;
+const BATTLE_FX_VICTORY_FLASH_COLOR = 0xfff0a6;
+const BATTLE_FX_SPARK_COLOR = 0xfff2a8;
 
 type BattleSubmenu = "command" | "psi" | "goods" | "target";
 type BattleTargetMode = "bash" | "spy" | "mirror" | "psi-offense" | "psi-recovery" | "goods";
@@ -213,6 +236,33 @@ type EnemyEffectDebug = {
   flashActive: boolean;
   flashIntensity: number;
   wobble: WobbleDebugOffset;
+};
+type BattleFxCounters = {
+  shakeCount: number;
+  sparkCount: number;
+  flashCount: number;
+  lungeCount: number;
+};
+type ScreenShakeFx = {
+  startedAt: number | null;
+  intensity: number;
+  durationMs: number;
+};
+type HitSparkFx = SpritePoint & {
+  startedAt: number;
+  durationMs: number;
+  color: number;
+};
+type FlashOverlayFx = {
+  startedAt: number | null;
+  durationMs: number;
+  baseAlpha: number;
+  color: number;
+};
+type EnemyLungeFx = {
+  startedAt: number;
+  durationMs: number;
+  dir: EffectDirection;
 };
 type EnemySpriteTexturePlan = {
   key: string;
@@ -309,12 +359,19 @@ export class BattleScene extends Phaser.Scene {
   private transitionGraphics?: Phaser.GameObjects.Graphics;
   private enemySprites: Phaser.GameObjects.Image[] = [];
   private enemyShadowGraphics?: Phaser.GameObjects.Graphics;
+  private hitSparkGraphics?: Phaser.GameObjects.Graphics;
+  private flashOverlayGraphics?: Phaser.GameObjects.Graphics;
   private enemySpriteBasePoints: Array<SpritePoint | undefined> = [];
   private enemySpriteRedrawScheduled = false;
   private enemySpriteRedrawAttempts = 0;
   private enemySpriteRetryQueuedKeys = new Set<string>();
   private enemyLastHitAt: Array<number | null> = [];
   private enemyDefeatedAt: Array<number | null> = [];
+  private fxCounters_: BattleFxCounters = initialBattleFxCounters();
+  private screenShakeFx_: ScreenShakeFx = inactiveScreenShakeFx();
+  private hitSparkFx_: HitSparkFx[] = [];
+  private flashOverlayFx_: FlashOverlayFx = inactiveFlashOverlayFx();
+  private enemyLungeFx_: Array<EnemyLungeFx | null> = [];
   private backgroundAnimation?: AnimatedBattleBackgroundHandle;
   private backgroundDebug: BattleBackgroundDebug = staticBattleBackgroundDebug();
   private battleSfx_: BattleSfx = createBattleSfx();
@@ -363,6 +420,11 @@ export class BattleScene extends Phaser.Scene {
     });
     this.enemyLastHitAt = enemies.map(() => null);
     this.enemyDefeatedAt = enemies.map(() => null);
+    this.enemyLungeFx_ = enemies.map(() => null);
+    this.fxCounters_ = initialBattleFxCounters();
+    this.screenShakeFx_ = inactiveScreenShakeFx();
+    this.hitSparkFx_ = [];
+    this.flashOverlayFx_ = inactiveFlashOverlayFx();
     this.enemySpriteBasePoints = [];
     this.enemySpriteRedrawScheduled = false;
     this.enemySpriteRedrawAttempts = 0;
@@ -681,6 +743,7 @@ export class BattleScene extends Phaser.Scene {
       this.menuMessage_ = result.message;
       this.executionMessageLines_ = composeBattleStepLines(result.details);
       this.playBattleStepSfx(result.details);
+      this.triggerBattleStepFx(result);
       if (this.executionMessageLines_.length === 0) {
         this.actionDelayMs_ = 0;
         continue;
@@ -707,6 +770,172 @@ export class BattleScene extends Phaser.Scene {
 
   private playBattleStepSfx(details: BattleRoundStepNarrationDetails): void {
     this.playBattleSfxSequence(battleStepSfx(details));
+  }
+
+  private triggerBattleStepFx(result: BattleRoundStepResult): void {
+    const details = result.details;
+    const damage = Math.max(0, Math.floor(details.damage ?? 0));
+    const damaging = damage > 0 && !details.missed;
+
+    if (damaging) {
+      this.startScreenShake(this.shakeIntensityForDamage(damage, Boolean(details.targetDied)));
+      let sparked = false;
+      for (const target of uniqueActors(this.impactTargetsForResult(result))) {
+        const point = this.impactPointForActor(target);
+        if (!point) {
+          continue;
+        }
+        this.spawnHitSpark(point);
+        sparked = true;
+      }
+      if (!sparked) {
+        this.spawnHitSpark(this.fallbackImpactPoint());
+      }
+    }
+
+    if (details.kind === "psi" && details.damage !== undefined) {
+      this.startFlashOverlay(
+        BATTLE_FX_PSI_FLASH_COLOR,
+        BATTLE_FX_PSI_FLASH_ALPHA,
+        BATTLE_FX_PSI_FLASH_MS
+      );
+    } else if (details.kind === "attack" && !result.skipped) {
+      this.startFlashOverlay(
+        BATTLE_FX_ATTACK_FLASH_COLOR,
+        BATTLE_FX_ATTACK_FLASH_ALPHA,
+        BATTLE_FX_ATTACK_FLASH_MS
+      );
+    }
+
+    if (
+      result.actor.side === "enemy" &&
+      !result.skipped &&
+      (details.kind === "attack" || details.kind === "psi")
+    ) {
+      this.startEnemyLunge(result.actor.index);
+    }
+  }
+
+  private impactTargetsForResult(result: BattleRoundStepResult): BattleActor[] {
+    const resolution = result.resolution;
+    if (!resolution) {
+      return [];
+    }
+    if ("defender" in resolution) {
+      return resolution.defender ? [resolution.defender] : [];
+    }
+    if ("targets" in resolution) {
+      return [...resolution.targets];
+    }
+    if ("target" in resolution) {
+      return resolution.target ? [resolution.target] : [];
+    }
+    return [];
+  }
+
+  private startScreenShake(intensity: number): void {
+    this.screenShakeFx_ = {
+      startedAt: this.time.now,
+      intensity: clampNumber(intensity, 0, BATTLE_FX_MAX_SHAKE_PX),
+      durationMs: BATTLE_FX_SCREEN_SHAKE_MS
+    };
+    this.fxCounters_.shakeCount += 1;
+  }
+
+  private shakeIntensityForDamage(damage: number, targetDied: boolean): number {
+    const scaled = BATTLE_FX_MIN_SHAKE_PX + Math.sqrt(Math.max(0, damage)) * 0.26 + (targetDied ? 0.9 : 0);
+    return clampNumber(scaled, BATTLE_FX_MIN_SHAKE_PX, BATTLE_FX_MAX_SHAKE_PX);
+  }
+
+  private spawnHitSpark(point: SpritePoint): void {
+    this.hitSparkFx_.push({
+      x: point.x,
+      y: point.y,
+      startedAt: this.time.now,
+      durationMs: BATTLE_FX_HIT_SPARK_MS,
+      color: BATTLE_FX_SPARK_COLOR
+    });
+    this.fxCounters_.sparkCount += 1;
+  }
+
+  private startFlashOverlay(color: number, baseAlpha: number, durationMs: number): void {
+    this.flashOverlayFx_ = {
+      startedAt: this.time.now,
+      durationMs,
+      baseAlpha,
+      color
+    };
+    this.fxCounters_.flashCount += 1;
+  }
+
+  private startEnemyLunge(enemyIndex: number): void {
+    if (!this.battle_.enemies[enemyIndex]) {
+      return;
+    }
+    this.enemyLungeFx_[enemyIndex] = {
+      startedAt: this.time.now,
+      durationMs: BATTLE_FX_ENEMY_LUNGE_MS,
+      dir: this.enemyLungeDirection(enemyIndex)
+    };
+    this.fxCounters_.lungeCount += 1;
+  }
+
+  private enemyLungeDirection(enemyIndex: number): EffectDirection {
+    const basePoint = this.enemySpriteBasePoints[enemyIndex];
+    const towardCenter = basePoint ? Math.sign(this.scale.width / 2 - basePoint.x) : 0;
+    return {
+      dx: towardCenter * 3,
+      dy: 12
+    };
+  }
+
+  private impactPointForActor(actor: BattleActor): SpritePoint | null {
+    if (actor.side === "enemy") {
+      const sprite = this.enemySprites[actor.index];
+      const basePoint = this.enemySpriteBasePoints[actor.index];
+      if (sprite) {
+        return { x: sprite.x, y: sprite.y };
+      }
+      return basePoint ? { ...basePoint } : null;
+    }
+    return this.partyImpactPoint(actor.index);
+  }
+
+  private partyImpactPoint(memberIndex: number): SpritePoint | null {
+    const card = this.currentStatusCardRects()[memberIndex];
+    if (!card) {
+      return null;
+    }
+    return {
+      x: card.x + card.width / 2,
+      y: Math.max(24, card.y - 12)
+    };
+  }
+
+  private currentStatusCardRects(): CanvasRect[] {
+    const memberCount = Math.min(4, this.battle_.party.length);
+    const activeIndex = this.currentActor_?.side === "party" && this.currentActor_.index < memberCount
+      ? this.currentActor_.index
+      : null;
+    return battleStatusCardRects({
+      screen: { width: this.scale.width, height: this.scale.height },
+      memberCount,
+      activeIndex,
+      sideMargin: BATTLE_STATUS_CARD_SIDE_MARGIN,
+      bottomMargin: BATTLE_STATUS_CARD_BOTTOM_MARGIN,
+      gap: BATTLE_STATUS_CARD_GAP,
+      cardHeight: BATTLE_STATUS_CARD_HEIGHT,
+      minCardWidth: BATTLE_STATUS_CARD_MIN_WIDTH,
+      maxCardWidth: BATTLE_STATUS_CARD_MAX_WIDTH,
+      activeLift: BATTLE_STATUS_CARD_ACTIVE_LIFT
+    });
+  }
+
+  private fallbackImpactPoint(): SpritePoint {
+    return {
+      x: this.scale.width / 2,
+      y: STATUS_TOP / 2
+    };
   }
 
   private playBattleSfxSequence(cues: readonly BattleSfxCue[]): void {
@@ -974,6 +1203,11 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     this.playBattleSfxCue("victory");
+    this.startFlashOverlay(
+      BATTLE_FX_VICTORY_FLASH_COLOR,
+      BATTLE_FX_VICTORY_FLASH_ALPHA,
+      BATTLE_FX_VICTORY_FLASH_MS
+    );
     const result = applyVictoryRewards(this.battle_, {
       rng: this.rng_,
       items: this.items_?.items,
@@ -1324,8 +1558,12 @@ export class BattleScene extends Phaser.Scene {
     this.targetCursor?.destroy();
     this.menuCursorGraphics?.destroy();
     this.enemyShadowGraphics?.destroy();
+    this.hitSparkGraphics?.destroy();
+    this.flashOverlayGraphics?.destroy();
     this.destroyBattleUiText();
     this.enemyShadowGraphics = this.add.graphics().setDepth(9);
+    this.flashOverlayGraphics = this.add.graphics().setDepth(BATTLE_FX_FLASH_DEPTH);
+    this.hitSparkGraphics = this.add.graphics().setDepth(BATTLE_FX_SPARK_DEPTH);
     this.statusGraphics = this.add.graphics().setDepth(20);
     this.statusFieldGraphics = this.add.graphics().setDepth(20.5);
     this.statusAccentGraphics = this.add.graphics().setDepth(26);
@@ -1656,6 +1894,80 @@ export class BattleScene extends Phaser.Scene {
     this.backgroundDebug = this.backgroundAnimation.update(this.time.now);
   }
 
+  private renderBattleFx(now: number): void {
+    this.applyScreenShake(now);
+    this.renderFlashOverlayFx(now);
+    this.renderHitSparkFx(now);
+  }
+
+  private applyScreenShake(now: number): void {
+    const fx = this.screenShakeFx_;
+    const offset = screenShakeOffset(now, fx.startedAt, fx.intensity, fx.durationMs);
+    this.cameras.main.setScroll(-offset.dx, -offset.dy);
+    if (fx.startedAt !== null && now - fx.startedAt >= fx.durationMs) {
+      this.screenShakeFx_ = inactiveScreenShakeFx();
+      this.cameras.main.setScroll(0, 0);
+    }
+  }
+
+  private renderFlashOverlayFx(now: number): void {
+    const graphics = this.flashOverlayGraphics;
+    if (!graphics) {
+      return;
+    }
+    graphics.clear();
+    const fx = this.flashOverlayFx_;
+    const overlay = flashOverlayState(now, fx.startedAt, fx.durationMs, fx.baseAlpha);
+    if (overlay.active && overlay.alpha > 0) {
+      graphics.fillStyle(fx.color, overlay.alpha);
+      graphics.fillRect(0, 0, this.scale.width, this.scale.height);
+    }
+    if (fx.startedAt !== null && now - fx.startedAt >= fx.durationMs) {
+      this.flashOverlayFx_ = inactiveFlashOverlayFx();
+    }
+  }
+
+  private renderHitSparkFx(now: number): void {
+    const graphics = this.hitSparkGraphics;
+    if (!graphics) {
+      return;
+    }
+    graphics.clear();
+    const active: HitSparkFx[] = [];
+    for (const fx of this.hitSparkFx_) {
+      const spark = hitSparkState(now, fx.startedAt, fx.durationMs);
+      if (!spark.active) {
+        continue;
+      }
+      this.drawHitSpark(graphics, fx, spark.radius, spark.alpha, spark.progress);
+      active.push(fx);
+    }
+    this.hitSparkFx_ = active;
+  }
+
+  private drawHitSpark(
+    graphics: Phaser.GameObjects.Graphics,
+    fx: HitSparkFx,
+    radius: number,
+    alpha: number,
+    progress: number
+  ): void {
+    const lineAlpha = clampNumber(alpha, 0, 1);
+    const lineWidth = Math.max(1, Math.round(2 - progress));
+    graphics.lineStyle(lineWidth, fx.color, lineAlpha);
+    graphics.strokeCircle(fx.x, fx.y, radius);
+    const rayCount = 8;
+    const innerRadius = radius * 0.32;
+    for (let index = 0; index < rayCount; index += 1) {
+      const angle = (index / rayCount) * TAU + progress * 0.55;
+      const inner = polarPoint(fx.x, fx.y, innerRadius, angle);
+      const outer = polarPoint(fx.x, fx.y, radius + 3, angle);
+      graphics.lineBetween(inner.x, inner.y, outer.x, outer.y);
+    }
+    graphics.fillStyle(0xffffff, lineAlpha * 0.72);
+    graphics.fillCircle(fx.x, fx.y, Math.max(1, 3 * (1 - progress)));
+  }
+
   private renderStatus(): void {
     const menuVisible = this.phase_ === "command-input" && this.currentActor_?.side === "party";
     const view = this.battleUiView(menuVisible);
@@ -1677,6 +1989,7 @@ export class BattleScene extends Phaser.Scene {
     });
     this.renderStatusCardBars(view, layout);
     this.renderEnemySpriteEffects(this.time.now);
+    this.renderBattleFx(this.time.now);
     this.renderMenuCursors(menuVisible, layout);
     this.renderTargetCursor(menuVisible);
   }
@@ -2071,6 +2384,7 @@ export class BattleScene extends Phaser.Scene {
       executionMessage: this.executionMessageLines_.join("\n"),
       lastSfx: this.lastSfx_,
       sfxCount: this.sfxCount_,
+      fx: { ...this.fxCounters_ },
       lastEnemyAction: this.lastEnemyAction_,
       party,
       enemies,
@@ -2129,8 +2443,9 @@ export class BattleScene extends Phaser.Scene {
       }
       const basePoint = this.enemySpriteBasePoints[index];
       const effect = this.enemyEffectFor(index, now);
+      const lunge = this.enemyLungeOffsetFor(index, now);
       if (basePoint) {
-        sprite.setPosition(basePoint.x + effect.wobble.dx, basePoint.y + effect.wobble.dy);
+        sprite.setPosition(basePoint.x + effect.wobble.dx + lunge.dx, basePoint.y + effect.wobble.dy + lunge.dy);
       }
       const defeat = enemyDefeatVisualState(now, alive, this.enemyDefeatedAt[index]);
       // Steady ground shadow under the sprite (does not wobble with it).
@@ -2294,6 +2609,18 @@ export class BattleScene extends Phaser.Scene {
         ? integerOffset(wobbleOffset(now, index, DEFAULT_ENEMY_WOBBLE_AMP_PX, DEFAULT_ENEMY_WOBBLE_PERIOD_MS))
         : { dx: 0, dy: 0 }
     };
+  }
+
+  private enemyLungeOffsetFor(index: number, now: number): WobbleDebugOffset {
+    const fx = this.enemyLungeFx_[index];
+    if (!fx) {
+      return { dx: 0, dy: 0 };
+    }
+    if (now - fx.startedAt >= fx.durationMs) {
+      this.enemyLungeFx_[index] = null;
+      return { dx: 0, dy: 0 };
+    }
+    return integerOffset(attackerLungeOffset(now, fx.startedAt, fx.durationMs, fx.dir));
   }
 
   private actorIsAlive(actor: BattleActor): boolean {
@@ -2606,6 +2933,44 @@ function debugCombatant(combatant: BattleState["party"][number]): {
 
 function debugActor(actor: BattleActor): { side: "party" | "enemy"; index: number } {
   return { side: actor.side, index: actor.index };
+}
+
+function initialBattleFxCounters(): BattleFxCounters {
+  return {
+    shakeCount: 0,
+    sparkCount: 0,
+    flashCount: 0,
+    lungeCount: 0
+  };
+}
+
+function inactiveScreenShakeFx(): ScreenShakeFx {
+  return {
+    startedAt: null,
+    intensity: 0,
+    durationMs: BATTLE_FX_SCREEN_SHAKE_MS
+  };
+}
+
+function inactiveFlashOverlayFx(): FlashOverlayFx {
+  return {
+    startedAt: null,
+    durationMs: BATTLE_FX_ATTACK_FLASH_MS,
+    baseAlpha: 0,
+    color: BATTLE_FX_ATTACK_FLASH_COLOR
+  };
+}
+
+function uniqueActors(actors: readonly BattleActor[]): BattleActor[] {
+  const seen = new Set<string>();
+  return actors.filter((actor) => {
+    const key = `${actor.side}:${actor.index}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function debugVictorySummary(summary: BattleVictorySummary): {

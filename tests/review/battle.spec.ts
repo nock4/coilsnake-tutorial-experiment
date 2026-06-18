@@ -53,6 +53,12 @@ type BattleDebug = {
   executionMessage: string;
   lastSfx: BattleSfxCueDebug | null;
   sfxCount: number;
+  fx: {
+    shakeCount: number;
+    sparkCount: number;
+    flashCount: number;
+    lungeCount: number;
+  };
   lastEnemyAction: {
     enemyIndex: number;
     actionIndex: number;
@@ -108,6 +114,10 @@ type BattleRun = {
   sawVictorySfx: boolean;
   sawVictorySummary: boolean;
   sawExitTransition: boolean;
+  sawShakeFx: boolean;
+  sawSparkFx: boolean;
+  sawFlashFx: boolean;
+  sawLungeFx: boolean;
 };
 
 test("enters battle and BASH rolls the enemy HP odometer to a win", async ({ page }) => {
@@ -117,6 +127,9 @@ test("enters battle and BASH rolls the enemy HP odometer to a win", async ({ pag
   expect(run.initial.enemies.some((enemy) => enemy.hpDisplayed > 0)).toBe(true);
   expect(run.sawEnemyRolling, "an enemy HP odometer should animate during at least one attack").toBe(true);
   expect(run.sawHpTickSfx, "rolling HP/PP should dispatch hpTick SFX").toBe(true);
+  expect(run.sawShakeFx, "damaging steps should trigger screen shake").toBe(true);
+  expect(run.sawSparkFx, "damaging steps should trigger hit sparks").toBe(true);
+  expect(run.sawFlashFx, "attacks and victory should trigger flash overlays").toBe(true);
   expect(run.enemyDisplayedTotals.some((value) => value < totalDisplayed(run.initial.enemies))).toBe(true);
   expect(run.enemyDisplayedTotals.at(-1)).toBe(0);
   expect(run.final.outcome).toBe("win");
@@ -144,6 +157,7 @@ test("player takes counter-damage during the fight", async ({ page }) => {
   expect(run.initial.party.every((member) => Number.isFinite(member.hpDisplayed))).toBe(true);
   expect(run.initial.party.every((member) => Number.isFinite(member.hpTarget))).toBe(true);
   expect(run.sawPartyHpDecrease, "party displayed HP should decrease after a counter-hit").toBe(true);
+  expect(run.sawLungeFx, "enemy attacks should trigger an attacker lunge").toBe(true);
   expectNeverIncreases(run.partyDisplayedTotals, "party total displayed HP");
   assertNoRuntimeIssues(issues);
 });
@@ -317,6 +331,10 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
   let sawVictorySfx = initial.lastSfx === "victory";
   let sawVictorySummary = false;
   let sawExitTransition = false;
+  let sawShakeFx = false;
+  let sawSparkFx = false;
+  let sawFlashFx = false;
+  let sawLungeFx = false;
   let final = initial;
   const deadline = Date.now() + 30_000;
 
@@ -343,6 +361,10 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
     sawVictorySfx ||= state.lastSfx === "victory";
     sawVictorySummary ||= state.phase === "victory-summary" && Boolean(state.victorySummary);
     sawExitTransition ||= state.phase === "exit-transition";
+    sawShakeFx ||= state.fx.shakeCount > initial.fx.shakeCount;
+    sawSparkFx ||= state.fx.sparkCount > initial.fx.sparkCount;
+    sawFlashFx ||= state.fx.flashCount > initial.fx.flashCount;
+    sawLungeFx ||= state.fx.lungeCount > initial.fx.lungeCount;
 
     if (state.enemies.every((enemy) => enemy.hpDisplayed === 0)) {
       expect(state.outcome).toBe("win");
@@ -364,7 +386,11 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
         sawHpTickSfx,
         sawVictorySfx,
         sawVictorySummary,
-        sawExitTransition
+        sawExitTransition,
+        sawShakeFx,
+        sawSparkFx,
+        sawFlashFx,
+        sawLungeFx
       };
     }
 
@@ -405,9 +431,17 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
   sawHpTickSfx ||= final.lastSfx === "hpTick";
   sawVictorySfx ||= final.lastSfx === "victory";
   sawVictorySummary ||= final.phase === "victory-summary" && Boolean(final.victorySummary);
+  sawShakeFx ||= final.fx.shakeCount > initial.fx.shakeCount;
+  sawSparkFx ||= final.fx.sparkCount > initial.fx.sparkCount;
+  sawFlashFx ||= final.fx.flashCount > initial.fx.flashCount;
+  sawLungeFx ||= final.fx.lungeCount > initial.fx.lungeCount;
   if (final.phase === "victory-summary") {
     final = await dismissVictorySummary(page);
     sawExitTransition ||= final.phase === "exit-transition";
+    sawShakeFx ||= final.fx.shakeCount > initial.fx.shakeCount;
+    sawSparkFx ||= final.fx.sparkCount > initial.fx.sparkCount;
+    sawFlashFx ||= final.fx.flashCount > initial.fx.flashCount;
+    sawLungeFx ||= final.fx.lungeCount > initial.fx.lungeCount;
   }
   return {
     initial,
@@ -422,7 +456,11 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
     sawHpTickSfx,
     sawVictorySfx,
     sawVictorySummary,
-    sawExitTransition
+    sawExitTransition,
+    sawShakeFx,
+    sawSparkFx,
+    sawFlashFx,
+    sawLungeFx
   };
 }
 
@@ -591,6 +629,14 @@ function expectBattleNumbers(state: BattleDebug): void {
   expect(state.lastSfx === null || typeof state.lastSfx === "string").toBe(true);
   expect(Number.isInteger(state.sfxCount)).toBe(true);
   expect(state.sfxCount).toBeGreaterThanOrEqual(0);
+  expect(Number.isInteger(state.fx.shakeCount)).toBe(true);
+  expect(Number.isInteger(state.fx.sparkCount)).toBe(true);
+  expect(Number.isInteger(state.fx.flashCount)).toBe(true);
+  expect(Number.isInteger(state.fx.lungeCount)).toBe(true);
+  expect(state.fx.shakeCount).toBeGreaterThanOrEqual(0);
+  expect(state.fx.sparkCount).toBeGreaterThanOrEqual(0);
+  expect(state.fx.flashCount).toBeGreaterThanOrEqual(0);
+  expect(state.fx.lungeCount).toBeGreaterThanOrEqual(0);
   expect(["none", "enter", "summary", "exit"]).toContain(state.transitionPhase);
   expect(Array.isArray(state.turnOrder)).toBe(true);
   expect(state.party.length).toBeGreaterThan(0);
