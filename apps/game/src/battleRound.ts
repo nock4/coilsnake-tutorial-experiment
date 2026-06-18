@@ -85,6 +85,7 @@ export type BattleRoundStepNarrationDetails = {
   missed?: boolean;
   fled?: boolean;
   defended?: boolean;
+  targetDied?: boolean;
 };
 
 export type BattleRoundStepResult = {
@@ -607,7 +608,8 @@ function narrationDetailsForResolution(
       targetName,
       message,
       damage: resolution.damage,
-      missed: !targetName || resolution.damage <= 0
+      missed: !targetName || resolution.damage <= 0,
+      targetDied: enemyTargetsDied(previousState, resolution.state, [resolution.defender])
     };
   }
 
@@ -621,7 +623,8 @@ function narrationDetailsForResolution(
       moveName: kind === "psi" ? "PSI" : undefined,
       message,
       damage: resolution.amount,
-      missed: !targetName || resolution.amount <= 0
+      missed: !targetName || resolution.amount <= 0,
+      targetDied: enemyTargetsDied(previousState, resolution.state, resolution.targets)
     };
   }
 
@@ -654,7 +657,8 @@ function narrationDetailsForResolution(
       damage: resolution.effect === "damageEnemies" ? resolution.amount : undefined,
       healed: resolution.effect === "healParty" ? resolution.amount : undefined,
       ppRestored: resolution.effect === "restorePp" ? resolution.amount : undefined,
-      missed: resolution.effect === "nothing"
+      missed: resolution.effect === "nothing",
+      targetDied: enemyTargetsDied(previousState, resolution.state, resolution.targets)
     };
   }
 
@@ -666,7 +670,8 @@ function narrationDetailsForResolution(
       targetName: target ? combatantName(previousState, target) : undefined,
       message,
       damage: "amount" in resolution ? resolution.amount : undefined,
-      missed: !("amount" in resolution) || resolution.amount <= 0
+      missed: !("amount" in resolution) || resolution.amount <= 0,
+      targetDied: enemyTargetsDied(previousState, resolution.state, [target])
     };
   }
 
@@ -682,7 +687,8 @@ function narrationDetailsForResolution(
       message,
       damage: context.psiKind === "offense" ? amount : undefined,
       healed: context.psiKind === "recovery" ? amount : undefined,
-      missed: !targetName || amount <= 0
+      missed: !targetName || amount <= 0,
+      targetDied: enemyTargetsDied(previousState, resolution.state, [target])
     };
   }
 
@@ -698,7 +704,8 @@ function narrationDetailsForResolution(
       message,
       healed: effect?.kind === "healHp" || effect?.kind === "healHpPercent" ? amount : undefined,
       ppRestored: effect?.kind === "recoverPp" || effect?.kind === "recoverPpPercent" ? amount : undefined,
-      missed: amount <= 0
+      missed: amount <= 0,
+      targetDied: enemyTargetsDied(previousState, resolution.state, [target])
     };
   }
 
@@ -742,6 +749,21 @@ function multiTargetName(state: BattleState, targets: readonly BattleActor[]): s
     return "the enemies";
   }
   return "everyone";
+}
+
+function enemyTargetsDied(
+  previousState: BattleState,
+  nextState: BattleState,
+  targets: readonly (BattleActor | null | undefined)[]
+): boolean {
+  return targets.some((target) => {
+    if (!target || target.side !== "enemy") {
+      return false;
+    }
+    const previous = combatantAt(previousState, target);
+    const next = combatantAt(nextState, target);
+    return Boolean(previous && isCombatantAlive(previous) && next && !isCombatantAlive(next));
+  });
 }
 
 function enemyTargetOptions(queued: QueuedCommand): { targetIndex?: number } {

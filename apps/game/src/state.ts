@@ -1,4 +1,5 @@
 import type { DialoguePage, TutorialStatus } from "@eb/schemas";
+import type { BattleSfxCue } from "./audio/battleSfx";
 import type { BattleCommand } from "./battleLogic";
 import type { MenuDebugState } from "./menuModel";
 import {
@@ -106,6 +107,8 @@ export type BattleDebug = {
   executionStepIndex: number;
   executionStepCount: number;
   executionMessage: string;
+  lastSfx: BattleSfxCue | null;
+  sfxCount: number;
   lastEnemyAction: LastEnemyActionDebug | null;
   party: BattleCombatantDebug[];
   enemies: BattleEnemyCombatantDebug[];
