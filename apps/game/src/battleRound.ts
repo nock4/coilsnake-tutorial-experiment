@@ -21,6 +21,7 @@ import {
   type BattleActionResolution,
   type BattleActor,
   type BattleCommand,
+  type EncounterAdvantage,
   type BattleSide,
   type BattleState,
   type EnemyActionResolution,
@@ -111,6 +112,10 @@ export type BattleRoundStartPriorityOptions = {
   minRunSuccessChance?: number;
 };
 
+export type EncounterAdvantageTurnOrderOptions = {
+  advantage?: EncounterAdvantage;
+};
+
 export type BattleRoundRunAttempt = {
   attempted: boolean;
   actor: BattleActor;
@@ -193,6 +198,33 @@ export function jitteredTurnOrder(
       return speedDelta !== 0 ? speedDelta : roundTieBreak(left.actor, right.actor);
     })
     .map((entry) => entry.actor);
+}
+
+export function encounterAdvantageTurnOrder(
+  state: BattleState,
+  queued: QueuedCommand[],
+  rng: Rng,
+  options: EncounterAdvantageTurnOrderOptions = {}
+): BattleActor[] {
+  const order = jitteredTurnOrder(state, queued, rng);
+  if (state.roundNumber !== 1) {
+    return order;
+  }
+  if (options.advantage === "partyFirstStrike") {
+    return order.filter((actor) => actor.side === "party");
+  }
+  if (options.advantage === "enemyFirstStrike") {
+    return order.filter((actor) => actor.side === "enemy");
+  }
+  return order;
+}
+
+export function shouldRunEnemyFirstStrikeBeforeInput(
+  state: BattleState,
+  advantage: EncounterAdvantage,
+  alreadyResolved: boolean
+): boolean {
+  return advantage === "enemyFirstStrike" && state.roundNumber === 1 && !alreadyResolved;
 }
 
 export function applyRoundStartGuardStance(

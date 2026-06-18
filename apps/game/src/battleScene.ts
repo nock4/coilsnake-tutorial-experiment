@@ -20,9 +20,11 @@ import {
 import {
   applyVictoryRewards,
   advanceBattleRound,
+  battleRngSeedForGroup,
   buildVictorySummaryViewModel,
   combatantAt,
   commandsForCharId,
+  createBattleRng,
   createBattleState,
   firstLivingIndex,
   isCombatantAlive,
@@ -30,20 +32,24 @@ import {
   outcome,
   psiBattleKind,
   psiPpCost,
+  resolveInstantWinRewards,
   tickBattleMeters,
   type BattleActor,
   type BattleCommand,
   type BattleOutcome,
   type BattleState,
   type BattleVictorySummary,
+  type EncounterAdvantage,
+  type InstantWinRewardOptions,
   type Rng
 } from "./battleLogic";
 import {
-  jitteredTurnOrder,
+  encounterAdvantageTurnOrder,
   nextInputState,
   partyInputOrder,
   resolveRoundStep,
   resolveRoundStartPriority,
+  shouldRunEnemyFirstStrikeBeforeInput,
   type BattleRoundStepNarrationDetails,
   type BattleRoundStepResult,
   type BattleRoundInputState,
@@ -322,6 +328,9 @@ export class BattleScene extends Phaser.Scene {
   private battleRules_?: BattleRules;
   private group_!: BattleGroup;
   private battle_!: BattleState;
+  private encounterAdvantage_: EncounterAdvantage = "normal";
+  private enemyFirstStrikeResolved_ = false;
+  private enemyFirstStrikePhase_ = false;
   private items_?: ItemCollection;
   private psi_?: PsiCollection;
   private font_?: FontCollection;
@@ -409,10 +418,14 @@ export class BattleScene extends Phaser.Scene {
     wallet?: number;
     returnTo?: BattleReturnContext;
     battleSfx?: BattleSfx;
+    encounterAdvantage?: EncounterAdvantage;
   }): void {
     this.battleData_ = data.battleData;
     this.battleRules_ = data.battleRules ?? data.returnTo?.gameData.battleRules;
     this.group_ = selectBattleGroup(data.battleData, data.groupId);
+    this.encounterAdvantage_ = normalizeEncounterAdvantage(data.encounterAdvantage);
+    this.enemyFirstStrikeResolved_ = false;
+    this.enemyFirstStrikePhase_ = false;
     this.items_ = data.items;
     this.psi_ = data.psi;
     this.font_ = data.font;
@@ -440,7 +453,7 @@ export class BattleScene extends Phaser.Scene {
     this.enemySpriteRedrawScheduled = false;
     this.enemySpriteRedrawAttempts = 0;
     this.enemySpriteRetryQueuedKeys.clear();
-    this.rng_ = createSeededRng((this.group_.id + 1) * 65537 + enemies.reduce((sum, enemy) => sum + enemy.id, 0));
+    this.rng_ = createBattleRng(battleRngSeedForGroup(this.group_.id, enemies));
     this.phase_ = "enter-transition";
     this.transitionPhase_ = "enter";
     this.transitionMs_ = ENTER_TRANSITION_MS;
@@ -476,6 +489,9 @@ export class BattleScene extends Phaser.Scene {
     this.sfxCount_ = 0;
     this.nextHpTickSfxAtMs_ = 0;
     this.exitOutcome_ = null;
+    if (this.encounterAdvantage_ === "instantWin") {
+      this.resolveInstantWinBattleState(enemies);
+    }
   }
 
   preload(): void {
@@ -538,7 +554,9 @@ export class BattleScene extends Phaser.Scene {
       if (this.transitionMs_ <= 0) {
         this.transitionGraphics?.clear();
         this.transitionPhase_ = "none";
-        this.beginCommandInputRound();
+        if (!this.beginEnemyFirstStrikeIfNeeded()) {
+          this.beginCommandInputRound();
+        }
       } else {
         this.renderTransition();
       }
@@ -693,7 +711,48 @@ export class BattleScene extends Phaser.Scene {
     this.publish();
   }
 
+  private beginEnemyFirstStrikeIfNeeded(): boolean {
+    if (!shouldRunEnemyFirstStrikeBeforeInput(this.battle_, this.encounterAdvantage_, this.enemyFirstStrikeResolved_)) {
+      return false;
+    }
+    this.enemyFirstStrikeResolved_ = true;
+    this.beginEnemyFirstStrikeExecution();
+    return true;
+  }
+
+  private beginEnemyFirstStrikeExecution(): void {
+    if (this.handleBattleOutcome()) {
+      return;
+    }
+    this.phase_ = "execution";
+    this.transitionPhase_ = "none";
+    this.enemyFirstStrikePhase_ = true;
+    this.inputState_ = initialBattleRoundInputState();
+    this.queuedCommands_ = [];
+    this.priorityStep_ = null;
+    this.executionOrder_ = encounterAdvantageTurnOrder(this.battle_, [], this.rng_, {
+      advantage: "enemyFirstStrike"
+    });
+    this.roundOrder_ = [...this.executionOrder_];
+    this.executionStepIndex_ = 0;
+    this.executionMessageLines_ = [];
+    this.pendingFlee_ = false;
+    this.currentActor_ = null;
+    this.resetMenuForActor();
+    this.actionDelayMs_ = 0;
+    this.autoCommandDelayMs_ = 0;
+    this.nextHpTickSfxAtMs_ = 0;
+    if (this.executionOrder_.length === 0) {
+      this.finishExecutionRound();
+      return;
+    }
+    this.advanceExecutionStep();
+  }
+
   private beginCommandInputRound(): void {
+    if (this.beginEnemyFirstStrikeIfNeeded()) {
+      return;
+    }
     if (this.handleBattleOutcome()) {
       return;
     }
@@ -730,7 +789,9 @@ export class BattleScene extends Phaser.Scene {
     this.battle_ = priority.state;
     this.queuedCommands_ = [...priority.queued];
     this.priorityStep_ = priority.priorityStep ?? null;
-    this.executionOrder_ = jitteredTurnOrder(this.battle_, this.queuedCommands_, this.rng_);
+    this.executionOrder_ = encounterAdvantageTurnOrder(this.battle_, this.queuedCommands_, this.rng_, {
+      advantage: this.encounterAdvantage_ === "partyFirstStrike" ? "partyFirstStrike" : "normal"
+    });
     this.roundOrder_ = this.priorityStep_
       ? [this.priorityStep_.actor, ...this.executionOrder_]
       : this.executionOrder_;
@@ -855,6 +916,13 @@ export class BattleScene extends Phaser.Scene {
 
   private finishExecutionRound(): void {
     if (this.handleBattleOutcome()) {
+      return;
+    }
+    if (this.enemyFirstStrikePhase_) {
+      this.enemyFirstStrikePhase_ = false;
+      this.executionMessageLines_ = [];
+      this.pendingFlee_ = false;
+      this.beginCommandInputRound();
       return;
     }
     this.battle_ = advanceBattleRound(this.battle_);
@@ -1291,6 +1359,30 @@ export class BattleScene extends Phaser.Scene {
       return -1;
     }
     return clampNumber(this.executionStepIndex_ - 1, 0, Math.max(0, this.executionOrder_.length - 1));
+  }
+
+  private resolveInstantWinBattleState(enemies: BattleEnemy[]): void {
+    const rewardOptions = instantWinRewardOptions({
+      wallet: this.battle_.wallet,
+      roundNumber: this.battle_.roundNumber,
+      rng: this.rng_,
+      items: this.items_?.items,
+      psi: this.psi_?.psi
+    });
+    const result = resolveInstantWinRewards(this.battle_.party, enemies, rewardOptions);
+    this.battle_ = result.state;
+    this.victorySummary_ = result.summary;
+    this.phase_ = "victory-summary";
+    this.transitionPhase_ = "summary";
+    this.transitionMs_ = 0;
+    this.submenu_ = "command";
+    this.commandIndex_ = 0;
+    this.currentActor_ = null;
+    this.menuMessage_ = "";
+    this.executionMessageLines_ = [];
+    this.pendingFlee_ = false;
+    this.autoMode_ = false;
+    this.autoCommandDelayMs_ = 0;
   }
 
   private beginVictorySummary(): void {
@@ -2466,6 +2558,7 @@ export class BattleScene extends Phaser.Scene {
       mode: "battle",
       phase: this.phase_,
       transitionPhase: this.transitionPhase_,
+      encounterAdvantage: this.encounterAdvantage_,
       autoMode: this.autoMode_,
       menuIndex: this.commandIndex_,
       roundNumber: this.battle_.roundNumber,
@@ -3252,12 +3345,37 @@ function stat(value: number): number {
   return Math.max(0, Math.floor(value));
 }
 
-function createSeededRng(seed: number): Rng {
-  let state = seed >>> 0;
-  return () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
-    return state / 0x100000000;
+function normalizeEncounterAdvantage(value: EncounterAdvantage | undefined): EncounterAdvantage {
+  switch (value) {
+    case "partyFirstStrike":
+    case "enemyFirstStrike":
+    case "instantWin":
+      return value;
+    case "normal":
+    default:
+      return "normal";
+  }
+}
+
+function instantWinRewardOptions(options: {
+  wallet: number;
+  roundNumber: number;
+  rng: Rng;
+  items?: ItemData[];
+  psi?: PsiData[];
+}): InstantWinRewardOptions {
+  const result: InstantWinRewardOptions = {
+    wallet: options.wallet,
+    roundNumber: options.roundNumber,
+    rng: options.rng
   };
+  if (options.items) {
+    result.items = options.items;
+  }
+  if (options.psi) {
+    result.psi = options.psi;
+  }
+  return result;
 }
 
 function removeBattleSearchParam(): void {

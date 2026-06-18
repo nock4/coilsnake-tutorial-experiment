@@ -3,10 +3,12 @@ import type { BattleEnemy, CharacterCollection, CharacterData, ItemData, PsiData
 import {
   BATTLE_COMMANDS,
   advanceBattleRound,
+  applyVictoryRewards,
   beginCombatantTurn,
   buildEnemyCombatant,
   buildPlayerCombatant,
   commandsForCharId,
+  computeEncounterAdvantage,
   createBattleState,
   damage,
   defaultTargetIndexForActor,
@@ -24,6 +26,7 @@ import {
   resolvePrayTurn,
   resolveSpyTurn,
   resolveTurn,
+  resolveInstantWinRewards,
   selectEnemyAction,
   shouldResetAutoFightRound,
   tickBattleMeters,
@@ -218,6 +221,60 @@ describe("battle player model", () => {
 
     expect(next.roundNumber).toBe(2);
     expect(next.party[0].defending).toBe(false);
+  });
+});
+
+describe("encounter advantage", () => {
+  it("returns instantWin only when the party vastly outclasses a non-boss group", () => {
+    expect(computeEncounterAdvantage([
+      { level: 18, stats: { offense: 96 } }
+    ], [
+      enemy(70, "SMALL_FOE", { hp: 24, level: 4 }),
+      enemy(71, "TINY_FOE", { hp: 18, level: 3 })
+    ])).toBe("instantWin");
+
+    expect(computeEncounterAdvantage([
+      { level: 9, stats: { offense: 42 } }
+    ], [
+      enemy(72, "CLOSE_FOE", { hp: 24, level: 4 }),
+      enemy(73, "CLOSE_FOE_2", { hp: 18, level: 3 })
+    ])).toBe("normal");
+
+    expect(computeEncounterAdvantage([
+      { level: 30, stats: { offense: 200 } }
+    ], [
+      enemy(74, "BOSS_FOE", { hp: 12, level: 1, bossFlag: true })
+    ])).toBe("normal");
+  });
+
+  it("resolves instant-win rewards with parity to a normal victory over the same group", () => {
+    const droppedEnemy: BattleEnemy = {
+      ...enemy(75, "DROP_FOE", { hp: 12, level: 1 }),
+      experience: 88,
+      money: 34,
+      itemDropped: 500,
+      itemRarity: { numerator: 1, denominator: 1 }
+    };
+    const items = [{ id: 500, name: "DROP_ITEM" }];
+    const battle = createBattleState(droppedEnemy, {
+      characters: characters([partyCharacterA]),
+      wallet: 10
+    });
+    const defeatedBattle = withCombatant(battle, actor("enemy", 0), {
+      ...battle.enemies[0],
+      hp: { ...battle.enemies[0].hp, displayed: 0, target: 0, isRolling: false }
+    });
+
+    const normalVictory = applyVictoryRewards(defeatedBattle, { rng: () => 0, items });
+    const instantVictory = resolveInstantWinRewards(battle.party, [droppedEnemy], {
+      wallet: battle.wallet,
+      rng: () => 0,
+      items
+    });
+
+    expect(instantVictory.summary).toEqual(normalVictory.summary);
+    expect(instantVictory.state.wallet).toBe(normalVictory.state.wallet);
+    expect(instantVictory.state.party[0].inventory).toEqual(normalVictory.state.party[0].inventory);
   });
 });
 

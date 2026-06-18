@@ -20,6 +20,7 @@ export type FirstSceneDebug = {
     | "lose"
     | "flee";
   transitionPhase?: "none" | "enter" | "summary" | "exit";
+  encounterAdvantage?: "normal" | "partyFirstStrike" | "enemyFirstStrike" | "instantWin";
   autoMode?: boolean;
   menuIndex?: number;
   commandIndex?: number;
