@@ -57,33 +57,33 @@ import {
 } from "./battleEffects";
 import { publishBattleDebug, type BattlePhase, type BattleTransitionPhase } from "./state";
 import {
-  BitmapFontText,
-  measureBitmapText,
-  prepareBitmapFont,
-  queueBitmapFontAssets,
-  type BitmapTextOptions,
-  type PreparedBitmapFont
-} from "./bitmapFont";
+  CLEAN_UI_GRID_COLUMNS,
+  CLEAN_UI_HP,
+  CLEAN_UI_PANEL_BORDER,
+  CLEAN_UI_PP,
+  CLEAN_UI_PRIMARY,
+  CLEAN_UI_SECONDARY,
+  CLEAN_UI_TRACK,
+  CLEAN_UI_TRACK_ALPHA,
+  cleanGridCells,
+  cleanLineHeight,
+  cleanPanelInnerRect,
+  createCleanText,
+  drawCleanCaret,
+  drawCleanPanel,
+  drawCleanSelection,
+  estimateCleanTextWidth,
+  moveBattleCommandGridIndex,
+  statusBarFillFraction,
+  type BattleCommandGridDirection,
+  type CleanGridCell
+} from "./cleanUi";
+import { activeWindowFlavorId } from "./windowSettings";
 import {
-  drawWindowFrame,
-  prepareWindowFrames,
-  queueWindowFrameAssets,
-  type PreparedWindowFrames
-} from "./windowFrame";
-import { WINDOW_FLAVOR_CHANGE_EVENT, activeWindowFlavorId } from "./windowSettings";
-import {
-  EB_BITMAP_TEXT_SCALE,
-  EB_UI_SCALE,
-  EB_WINDOW_TILE_PX,
   type CanvasRect,
-  battleMenuCascadeLayout,
-  battleStatusCardContentRect,
-  battleStatusDigitBoxRects,
   battleStatusCardRects,
-  type BattleMenuListRect,
-  type BattleStatusDigitBoxRect,
-  ebTextLineHeight,
-  windowInnerContentRect
+  contentFitWindowRect,
+  type BattleMenuListRect
 } from "./windowLayout";
 import {
   commandTargetSelectionPlan,
@@ -107,10 +107,8 @@ import {
   type BattleBackgroundDebug
 } from "./battleBackground";
 import {
-  MENU_CURSOR_GUTTER_PX,
   enemyDefeatVisualState,
-  menuCursorVisible,
-  selectionArrowTriangle
+  menuCursorVisible
 } from "./battleVisuals";
 import { swirlMask, type SwirlMask } from "./transitions";
 import {
@@ -126,55 +124,51 @@ import {
   type RollingMeterState
 } from "./rollingMeter";
 
-const MONO = "Menlo, Consolas, monospace";
 const TAU = Math.PI * 2;
 export const COMMANDS = commandsForCharId(0);
 const STATUS_TOP = 288;
-const BATTLE_LINE_SPACING = 4;
+const BATTLE_LINE_SPACING = 2;
+const BATTLE_FONT_SIZE = 14;
+const BATTLE_DESCRIPTION_FONT_SIZE = 13;
+const BATTLE_STATUS_NAME_FONT_SIZE = 13;
+const BATTLE_STATUS_LABEL_FONT_SIZE = 11;
+const BATTLE_STATUS_VALUE_FONT_SIZE = 12;
 const BATTLE_LEFT_MARGIN = 16;
-const BATTLE_LINE_HEIGHT = ebTextLineHeight({ lineSpacing: BATTLE_LINE_SPACING });
-const BATTLE_COMMAND_TEXT_PADDING_X = 14;
+const BATTLE_LINE_HEIGHT = cleanLineHeight(BATTLE_FONT_SIZE, BATTLE_LINE_SPACING);
+const BATTLE_COMMAND_TEXT_PADDING_X = 12;
 const BATTLE_COMMAND_TEXT_PADDING_Y = 10;
+const BATTLE_COMMAND_GRID_GAP_X = 8;
+const BATTLE_COMMAND_GRID_GAP_Y = 8;
+const BATTLE_COMMAND_CELL_HEIGHT = 26;
+const BATTLE_MENU_CARET_GUTTER_PX = 12;
 const BATTLE_MENU_TOP_MARGIN = 8;
 const BATTLE_MENU_RIGHT_MARGIN = 16;
-const BATTLE_MENU_BOTTOM_CLEARANCE = 104;
-const BATTLE_CASCADE_OVERLAP = 8;
-const BATTLE_SUBMENU_OFFSET_Y = 12;
-const BATTLE_DESCRIPTION_GAP = 0;
-const BATTLE_COMMAND_MIN_WIDTH = 92;
+const BATTLE_MENU_BOTTOM_CLEARANCE = 92;
+const BATTLE_SUBMENU_GAP = 8;
+const BATTLE_DESCRIPTION_GAP = 8;
+const BATTLE_COMMAND_MIN_WIDTH = 252;
 const BATTLE_SUBMENU_MIN_WIDTH = 260;
 const BATTLE_DESCRIPTION_MIN_WIDTH = 128;
-const BATTLE_COMMAND_EXTRA_HEIGHT = 8;
 const BATTLE_MENU_MAX_WIDTH = 360;
 const BATTLE_DESCRIPTION_MAX_WIDTH = 260;
-const BATTLE_DESCRIPTION_TEXT_PADDING_X = 16;
-const BATTLE_DESCRIPTION_TEXT_PADDING_Y = 8;
-const BATTLE_WINDOW_FRAME_THICKNESS = EB_WINDOW_TILE_PX * EB_UI_SCALE;
-const BATTLE_TERMINAL_CONTENT_PADDING_X = 6;
-const BATTLE_TERMINAL_CONTENT_PADDING_Y = 6;
-const BATTLE_STATUS_WINDOW_FLAVOR_ID = 0;
-const BATTLE_STATUS_CARD_SIDE_MARGIN = 0;
+const BATTLE_DESCRIPTION_TEXT_PADDING_X = 12;
+const BATTLE_DESCRIPTION_TEXT_PADDING_Y = 9;
+const BATTLE_STATUS_CARD_SIDE_MARGIN = 10;
 const BATTLE_STATUS_CARD_BOTTOM_MARGIN = 8;
-const BATTLE_STATUS_CARD_GAP = 0;
-const BATTLE_STATUS_CARD_HEIGHT = 104;
+const BATTLE_STATUS_CARD_GAP = 8;
+const BATTLE_STATUS_CARD_HEIGHT = 78;
 const BATTLE_STATUS_CARD_MIN_WIDTH = 112;
-const BATTLE_STATUS_CARD_MAX_WIDTH = 128;
-const BATTLE_STATUS_CARD_ACTIVE_LIFT = 6;
-const BATTLE_STATUS_FRAME_THICKNESS = BATTLE_WINDOW_FRAME_THICKNESS;
-const BATTLE_STATUS_CONTENT_PADDING_X = 3;
-const BATTLE_STATUS_CONTENT_PADDING_TOP = 5;
-const BATTLE_STATUS_CONTENT_PADDING_BOTTOM = 3;
+const BATTLE_STATUS_CARD_MAX_WIDTH = 160;
+const BATTLE_STATUS_CARD_ACTIVE_LIFT = 4;
+const BATTLE_STATUS_CONTENT_PADDING_X = 10;
+const BATTLE_STATUS_CONTENT_PADDING_Y = 8;
 const BATTLE_STATUS_NAME_Y = 0;
-const BATTLE_STATUS_HP_ROW_Y = 20;
-const BATTLE_STATUS_PP_ROW_Y = 42;
-const BATTLE_STATUS_DIGIT_COUNT = 3;
-const BATTLE_STATUS_DIGIT_WIDTH = 18;
-const BATTLE_STATUS_DIGIT_HEIGHT = 22;
-const BATTLE_STATUS_DIGIT_GAP = 2;
-const BATTLE_STATUS_DIGIT_RIGHT_PADDING = 0;
-const BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET = 1;
-const BATTLE_STATUS_FIELD_INSET = 16;
-const BATTLE_STATUS_LABEL_DIGIT_GAP = 6;
+const BATTLE_STATUS_HP_ROW_Y = 23;
+const BATTLE_STATUS_PP_ROW_Y = 47;
+const BATTLE_STATUS_LABEL_WIDTH = 20;
+const BATTLE_STATUS_BAR_HEIGHT = 5;
+const BATTLE_STATUS_BAR_X = 28;
+const BATTLE_STATUS_BAR_VALUE_GAP = 4;
 const BATTLE_PP_RATE_PER_SEC = 36;
 const ACTION_ADVANCE_DELAY_MS = 350;
 const ENTER_TRANSITION_MS = 650;
@@ -196,7 +190,6 @@ type LastEnemyActionDebug = {
   actionType: number | null;
   target: number | null;
 };
-type GameText = Phaser.GameObjects.Text | BitmapFontText;
 type SpritePoint = { x: number; y: number };
 type WobbleDebugOffset = { dx: number; dy: number };
 type EnemyEffectDebug = {
@@ -209,8 +202,11 @@ type EnemySpriteTexturePlan = {
   url: string;
   override: ReturnType<typeof spriteOverrideForEnemyId>;
 };
+type BattleCommandGridLayout = CanvasRect & {
+  cells: CleanGridCell[];
+};
 type BattleStatusLayout = {
-  command?: BattleMenuListRect;
+  command?: BattleCommandGridLayout;
   submenu?: BattleMenuListRect;
   description?: CanvasRect;
   statusCards: BattleStatusCardLayout[];
@@ -219,7 +215,9 @@ type BattleStatusCardView = {
   memberIndex: number;
   name: string;
   hp: number;
+  maxHp: number;
   pp: number;
+  maxPp: number;
   active: boolean;
   target: boolean;
 };
@@ -230,11 +228,11 @@ type BattleStatusCardLayout = CanvasRect & {
   target: boolean;
 };
 type BattleStatusCardTextSet = {
-  name: GameText;
-  hpLabel: GameText;
-  ppLabel: GameText;
-  hpDigits: GameText[];
-  ppDigits: GameText[];
+  name: Phaser.GameObjects.Text;
+  hpLabel: Phaser.GameObjects.Text;
+  ppLabel: Phaser.GameObjects.Text;
+  hpValue: Phaser.GameObjects.Text;
+  ppValue: Phaser.GameObjects.Text;
 };
 type BattleUiView = {
   commandLines: string[];
@@ -254,9 +252,6 @@ export class BattleScene extends Phaser.Scene {
   private font_?: FontCollection;
   private window_?: WindowCollection;
   private spriteOverrides_?: SpriteOverrides;
-  private bitmapFont?: PreparedBitmapFont;
-  private windowFrames?: PreparedWindowFrames;
-  private statusWindowFrames?: PreparedWindowFrames;
   private rng_: Rng = () => 0.5;
   private phase_: BattlePhase = "enter-transition";
   private transitionPhase_: BattleTransitionPhase = "enter";
@@ -280,11 +275,11 @@ export class BattleScene extends Phaser.Scene {
   private statusGraphics?: Phaser.GameObjects.Graphics;
   private statusFieldGraphics?: Phaser.GameObjects.Graphics;
   private statusAccentGraphics?: Phaser.GameObjects.Graphics;
-  private statusWindows: Phaser.GameObjects.Container[] = [];
   private statusLayoutSignature = "";
   private targetCursor?: Phaser.GameObjects.Graphics;
   private menuCursorGraphics?: Phaser.GameObjects.Graphics;
-  private menuTexts: Partial<Record<BattleMenuTextRole, GameText>> = {};
+  private menuTexts: Partial<Record<Exclude<BattleMenuTextRole, "command">, Phaser.GameObjects.Text>> = {};
+  private commandGridTexts: Phaser.GameObjects.Text[] = [];
   private statusCardTexts: BattleStatusCardTextSet[] = [];
   private ppMeters = new Map<number, RollingMeterState>();
   private transitionGraphics?: Phaser.GameObjects.Graphics;
@@ -297,7 +292,6 @@ export class BattleScene extends Phaser.Scene {
   private enemyDefeatedAt: Array<number | null> = [];
   private backgroundAnimation?: AnimatedBattleBackgroundHandle;
   private backgroundDebug: BattleBackgroundDebug = staticBattleBackgroundDebug();
-  private windowFlavorListener?: () => void;
   private returnTo_?: BattleReturnContext;
   private exitOutcome_: BattleReturnOutcome | null = null;
 
@@ -378,30 +372,20 @@ export class BattleScene extends Phaser.Scene {
         this.load.image(texture.key, texture.url);
       }
     }
-    queueBitmapFontAssets(this, this.font_);
-    queueWindowFrameAssets(this, this.window_);
   }
 
   create(): void {
-    this.bitmapFont = prepareBitmapFont(this, this.font_);
-    this.refreshWindowFrames();
-    this.windowFlavorListener = () => this.handleWindowFlavorChanged();
-    globalThis.addEventListener?.(WINDOW_FLAVOR_CHANGE_EVENT, this.windowFlavorListener);
     this.cameras.main.setBackgroundColor("#050505");
     this.drawBackground();
     this.events.once("shutdown", () => {
       this.backgroundAnimation?.destroy();
-      if (this.windowFlavorListener) {
-        globalThis.removeEventListener?.(WINDOW_FLAVOR_CHANGE_EVENT, this.windowFlavorListener);
-        this.windowFlavorListener = undefined;
-      }
     });
     this.drawEnemySprites();
     this.createStatusWindow();
-    registerDiscreteKeys(this.input.keyboard, MENU_UP_KEY_NAMES, () => this.moveMenu(-1));
-    registerDiscreteKeys(this.input.keyboard, MENU_DOWN_KEY_NAMES, () => this.moveMenu(1));
-    registerDiscreteKeys(this.input.keyboard, MENU_LEFT_KEY_NAMES, () => this.moveTarget(-1));
-    registerDiscreteKeys(this.input.keyboard, MENU_RIGHT_KEY_NAMES, () => this.moveTarget(1));
+    registerDiscreteKeys(this.input.keyboard, MENU_UP_KEY_NAMES, () => this.moveMenu("up"));
+    registerDiscreteKeys(this.input.keyboard, MENU_DOWN_KEY_NAMES, () => this.moveMenu("down"));
+    registerDiscreteKeys(this.input.keyboard, MENU_LEFT_KEY_NAMES, () => this.moveMenu("left"));
+    registerDiscreteKeys(this.input.keyboard, MENU_RIGHT_KEY_NAMES, () => this.moveMenu("right"));
     registerDiscreteKeys(this.input.keyboard, CONFIRM_KEY_NAMES, () => this.confirmMenu());
     registerDiscreteKeys(this.input.keyboard, CANCEL_KEY_NAMES, () => this.cancelMenu());
     void this.loadOptionalGeneratedMenuData();
@@ -409,18 +393,6 @@ export class BattleScene extends Phaser.Scene {
     this.renderTransition();
     this.renderStatus();
     this.publish();
-  }
-
-  private handleWindowFlavorChanged(): void {
-    this.refreshWindowFrames();
-    this.createStatusWindow();
-    this.renderStatus();
-    this.publish();
-  }
-
-  private refreshWindowFrames(): void {
-    this.windowFrames = prepareWindowFrames(this, this.window_, activeWindowFlavorId(this.window_));
-    this.statusWindowFrames = prepareWindowFrames(this, this.window_, BATTLE_STATUS_WINDOW_FLAVOR_ID) ?? this.windowFrames;
   }
 
   update(_: number, delta: number): void {
@@ -463,27 +435,33 @@ export class BattleScene extends Phaser.Scene {
     this.publish();
   }
 
-  private moveMenu(direction: -1 | 1): void {
+  private moveMenu(direction: BattleCommandGridDirection): void {
     if (this.phase_ !== "menu") {
       return;
     }
     this.menuMessage_ = "";
     if (this.submenu_ === "command") {
       const commands = this.commandsForCurrentActor();
-      this.commandIndex_ = (this.commandIndex_ + direction + commands.length) % commands.length;
+      this.commandIndex_ = moveBattleCommandGridIndex(this.commandIndex_, commands.length, direction, CLEAN_UI_GRID_COLUMNS);
       this.targetMode_ = targetModeForCommand(this.currentCommand()) ?? this.targetMode_;
     } else if (this.submenu_ === "psi") {
+      if (direction === "left" || direction === "right") {
+        return;
+      }
       const count = this.learnedPsiForCurrentActor().length;
       if (count > 0) {
-        this.submenuIndex_ = clampIndex(this.submenuIndex_ + direction, count);
+        this.submenuIndex_ = clampIndex(this.submenuIndex_ + menuDirectionDelta(direction), count);
       }
     } else if (this.submenu_ === "goods") {
+      if (direction === "left" || direction === "right") {
+        return;
+      }
       const count = this.goodsForCurrentActor().length;
       if (count > 0) {
-        this.submenuIndex_ = clampIndex(this.submenuIndex_ + direction, count);
+        this.submenuIndex_ = clampIndex(this.submenuIndex_ + menuDirectionDelta(direction), count);
       }
     } else if (this.submenu_ === "target") {
-      this.moveTarget(direction);
+      this.moveTarget(direction === "left" || direction === "up" ? -1 : 1);
       return;
     }
     this.renderStatus();
@@ -1281,10 +1259,6 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createStatusWindow(): void {
-    for (const window of this.statusWindows) {
-      window.destroy(true);
-    }
-    this.statusWindows = [];
     this.statusGraphics?.destroy();
     this.statusFieldGraphics?.destroy();
     this.statusAccentGraphics?.destroy();
@@ -1304,60 +1278,36 @@ export class BattleScene extends Phaser.Scene {
       text?.destroy();
     }
     this.menuTexts = {};
+    for (const text of this.commandGridTexts) {
+      text.destroy();
+    }
+    this.commandGridTexts = [];
     for (const textSet of this.statusCardTexts) {
       textSet.name.destroy();
       textSet.hpLabel.destroy();
       textSet.ppLabel.destroy();
-      for (const text of textSet.hpDigits) {
-        text.destroy();
-      }
-      for (const text of textSet.ppDigits) {
-        text.destroy();
-      }
+      textSet.hpValue.destroy();
+      textSet.ppValue.destroy();
     }
     this.statusCardTexts = [];
   }
 
   private layoutStatusWindows(view: BattleUiView): BattleStatusLayout {
-    const useTerminalContentRect = this.usesTerminalWindowContentRect();
-    const commandPaddingX = useTerminalContentRect
-      ? BATTLE_WINDOW_FRAME_THICKNESS + BATTLE_TERMINAL_CONTENT_PADDING_X + MENU_CURSOR_GUTTER_PX
-      : BATTLE_COMMAND_TEXT_PADDING_X + MENU_CURSOR_GUTTER_PX;
-    const commandPaddingY = useTerminalContentRect
-      ? BATTLE_WINDOW_FRAME_THICKNESS + BATTLE_TERMINAL_CONTENT_PADDING_Y
-      : BATTLE_COMMAND_TEXT_PADDING_Y;
-    const descriptionPaddingX = useTerminalContentRect
-      ? BATTLE_WINDOW_FRAME_THICKNESS + BATTLE_TERMINAL_CONTENT_PADDING_X
-      : BATTLE_DESCRIPTION_TEXT_PADDING_X;
-    const descriptionPaddingY = useTerminalContentRect
-      ? BATTLE_WINDOW_FRAME_THICKNESS + BATTLE_TERMINAL_CONTENT_PADDING_Y
-      : BATTLE_DESCRIPTION_TEXT_PADDING_Y;
-    const menuLayout = battleMenuCascadeLayout({
-      screen: { width: this.scale.width, height: this.scale.height },
-      commandLabels: view.commandLines,
-      submenuLabels: view.submenuLines,
-      descriptionLines: view.descriptionLines,
-      selectedSubmenuIndex: view.selectedSubmenuIndex,
-      measureText: (label) => this.measureTextWidth(label),
-      lineHeight: BATTLE_LINE_HEIGHT,
-      paddingX: commandPaddingX,
-      paddingY: commandPaddingY,
-      leftMargin: BATTLE_LEFT_MARGIN,
-      topMargin: BATTLE_MENU_TOP_MARGIN,
-      rightMargin: BATTLE_MENU_RIGHT_MARGIN,
-      bottomMargin: BATTLE_MENU_BOTTOM_CLEARANCE,
-      cascadeOverlap: BATTLE_CASCADE_OVERLAP,
-      submenuOffsetY: BATTLE_SUBMENU_OFFSET_Y,
-      descriptionGap: BATTLE_DESCRIPTION_GAP,
-      minCommandWidth: BATTLE_COMMAND_MIN_WIDTH,
-      minSubmenuWidth: BATTLE_SUBMENU_MIN_WIDTH,
-      minDescriptionWidth: BATTLE_DESCRIPTION_MIN_WIDTH,
-      commandExtraHeight: useTerminalContentRect ? 0 : BATTLE_COMMAND_EXTRA_HEIGHT,
-      maxMenuWidth: BATTLE_MENU_MAX_WIDTH,
-      maxDescriptionWidth: BATTLE_DESCRIPTION_MAX_WIDTH,
-      descriptionPaddingX,
-      descriptionPaddingY
-    });
+    const command = this.commandGridLayout(view.commandLines);
+    const submenu = command && view.submenuLines.length > 0
+      ? this.menuListLayout({
+        labels: view.submenuLines,
+        selectedIndex: view.selectedSubmenuIndex,
+        x: command.x + command.width + BATTLE_SUBMENU_GAP,
+        y: command.y,
+        minWidth: BATTLE_SUBMENU_MIN_WIDTH,
+        maxWidth: BATTLE_MENU_MAX_WIDTH
+      })
+      : undefined;
+    const descriptionAnchor = submenu ?? command;
+    const description = descriptionAnchor && view.descriptionLines.length > 0
+      ? this.descriptionLayout(view.descriptionLines, descriptionAnchor)
+      : undefined;
     const activeCardIndex = view.statusCards.findIndex((card) => card.active);
     const statusCardCount = Math.min(4, view.statusCards.length);
     const statusCards = battleStatusCardRects({
@@ -1377,14 +1327,14 @@ export class BattleScene extends Phaser.Scene {
       target: Boolean(view.statusCards[index]?.target)
     }));
     const layout: BattleStatusLayout = {
-      command: menuLayout.command,
-      submenu: menuLayout.submenu,
-      description: menuLayout.description,
+      command,
+      submenu,
+      description,
       statusCards
     };
     const signature = JSON.stringify(layout);
     const textReady =
-      (view.commandLines.length === 0 || Boolean(this.menuTexts.command)) &&
+      (view.commandLines.length === 0 || this.commandGridTexts.length === view.commandLines.length) &&
       (view.submenuLines.length === 0 || Boolean(this.menuTexts.submenu)) &&
       (view.descriptionLines.length === 0 || Boolean(this.menuTexts.description)) &&
       this.statusCardTexts.length === statusCards.length;
@@ -1393,10 +1343,6 @@ export class BattleScene extends Phaser.Scene {
     }
     this.statusLayoutSignature = signature;
 
-    for (const window of this.statusWindows) {
-      window.destroy(true);
-    }
-    this.statusWindows = [];
     this.destroyBattleUiText();
 
     const graphics = this.statusGraphics;
@@ -1408,178 +1354,187 @@ export class BattleScene extends Phaser.Scene {
     this.statusAccentGraphics?.clear();
 
     if (layout.command) {
-      const textRect = this.commandWindowTextRect(layout.command);
-      this.drawWindow(layout.command.x, layout.command.y, layout.command.width, layout.command.height, 20);
-      this.menuTexts.command = this.createGameText(
-        textRect.x,
-        textRect.y,
-        "",
-        {
-          fontFamily: MONO,
-          fontSize: "15px",
-          color: "#f8fafc",
-          lineSpacing: BATTLE_LINE_SPACING
-        },
-        {
-          scale: EB_BITMAP_TEXT_SCALE,
-          tint: 0xf8fafc,
-          lineSpacing: BATTLE_LINE_SPACING,
-          lineHeight: BATTLE_LINE_HEIGHT,
-          maxWidth: textRect.width
-        }
-      ).setDepth(21);
+      drawCleanPanel(graphics, layout.command);
+      this.commandGridTexts = layout.command.cells.map((cell) => createCleanText(this, cell.x + BATTLE_MENU_CARET_GUTTER_PX, cell.y + 4, "", {
+        fontSize: BATTLE_FONT_SIZE,
+        color: CLEAN_UI_PRIMARY,
+        fixedWidth: Math.max(1, cell.width - BATTLE_MENU_CARET_GUTTER_PX),
+        fixedHeight: cell.height,
+        weight: 400
+      }).setDepth(21));
     }
 
     if (layout.description) {
       const textRect = this.descriptionWindowTextRect(layout.description);
-      this.drawWindow(layout.description.x, layout.description.y, layout.description.width, layout.description.height, 22);
-      this.menuTexts.description = this.createGameText(
-        textRect.x,
-        textRect.y,
-        "",
-        {
-          fontFamily: MONO,
-          fontSize: "14px",
-          color: "#f8fafc",
-          lineSpacing: BATTLE_LINE_SPACING
-        },
-        {
-          scale: EB_BITMAP_TEXT_SCALE,
-          tint: 0xf8fafc,
-          lineSpacing: BATTLE_LINE_SPACING,
-          lineHeight: BATTLE_LINE_HEIGHT,
-          maxWidth: textRect.width
-        }
-      ).setDepth(23);
+      drawCleanPanel(graphics, layout.description);
+      this.menuTexts.description = createCleanText(this, textRect.x, textRect.y, "", {
+        fontSize: BATTLE_DESCRIPTION_FONT_SIZE,
+        color: CLEAN_UI_PRIMARY,
+        lineSpacing: BATTLE_LINE_SPACING,
+        fixedWidth: textRect.width,
+        wordWrapWidth: textRect.width
+      }).setDepth(23);
     }
 
     if (layout.submenu) {
       const textRect = this.standardMenuListTextRect(layout.submenu);
-      this.drawWindow(layout.submenu.x, layout.submenu.y, layout.submenu.width, layout.submenu.height, 24);
-      this.menuTexts.submenu = this.createGameText(
-        textRect.x,
-        textRect.y,
-        "",
-        {
-          fontFamily: MONO,
-          fontSize: "15px",
-          color: "#f8fafc",
-          lineSpacing: BATTLE_LINE_SPACING
-        },
-        {
-          scale: EB_BITMAP_TEXT_SCALE,
-          tint: 0xf8fafc,
-          lineSpacing: BATTLE_LINE_SPACING,
-          lineHeight: BATTLE_LINE_HEIGHT,
-          maxWidth: textRect.width
-        }
-      ).setDepth(25);
+      drawCleanPanel(graphics, layout.submenu);
+      this.menuTexts.submenu = createCleanText(this, textRect.x, textRect.y, "", {
+        fontSize: BATTLE_FONT_SIZE,
+        color: CLEAN_UI_PRIMARY,
+        lineSpacing: BATTLE_LINE_SPACING,
+        fixedWidth: textRect.width
+      }).setDepth(25);
     }
 
     layout.statusCards.forEach((card) => {
-      this.drawWindow(card.x, card.y, card.width, card.height, 20, this.statusWindowFrames);
-      this.drawStatusCardField(card);
-      this.drawStatusCardAccent(card);
+      drawCleanPanel(graphics, card);
       this.statusCardTexts.push(this.createStatusCardTexts(card));
     });
 
     return layout;
   }
 
-  private usesTerminalWindowContentRect(): boolean {
-    return this.phase_ === "victory-summary" || this.phase_ === "lose" || this.phase_ === "flee";
+  private commandGridLayout(labels: string[]): BattleCommandGridLayout | undefined {
+    if (labels.length === 0) {
+      return undefined;
+    }
+    const rows = Math.max(1, Math.ceil(labels.length / CLEAN_UI_GRID_COLUMNS));
+    const minWidth = labels.length <= 1 ? 74 : BATTLE_COMMAND_MIN_WIDTH;
+    const labelWidth = Math.max(0, ...labels.map((label) => this.measureTextWidth(label, BATTLE_FONT_SIZE, 500)));
+    const requestedWidth = Math.max(
+      minWidth,
+      Math.ceil(labelWidth * CLEAN_UI_GRID_COLUMNS + BATTLE_COMMAND_TEXT_PADDING_X * 2 + BATTLE_MENU_CARET_GUTTER_PX * CLEAN_UI_GRID_COLUMNS + BATTLE_COMMAND_GRID_GAP_X * (CLEAN_UI_GRID_COLUMNS - 1))
+    );
+    const width = Math.min(
+      Math.max(minWidth, requestedWidth),
+      Math.floor(this.scale.width - BATTLE_LEFT_MARGIN - BATTLE_MENU_RIGHT_MARGIN)
+    );
+    const height = BATTLE_COMMAND_TEXT_PADDING_Y * 2 + rows * BATTLE_COMMAND_CELL_HEIGHT + (rows - 1) * BATTLE_COMMAND_GRID_GAP_Y;
+    const rect = clampRectToScreen(
+      {
+        x: BATTLE_LEFT_MARGIN,
+        y: BATTLE_MENU_TOP_MARGIN,
+        width,
+        height
+      },
+      { width: this.scale.width, height: this.scale.height },
+      {
+        left: BATTLE_LEFT_MARGIN,
+        right: BATTLE_MENU_RIGHT_MARGIN,
+        top: BATTLE_MENU_TOP_MARGIN,
+        bottom: BATTLE_MENU_BOTTOM_CLEARANCE
+      }
+    );
+    const content = cleanPanelInnerRect(rect, {
+      x: BATTLE_COMMAND_TEXT_PADDING_X,
+      y: BATTLE_COMMAND_TEXT_PADDING_Y
+    });
+    return {
+      ...rect,
+      cells: cleanGridCells(content, labels.length, CLEAN_UI_GRID_COLUMNS, BATTLE_COMMAND_GRID_GAP_X, BATTLE_COMMAND_GRID_GAP_Y)
+    };
   }
 
-  private commandWindowTextRect(rect: BattleMenuListRect): CanvasRect {
-    if (this.usesTerminalWindowContentRect()) {
-      const content = this.terminalWindowContentRect(rect);
-      return {
-        x: content.x + MENU_CURSOR_GUTTER_PX,
-        y: content.y,
-        width: Math.max(1, content.width - MENU_CURSOR_GUTTER_PX),
-        height: content.height
-      };
-    }
-    return this.standardMenuListTextRect(rect);
+  private menuListLayout(options: {
+    labels: string[];
+    selectedIndex: number;
+    x: number;
+    y: number;
+    minWidth: number;
+    maxWidth: number;
+  }): BattleMenuListRect {
+    const screen = { width: this.scale.width, height: this.scale.height };
+    const maxHeight = Math.max(
+      BATTLE_LINE_HEIGHT + BATTLE_COMMAND_TEXT_PADDING_Y * 2,
+      Math.floor(screen.height - BATTLE_MENU_BOTTOM_CLEARANCE - options.y)
+    );
+    const maxRows = Math.max(1, Math.floor((maxHeight - BATTLE_COMMAND_TEXT_PADDING_Y * 2) / BATTLE_LINE_HEIGHT));
+    const visibleCount = Math.max(1, Math.min(options.labels.length, maxRows));
+    const selectedIndex = clampNumber(Math.floor(options.selectedIndex), 0, Math.max(0, options.labels.length - 1));
+    const visibleStart = visibleItemStart(selectedIndex, options.labels.length, visibleCount);
+    const rect = contentFitWindowRect({
+      x: options.x,
+      y: options.y,
+      labels: options.labels,
+      measureText: (label) => this.measureTextWidth(label),
+      lineHeight: BATTLE_LINE_HEIGHT,
+      lineCount: visibleCount,
+      paddingX: BATTLE_COMMAND_TEXT_PADDING_X + BATTLE_MENU_CARET_GUTTER_PX,
+      paddingY: BATTLE_COMMAND_TEXT_PADDING_Y,
+      minWidth: options.minWidth,
+      maxWidth: Math.min(options.maxWidth, Math.floor(screen.width - BATTLE_LEFT_MARGIN - BATTLE_MENU_RIGHT_MARGIN)),
+      maxHeight
+    });
+    const clamped = clampRectToScreen(rect, screen, {
+      left: BATTLE_LEFT_MARGIN,
+      right: BATTLE_MENU_RIGHT_MARGIN,
+      top: BATTLE_MENU_TOP_MARGIN,
+      bottom: BATTLE_MENU_BOTTOM_CLEARANCE
+    });
+    return {
+      ...clamped,
+      visibleStart,
+      visibleCount,
+      hasMoreBefore: visibleStart > 0,
+      hasMoreAfter: visibleStart + visibleCount < options.labels.length
+    };
+  }
+
+  private descriptionLayout(lines: string[], anchor: CanvasRect): CanvasRect {
+    const y = anchor.y + anchor.height + BATTLE_DESCRIPTION_GAP;
+    const maxWidth = Math.min(
+      Math.max(BATTLE_DESCRIPTION_MIN_WIDTH, anchor.width),
+      BATTLE_DESCRIPTION_MAX_WIDTH,
+      Math.floor(this.scale.width - BATTLE_LEFT_MARGIN - BATTLE_MENU_RIGHT_MARGIN)
+    );
+    const maxHeight = Math.max(
+      BATTLE_LINE_HEIGHT + BATTLE_DESCRIPTION_TEXT_PADDING_Y * 2,
+      Math.floor(this.scale.height - BATTLE_MENU_BOTTOM_CLEARANCE - y)
+    );
+    const rect = contentFitWindowRect({
+      x: anchor.x,
+      y,
+      labels: lines,
+      measureText: (label) => this.measureTextWidth(label, BATTLE_DESCRIPTION_FONT_SIZE),
+      lineHeight: BATTLE_LINE_HEIGHT,
+      lineCount: Math.max(1, lines.length),
+      paddingX: BATTLE_DESCRIPTION_TEXT_PADDING_X,
+      paddingY: BATTLE_DESCRIPTION_TEXT_PADDING_Y,
+      minWidth: Math.max(BATTLE_DESCRIPTION_MIN_WIDTH, Math.min(anchor.width, maxWidth)),
+      maxWidth,
+      maxHeight
+    });
+    return clampRectToScreen(rect, { width: this.scale.width, height: this.scale.height }, {
+      left: BATTLE_LEFT_MARGIN,
+      right: BATTLE_MENU_RIGHT_MARGIN,
+      top: BATTLE_MENU_TOP_MARGIN,
+      bottom: BATTLE_MENU_BOTTOM_CLEARANCE
+    });
   }
 
   private standardMenuListTextRect(rect: BattleMenuListRect): CanvasRect {
+    const content = cleanPanelInnerRect(rect, {
+      x: BATTLE_COMMAND_TEXT_PADDING_X,
+      y: BATTLE_COMMAND_TEXT_PADDING_Y
+    });
     return {
-      x: rect.x + BATTLE_COMMAND_TEXT_PADDING_X + MENU_CURSOR_GUTTER_PX,
-      y: rect.y + BATTLE_COMMAND_TEXT_PADDING_Y,
-      width: this.menuTextWidth(rect, BATTLE_COMMAND_TEXT_PADDING_X),
-      height: Math.max(1, rect.height - BATTLE_COMMAND_TEXT_PADDING_Y * 2)
+      x: content.x + BATTLE_MENU_CARET_GUTTER_PX,
+      y: content.y,
+      width: Math.max(1, content.width - BATTLE_MENU_CARET_GUTTER_PX),
+      height: content.height
     };
   }
 
   private descriptionWindowTextRect(rect: CanvasRect): CanvasRect {
-    if (this.usesTerminalWindowContentRect()) {
-      return this.terminalWindowContentRect(rect);
-    }
-    return {
-      x: rect.x + BATTLE_DESCRIPTION_TEXT_PADDING_X,
-      y: rect.y + BATTLE_DESCRIPTION_TEXT_PADDING_Y,
-      width: this.menuTextWidth(rect, BATTLE_DESCRIPTION_TEXT_PADDING_X, 0),
-      height: Math.max(1, rect.height - BATTLE_DESCRIPTION_TEXT_PADDING_Y * 2)
-    };
-  }
-
-  private terminalWindowContentRect(rect: CanvasRect): CanvasRect {
-    return windowInnerContentRect({
-      rect,
-      frameThickness: BATTLE_WINDOW_FRAME_THICKNESS,
-      paddingX: BATTLE_TERMINAL_CONTENT_PADDING_X,
-      paddingTop: BATTLE_TERMINAL_CONTENT_PADDING_Y,
-      paddingBottom: BATTLE_TERMINAL_CONTENT_PADDING_Y
+    return cleanPanelInnerRect(rect, {
+      x: BATTLE_DESCRIPTION_TEXT_PADDING_X,
+      y: BATTLE_DESCRIPTION_TEXT_PADDING_Y
     });
   }
 
-  private drawWindow(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    depth = 20,
-    frames: PreparedWindowFrames | undefined = this.windowFrames
-  ): void {
-    const graphics = this.statusGraphics;
-    if (!graphics) {
-      return;
-    }
-    if (frames) {
-      this.statusWindows.push(
-        drawWindowFrame(this, frames, x, y, width, height, { scale: EB_UI_SCALE }).setDepth(depth)
-      );
-      return;
-    }
-    graphics.fillStyle(0x0a0f1e, 1);
-    graphics.fillRoundedRect(x, y, width, height, 5);
-    graphics.lineStyle(3, 0xf8fafc, 1);
-    graphics.strokeRoundedRect(x + 2, y + 2, width - 4, height - 4, 4);
-    graphics.lineStyle(1, 0x6b7280, 1);
-    graphics.strokeRoundedRect(x + 7, y + 7, width - 14, height - 14, 3);
-  }
-
-  private createGameText(
-    x: number,
-    y: number,
-    text: string,
-    style: Phaser.Types.GameObjects.Text.TextStyle,
-    bitmapOptions: BitmapTextOptions = {}
-  ): GameText {
-    if (this.bitmapFont) {
-      return new BitmapFontText(this, this.bitmapFont, x, y, text, bitmapOptions);
-    }
-    return this.add.text(x, y, text, style);
-  }
-
-  private measureTextWidth(text: string): number {
-    if (this.bitmapFont) {
-      return measureBitmapText(this.bitmapFont.collection, this.bitmapFont.sheet, text, {
-        scale: EB_BITMAP_TEXT_SCALE
-      }).width;
-    }
-    return text.length * 8;
+  private measureTextWidth(text: string, fontSize = BATTLE_FONT_SIZE, weight: 400 | 500 = 400): number {
+    return estimateCleanTextWidth(text, fontSize, weight);
   }
 
   private updateBackground(): void {
@@ -1593,13 +1548,8 @@ export class BattleScene extends Phaser.Scene {
     const menuVisible = this.phase_ === "menu" && this.currentActor_?.side === "party";
     const view = this.battleUiView(menuVisible);
     const layout = this.layoutStatusWindows(view);
-    this.menuTexts.command?.setText(this.listWindowText(
-      view.commandLines,
-      layout.command,
-      BATTLE_COMMAND_TEXT_PADDING_X,
-      layout.command ? this.commandWindowTextRect(layout.command).width : undefined
-    ));
-    this.menuTexts.submenu?.setText(this.listWindowText(view.submenuLines, layout.submenu, BATTLE_COMMAND_TEXT_PADDING_X));
+    this.updateCommandGridTexts(view, layout);
+    this.menuTexts.submenu?.setText(this.listWindowText(view.submenuLines, layout.submenu));
     this.menuTexts.description?.setText(
       this.descriptionWindowText(view.descriptionLines, layout.description)
     );
@@ -1610,6 +1560,7 @@ export class BattleScene extends Phaser.Scene {
         this.updateStatusCardTexts(viewCard, card, textSet);
       }
     });
+    this.renderStatusCardBars(view, layout);
     this.renderEnemySpriteEffects(this.time.now);
     this.renderMenuCursors(menuVisible, layout);
     this.renderTargetCursor(menuVisible);
@@ -1656,7 +1607,7 @@ export class BattleScene extends Phaser.Scene {
       };
     }
     return {
-      commandLines: this.commandsForCurrentActor(),
+      commandLines: this.commandsForCurrentActor().map(formatCommandLabel),
       submenuLines: this.submenuTextLines(),
       descriptionLines: this.menuDescriptionLines(),
       selectedSubmenuIndex: this.submenuIndex_,
@@ -1666,14 +1617,12 @@ export class BattleScene extends Phaser.Scene {
 
   private listWindowText(
     lines: string[],
-    rect: BattleMenuListRect | undefined,
-    paddingX: number,
-    textWidthOverride?: number
+    rect: BattleMenuListRect | undefined
   ): string {
     if (!rect) {
       return "";
     }
-    const textWidth = textWidthOverride ?? this.menuTextWidth(rect, paddingX);
+    const textWidth = this.standardMenuListTextRect(rect).width;
     return lines
       .slice(rect.visibleStart, rect.visibleStart + rect.visibleCount)
       .map((line) => this.fitMeasuredText(line, textWidth))
@@ -1696,40 +1645,20 @@ export class BattleScene extends Phaser.Scene {
     return visible.map((line) => this.fitMeasuredText(line, textRect.width)).join("\n");
   }
 
-  private menuTextWidth(rect: Pick<CanvasRect, "width">, paddingX: number, gutter = MENU_CURSOR_GUTTER_PX): number {
-    return Math.max(1, rect.width - paddingX * 2 - gutter);
-  }
-
   private statusCardNameWidth(rect: CanvasRect): number {
     return this.statusCardContentRect(rect).width;
   }
 
   private createStatusCardTexts(card: BattleStatusCardLayout): BattleStatusCardTextSet {
     const content = this.statusCardContentRect(card);
-    const hpBoxes = this.statusDigitBoxes(card, 0, "hp");
-    const ppBoxes = this.statusDigitBoxes(card, 0, "pp");
-    const labelWidth = this.statusLabelWidth();
+    const hpMetrics = this.statusBarMetrics(content, "hp");
+    const ppMetrics = this.statusBarMetrics(content, "pp");
     return {
-      name: this.createStatusText(
-        content.x,
-        content.y + BATTLE_STATUS_NAME_Y,
-        "",
-        content.width
-      ).setDepth(22),
-      hpLabel: this.createStatusText(
-        content.x,
-        content.y + BATTLE_STATUS_HP_ROW_Y + BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET,
-        "HP",
-        labelWidth
-      ).setDepth(22),
-      ppLabel: this.createStatusText(
-        content.x,
-        content.y + BATTLE_STATUS_PP_ROW_Y + BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET,
-        "PP",
-        labelWidth
-      ).setDepth(22),
-      hpDigits: hpBoxes.map((box) => this.createDigitText(box).setDepth(22)),
-      ppDigits: ppBoxes.map((box) => this.createDigitText(box).setDepth(22))
+      name: this.createStatusText(content.x, content.y + BATTLE_STATUS_NAME_Y, "", content.width, BATTLE_STATUS_NAME_FONT_SIZE, 500).setDepth(22),
+      hpLabel: this.createStatusText(content.x, hpMetrics.labelY, "HP", BATTLE_STATUS_LABEL_WIDTH, BATTLE_STATUS_LABEL_FONT_SIZE, 500).setDepth(22),
+      ppLabel: this.createStatusText(content.x, ppMetrics.labelY, "PP", BATTLE_STATUS_LABEL_WIDTH, BATTLE_STATUS_LABEL_FONT_SIZE, 500).setDepth(22),
+      hpValue: this.createStatusText(hpMetrics.valueX, hpMetrics.valueY, "", hpMetrics.valueWidth, BATTLE_STATUS_VALUE_FONT_SIZE, 400, "right").setDepth(22),
+      ppValue: this.createStatusText(ppMetrics.valueX, ppMetrics.valueY, "", ppMetrics.valueWidth, BATTLE_STATUS_VALUE_FONT_SIZE, 400, "right").setDepth(22)
     };
   }
 
@@ -1741,90 +1670,127 @@ export class BattleScene extends Phaser.Scene {
     textSet.name.setText(this.fitMeasuredText(card.name, this.statusCardNameWidth(rect)));
     textSet.hpLabel.setText("HP");
     textSet.ppLabel.setText("PP");
-    this.updateDigitTexts(textSet.hpDigits, this.statusDigitBoxes(rect, card.hp, "hp"));
-    this.updateDigitTexts(textSet.ppDigits, this.statusDigitBoxes(rect, card.pp, "pp"));
+    textSet.hpValue.setText(`${card.hp}/${card.maxHp}`);
+    textSet.ppValue.setText(`${card.pp}/${card.maxPp}`);
   }
 
-  private createStatusText(x: number, y: number, text: string, maxWidth: number): GameText {
-    return this.createGameText(
-      x,
-      y,
-      text,
-      {
-        fontFamily: MONO,
-        fontSize: "13px",
-        color: "#f8fafc",
-        lineSpacing: BATTLE_LINE_SPACING
-      },
-      {
-        scale: EB_BITMAP_TEXT_SCALE,
-        tint: 0xf8fafc,
-        lineSpacing: BATTLE_LINE_SPACING,
-        lineHeight: BATTLE_LINE_HEIGHT,
-        maxWidth
-      }
-    );
-  }
-
-  private createDigitText(box: BattleStatusDigitBoxRect): GameText {
-    const text = this.createStatusText(0, 0, box.digit, box.width);
-    return this.positionDigitText(text, box);
-  }
-
-  private updateDigitTexts(texts: GameText[], boxes: BattleStatusDigitBoxRect[]): void {
-    boxes.forEach((box, index) => {
-      const text = texts[index];
-      if (!text) {
-        return;
-      }
-      text.setText(box.digit);
-      this.positionDigitText(text, box);
-    });
-  }
-
-  private positionDigitText(text: GameText, box: BattleStatusDigitBoxRect): GameText {
-    const width = this.measureTextWidth(box.digit);
-    return text.setPosition(
-      Math.round(box.x + (box.width - width) / 2),
-      box.y + BATTLE_STATUS_DIGIT_TEXT_Y_OFFSET
-    );
-  }
-
-  private statusDigitBoxes(
-    card: CanvasRect,
-    value: number,
-    row: "hp" | "pp"
-  ): BattleStatusDigitBoxRect[] {
-    const content = this.statusCardContentRect(card);
-    return battleStatusDigitBoxRects({
-      card: content,
-      value,
-      digitCount: BATTLE_STATUS_DIGIT_COUNT,
-      digitWidth: this.statusDigitBoxWidth(),
-      digitHeight: BATTLE_STATUS_DIGIT_HEIGHT,
-      gap: BATTLE_STATUS_DIGIT_GAP,
-      rightPadding: BATTLE_STATUS_DIGIT_RIGHT_PADDING,
-      y: content.y + (row === "hp" ? BATTLE_STATUS_HP_ROW_Y : BATTLE_STATUS_PP_ROW_Y),
-      leftPadding: this.statusLabelWidth() + BATTLE_STATUS_LABEL_DIGIT_GAP
+  private createStatusText(
+    x: number,
+    y: number,
+    text: string,
+    maxWidth: number,
+    fontSize: number,
+    weight: 400 | 500,
+    align: "left" | "right" = "left"
+  ): Phaser.GameObjects.Text {
+    return createCleanText(this, x, y, text, {
+      fontSize,
+      color: weight === 500 ? CLEAN_UI_PRIMARY : CLEAN_UI_SECONDARY,
+      weight,
+      fixedWidth: maxWidth,
+      align
     });
   }
 
   private statusCardContentRect(card: CanvasRect): CanvasRect {
-    return battleStatusCardContentRect({
-      card,
-      frameThickness: BATTLE_STATUS_FRAME_THICKNESS,
-      paddingX: BATTLE_STATUS_CONTENT_PADDING_X,
-      paddingTop: BATTLE_STATUS_CONTENT_PADDING_TOP,
-      paddingBottom: BATTLE_STATUS_CONTENT_PADDING_BOTTOM
+    return cleanPanelInnerRect(card, {
+      x: BATTLE_STATUS_CONTENT_PADDING_X,
+      y: BATTLE_STATUS_CONTENT_PADDING_Y
     });
   }
 
-  private statusLabelWidth(): number {
-    return Math.max(this.measureTextWidth("HP"), this.measureTextWidth("PP"));
+  private updateCommandGridTexts(view: BattleUiView, layout: BattleStatusLayout): void {
+    if (!layout.command) {
+      return;
+    }
+    layout.command.cells.forEach((cell, index) => {
+      const text = this.commandGridTexts[index];
+      if (!text) {
+        return;
+      }
+      const selected = this.selectedCommandIndex() === index;
+      text.setText(this.fitMeasuredText(view.commandLines[index] ?? "", Math.max(1, cell.width - BATTLE_MENU_CARET_GUTTER_PX)));
+      text.setColor(selected ? CLEAN_UI_PRIMARY : CLEAN_UI_PRIMARY);
+      text.setFontStyle(selected ? "500" : "400");
+    });
   }
 
-  private statusDigitBoxWidth(): number {
-    return Math.max(BATTLE_STATUS_DIGIT_WIDTH, this.measureTextWidth("8") + 2);
+  private renderStatusCardBars(view: BattleUiView, layout: BattleStatusLayout): void {
+    const fieldGraphics = this.statusFieldGraphics;
+    const accentGraphics = this.statusAccentGraphics;
+    if (!fieldGraphics || !accentGraphics) {
+      return;
+    }
+    fieldGraphics.clear();
+    accentGraphics.clear();
+    layout.statusCards.forEach((card, index) => {
+      const viewCard = view.statusCards[index];
+      if (!viewCard) {
+        return;
+      }
+      if (card.active) {
+        drawCleanSelection(accentGraphics, {
+          x: card.x + 4,
+          y: card.y + 4,
+          width: Math.max(1, card.width - 8),
+          height: Math.max(1, card.height - 8)
+        });
+        accentGraphics.lineStyle(1, CLEAN_UI_PANEL_BORDER, 0.46);
+        accentGraphics.strokeRoundedRect(card.x + 4.5, card.y + 4.5, Math.max(1, card.width - 9), Math.max(1, card.height - 9), 5);
+      }
+      if (card.target) {
+        accentGraphics.lineStyle(2, 0x4d9bdc, 0.9);
+        accentGraphics.strokeRoundedRect(card.x + 6, card.y + 6, Math.max(1, card.width - 12), Math.max(1, card.height - 12), 4);
+      }
+
+      const content = this.statusCardContentRect(card);
+      this.drawStatusBar(fieldGraphics, this.statusBarMetrics(content, "hp"), viewCard.hp, viewCard.maxHp, CLEAN_UI_HP);
+      this.drawStatusBar(fieldGraphics, this.statusBarMetrics(content, "pp"), viewCard.pp, viewCard.maxPp, CLEAN_UI_PP);
+    });
+  }
+
+  private statusBarMetrics(content: CanvasRect, row: "hp" | "pp"): {
+    labelY: number;
+    valueX: number;
+    valueY: number;
+    valueWidth: number;
+    barX: number;
+    barY: number;
+    barWidth: number;
+    barHeight: number;
+  } {
+    const rowY = content.y + (row === "hp" ? BATTLE_STATUS_HP_ROW_Y : BATTLE_STATUS_PP_ROW_Y);
+    const valueWidth = Math.min(58, Math.max(42, Math.floor(content.width * 0.38)));
+    const barX = content.x + BATTLE_STATUS_BAR_X;
+    const valueX = content.x + content.width - valueWidth;
+    const barWidth = Math.max(12, valueX - BATTLE_STATUS_BAR_VALUE_GAP - barX);
+    return {
+      labelY: rowY - 1,
+      valueX,
+      valueY: rowY - 2,
+      valueWidth,
+      barX,
+      barY: rowY + 13,
+      barWidth,
+      barHeight: BATTLE_STATUS_BAR_HEIGHT
+    };
+  }
+
+  private drawStatusBar(
+    graphics: Phaser.GameObjects.Graphics,
+    metrics: ReturnType<BattleScene["statusBarMetrics"]>,
+    current: number,
+    max: number,
+    fillColor: number
+  ): void {
+    graphics.fillStyle(CLEAN_UI_TRACK, CLEAN_UI_TRACK_ALPHA);
+    graphics.fillRoundedRect(metrics.barX, metrics.barY, metrics.barWidth, metrics.barHeight, 3);
+    const fillWidth = Math.round(metrics.barWidth * statusBarFillFraction(current, max));
+    if (fillWidth <= 0) {
+      return;
+    }
+    graphics.fillStyle(fillColor, 0.95);
+    graphics.fillRoundedRect(metrics.barX, metrics.barY, fillWidth, metrics.barHeight, 3);
   }
 
   private fitMeasuredText(text: string, maxWidth: number): string {
@@ -1849,7 +1815,9 @@ export class BattleScene extends Phaser.Scene {
         memberIndex,
         name: member.name,
         hp: member.hp.displayed,
+        maxHp: member.maxHp,
         pp: this.displayedPpForMember(memberIndex, member.pp),
+        maxPp: member.maxPp,
         active: memberIndex === activeMemberIndex,
         target: memberIndex === targetMemberIndex
       };
@@ -1936,68 +1904,6 @@ export class BattleScene extends Phaser.Scene {
     }
 
     return [];
-  }
-
-  private drawStatusCardAccent(card: BattleStatusCardLayout): void {
-    const graphics = this.statusAccentGraphics;
-    if (!graphics) {
-      return;
-    }
-    if (card.active) {
-      graphics.lineStyle(2, 0xf8fafc, 0.92);
-      graphics.strokeRoundedRect(card.x + 5, card.y + 5, card.width - 10, card.height - 10, 3);
-    }
-    if (card.target) {
-      graphics.lineStyle(2, 0x7dd3fc, 0.95);
-      graphics.strokeRoundedRect(card.x + 8, card.y + 8, card.width - 16, card.height - 16, 2);
-    }
-  }
-
-  private drawStatusCardField(card: BattleStatusCardLayout): void {
-    const graphics = this.statusFieldGraphics;
-    if (!graphics) {
-      return;
-    }
-    const inset = BATTLE_STATUS_FIELD_INSET;
-    const x = Math.round(card.x + inset);
-    const y = Math.round(card.y + inset);
-    const width = Math.max(1, Math.round(card.width - inset * 2));
-    const height = Math.max(1, Math.round(card.height - inset * 2));
-    const interior = this.statusWindowFrames?.flavor.interiorColor ?? this.windowFrames?.flavor.interiorColor;
-    const baseColor = interior ? rgbToNumber(interior) : 0x101010;
-    const checkColor = interior ? rgbToNumber(lightenRgb(interior, 22)) : 0x242424;
-
-    graphics.fillStyle(baseColor, 0.96);
-    graphics.fillRect(x, y, width, height);
-    const cell = 4;
-    for (let yy = y; yy < y + height; yy += cell) {
-      for (let xx = x; xx < x + width; xx += cell) {
-        if ((((xx - x) / cell) + ((yy - y) / cell) + card.index) % 2 !== 0) {
-          continue;
-        }
-        graphics.fillStyle(checkColor, 0.2);
-        graphics.fillRect(xx, yy, Math.min(cell, x + width - xx), Math.min(cell, y + height - yy));
-      }
-    }
-
-    for (const box of [
-      ...this.statusDigitBoxes(card, 0, "hp"),
-      ...this.statusDigitBoxes(card, 0, "pp")
-    ]) {
-      this.drawStatusDigitBox(graphics, box);
-    }
-  }
-
-  private drawStatusDigitBox(
-    graphics: Phaser.GameObjects.Graphics,
-    box: BattleStatusDigitBoxRect
-  ): void {
-    graphics.fillStyle(0x050505, 0.96);
-    graphics.fillRoundedRect(box.x, box.y, box.width, box.height, 2);
-    graphics.fillStyle(0xf8fafc, 0.14);
-    graphics.fillRect(box.x + 1, box.y + 1, Math.max(1, box.width - 2), 2);
-    graphics.lineStyle(1, 0xf8fafc, 0.86);
-    graphics.strokeRoundedRect(box.x + 0.5, box.y + 0.5, box.width - 1, box.height - 1, 2);
   }
 
   private publish(): void {
@@ -2118,19 +2024,17 @@ export class BattleScene extends Phaser.Scene {
     if (layout.submenu) {
       this.drawListScrollMarkers(graphics, layout.submenu);
     }
-    if (!menuCursorVisible(this.time.now)) {
-      return;
-    }
+    const showCaret = menuCursorVisible(this.time.now);
 
-    const commandRow = this.selectedCommandRow();
-    if (layout.command && commandRow !== null) {
-      const textRect = this.commandWindowTextRect(layout.command);
-      this.drawMenuCursorArrow(
-        graphics,
-        textRect.x - MENU_CURSOR_GUTTER_PX + 1,
-        textRect.y + commandRow * BATTLE_LINE_HEIGHT,
-        BATTLE_LINE_HEIGHT
-      );
+    const commandIndex = this.selectedCommandIndex();
+    if (layout.command && commandIndex !== null) {
+      const cell = layout.command.cells[commandIndex];
+      if (cell) {
+        drawCleanSelection(graphics, cell);
+        if (showCaret) {
+          drawCleanCaret(graphics, cell.x + 3, cell.y, cell.height);
+        }
+      }
     }
 
     if (!menuVisible) {
@@ -2138,12 +2042,17 @@ export class BattleScene extends Phaser.Scene {
     }
     const submenuRow = this.selectedSubmenuRow(layout.submenu);
     if (layout.submenu && submenuRow !== null) {
-      this.drawMenuCursorArrow(
-        graphics,
-        layout.submenu.x + BATTLE_COMMAND_TEXT_PADDING_X + 1,
-        layout.submenu.y + BATTLE_COMMAND_TEXT_PADDING_Y + submenuRow * BATTLE_LINE_HEIGHT,
-        BATTLE_LINE_HEIGHT
-      );
+      const textRect = this.standardMenuListTextRect(layout.submenu);
+      const selectionRect = {
+        x: layout.submenu.x + BATTLE_COMMAND_TEXT_PADDING_X,
+        y: textRect.y + submenuRow * BATTLE_LINE_HEIGHT - 2,
+        width: Math.max(1, layout.submenu.width - BATTLE_COMMAND_TEXT_PADDING_X * 2),
+        height: BATTLE_LINE_HEIGHT
+      };
+      drawCleanSelection(graphics, selectionRect);
+      if (showCaret) {
+        drawCleanCaret(graphics, selectionRect.x + 3, selectionRect.y, selectionRect.height);
+      }
     }
 
     if (this.activeTargetSide() === "party") {
@@ -2153,7 +2062,7 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private selectedCommandRow(): number | null {
+  private selectedCommandIndex(): number | null {
     if (this.phase_ === "victory-summary" || this.phase_ === "lose" || this.phase_ === "flee") {
       return 0;
     }
@@ -2183,19 +2092,6 @@ export class BattleScene extends Phaser.Scene {
     return row >= 0 && row < submenu.visibleCount ? row : null;
   }
 
-  private drawMenuCursorArrow(
-    graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    rowTop: number,
-    rowHeight: number
-  ): void {
-    const triangle = selectionArrowTriangle(x, rowTop, rowHeight);
-    graphics.fillStyle(0xf8fafc, 1);
-    graphics.fillTriangle(triangle.x1, triangle.y1, triangle.x2, triangle.y2, triangle.x3, triangle.y3);
-    graphics.lineStyle(1, 0x111827, 1);
-    graphics.strokeTriangle(triangle.x1, triangle.y1, triangle.x2, triangle.y2, triangle.x3, triangle.y3);
-  }
-
   private drawListScrollMarkers(
     graphics: Phaser.GameObjects.Graphics,
     rect: BattleMenuListRect
@@ -2203,17 +2099,13 @@ export class BattleScene extends Phaser.Scene {
     const x = Math.round(rect.x + rect.width - BATTLE_COMMAND_TEXT_PADDING_X + 2);
     if (rect.hasMoreBefore) {
       const y = Math.round(rect.y + 8);
-      graphics.fillStyle(0xf8fafc, 0.9);
+      graphics.fillStyle(CLEAN_UI_PANEL_BORDER, 0.76);
       graphics.fillTriangle(x, y, x - 5, y + 6, x + 5, y + 6);
-      graphics.lineStyle(1, 0x111827, 0.9);
-      graphics.strokeTriangle(x, y, x - 5, y + 6, x + 5, y + 6);
     }
     if (rect.hasMoreAfter) {
       const y = Math.round(rect.y + rect.height - 8);
-      graphics.fillStyle(0xf8fafc, 0.9);
+      graphics.fillStyle(CLEAN_UI_PANEL_BORDER, 0.76);
       graphics.fillTriangle(x, y, x - 5, y - 6, x + 5, y - 6);
-      graphics.lineStyle(1, 0x111827, 0.9);
-      graphics.strokeTriangle(x, y, x - 5, y - 6, x + 5, y - 6);
     }
   }
 
@@ -2223,10 +2115,8 @@ export class BattleScene extends Phaser.Scene {
   ): void {
     const x = Math.round(card.x + card.width / 2);
     const y = Math.max(2, card.y - 8);
-    graphics.fillStyle(0xf8fafc, 1);
+    graphics.fillStyle(CLEAN_UI_PANEL_BORDER, 0.9);
     graphics.fillTriangle(x, y + 8, x - 7, y, x + 7, y);
-    graphics.lineStyle(1, 0x111827, 1);
-    graphics.strokeTriangle(x, y + 8, x - 7, y, x + 7, y);
   }
 
   private enemyEffectFor(index: number, now: number): EnemyEffectDebug {
@@ -2577,18 +2467,6 @@ function roundTo(value: number, places: number): number {
   return Math.round(value * multiplier) / multiplier;
 }
 
-function rgbToNumber(color: { r: number; g: number; b: number }): number {
-  return ((color.r & 0xff) << 16) | ((color.g & 0xff) << 8) | (color.b & 0xff);
-}
-
-function lightenRgb(color: { r: number; g: number; b: number }, amount: number): { r: number; g: number; b: number } {
-  return {
-    r: Math.min(255, color.r + amount),
-    g: Math.min(255, color.g + amount),
-    b: Math.min(255, color.b + amount)
-  };
-}
-
 function fitLine(line: string, width: number): string {
   return line.length > width ? line.slice(0, Math.max(0, width - 3)) + "..." : line;
 }
@@ -2606,6 +2484,47 @@ function clampIndex(index: number, length: number): number {
     return 0;
   }
   return (index + length) % length;
+}
+
+function menuDirectionDelta(direction: BattleCommandGridDirection): -1 | 1 {
+  return direction === "up" || direction === "left" ? -1 : 1;
+}
+
+function visibleItemStart(cursorIndex: number, itemCount: number, maxItems: number): number {
+  if (maxItems <= 0 || itemCount <= maxItems) {
+    return 0;
+  }
+  return Math.min(Math.max(0, cursorIndex - maxItems + 1), itemCount - maxItems);
+}
+
+function clampRectToScreen(
+  rect: CanvasRect,
+  screen: { width: number; height: number },
+  margins: { left: number; right: number; top: number; bottom: number }
+): CanvasRect {
+  const width = Math.min(rect.width, Math.max(1, Math.floor(screen.width - margins.left - margins.right)));
+  const height = Math.min(rect.height, Math.max(1, Math.floor(screen.height - margins.top - margins.bottom)));
+  const maxX = Math.max(margins.left, Math.floor(screen.width - margins.right - width));
+  const maxY = Math.max(margins.top, Math.floor(screen.height - margins.bottom - height));
+  return {
+    x: clampNumber(Math.round(rect.x), margins.left, maxX),
+    y: clampNumber(Math.round(rect.y), margins.top, maxY),
+    width,
+    height
+  };
+}
+
+function clampNumber(value: number, minValue: number, maxValue: number): number {
+  return Math.max(minValue, Math.min(maxValue, value));
+}
+
+function formatCommandLabel(command: BattleCommand): string {
+  switch (command) {
+    case "PSI":
+      return "PSI";
+    default:
+      return command.charAt(0) + command.slice(1).toLowerCase();
+  }
 }
 
 function targetModeForCommand(command: BattleCommand): BattleTargetMode | null {
