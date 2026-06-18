@@ -36,6 +36,17 @@ describe("battle command grid helpers", () => {
     expect(moveBattleCommandGridIndex(4, 5, "up")).toBe(1);
     expect(moveBattleCommandGridIndex(4, 5, "right")).toBe(3);
   });
+
+  it("wraps a 7-command grid through 3/3/1 rows without leaving real cells", () => {
+    expect(battleCommandGridPosition(6)).toEqual({ row: 2, col: 0 });
+    expect(battleCommandGridIndex(2, 0, 7)).toBe(6);
+    expect(battleCommandGridIndex(2, 2, 7)).toBe(6);
+    expect(moveBattleCommandGridIndex(5, 7, "down")).toBe(6);
+    expect(moveBattleCommandGridIndex(6, 7, "right")).toBe(6);
+    expect(moveBattleCommandGridIndex(6, 7, "left")).toBe(6);
+    expect(moveBattleCommandGridIndex(6, 7, "down")).toBe(0);
+    expect(moveBattleCommandGridIndex(6, 7, "up")).toBe(3);
+  });
 });
 
 describe("clean panel geometry", () => {
@@ -66,6 +77,19 @@ describe("clean panel geometry", () => {
       { index: 4, row: 1, col: 1, x: 102, y: 46, width: 76, height: 28 },
       { index: 5, row: 1, col: 2, x: 184, y: 46, width: 76, height: 28 }
     ]);
+  });
+
+  it("fits a 7-command grid inside a 3-row content rect", () => {
+    const content = { x: 12, y: 14, width: 270, height: 94 };
+    const cells = cleanGridCells(content, 7, 3, 8, 8);
+    expect(cells).toHaveLength(7);
+    expect(cells[6]).toMatchObject({ index: 6, row: 2, col: 0 });
+    for (const cell of cells) {
+      expect(cell.x).toBeGreaterThanOrEqual(content.x);
+      expect(cell.y).toBeGreaterThanOrEqual(content.y);
+      expect(cell.x + cell.width).toBeLessThanOrEqual(content.x + content.width);
+      expect(cell.y + cell.height).toBeLessThanOrEqual(content.y + content.height);
+    }
   });
 });
 
