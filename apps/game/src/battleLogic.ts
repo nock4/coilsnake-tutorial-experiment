@@ -31,6 +31,7 @@ export type BattleActor = {
   index: number;
 };
 export type BattleOutcome = "ongoing" | "win" | "lose";
+export type EncounterAdvantage = "normal" | "partyFirstStrike" | "enemyFirstStrike" | "instantWin";
 const ALL_BATTLE_COMMANDS = ["BASH", "GOODS", "AUTO", "PSI", "SPY", "PRAY", "MIRROR", "DEFEND", "RUN"] as const;
 export type BattleCommand = typeof ALL_BATTLE_COMMANDS[number];
 export const BATTLE_COMMANDS = ["BASH", "GOODS", "AUTO", "PSI", "DEFEND", "RUN"] as const satisfies readonly BattleCommand[];
@@ -212,6 +213,27 @@ export type BattleVictoryViewModel = {
   levelUps: BattleLevelUpSummary[];
 };
 
+export type EncounterAdvantagePartyMember = {
+  level: number;
+  offense?: number;
+  stats?: { offense: number };
+};
+
+export type EncounterAdvantageEnemy = {
+  level: number;
+  hp?: unknown;
+  maxHp?: number;
+  bossFlag?: boolean;
+};
+
+export type InstantWinRewardOptions = {
+  wallet?: number;
+  roundNumber?: number;
+  rng?: Rng;
+  items?: Array<Pick<ItemData, "id" | "name">>;
+  psi?: PsiData[];
+};
+
 export const PLAYER_DEFAULTS = {
   charId: 0,
   name: "PLAYER",
@@ -246,6 +268,7 @@ const STRENGTH_PP_COST: Record<string, number> = {
 const PRAY_HEAL_AMOUNT = 12;
 const PRAY_PP_RESTORE_AMOUNT = 4;
 const PRAY_DAMAGE_AMOUNT = 8;
+const INSTANT_WIN_LEVEL_MARGIN = 8;
 const NOOP_ENEMY_ACTION: BattleEnemy["actions"][number] = {
   id: 0,
   arg: 0,
@@ -360,6 +383,65 @@ export function createBattleState(enemies: BattleEnemy | BattleEnemy[], options:
     wallet: stat(options.wallet ?? party.reduce((sum, member) => sum + member.money, 0)),
     roundNumber: Math.max(1, stat(options.roundNumber ?? 1))
   };
+}
+
+export function computeEncounterAdvantage(
+  party: readonly EncounterAdvantagePartyMember[],
+  enemies: readonly EncounterAdvantageEnemy[]
+): EncounterAdvantage {
+  if (party.length === 0 || enemies.length === 0) {
+    return "normal";
+  }
+  if (enemies.some((enemy) => enemy.bossFlag)) {
+    return "normal";
+  }
+
+  const partyOffenses = party.map(encounterPartyOffense);
+  const minPartyOffense = Math.min(...partyOffenses);
+  const averagePartyLevel = party.reduce((sum, member) => sum + stat(member.level), 0) / party.length;
+  const totalEnemyMaxHp = enemies.reduce((sum, enemy) => sum + encounterEnemyMaxHp(enemy), 0);
+  const maxEnemyLevel = Math.max(...enemies.map((enemy) => stat(enemy.level)));
+
+  if (minPartyOffense >= totalEnemyMaxHp && averagePartyLevel >= maxEnemyLevel + INSTANT_WIN_LEVEL_MARGIN) {
+    return "instantWin";
+  }
+  return "normal";
+}
+
+export function battleRngSeedForGroup(groupId: number, enemies: readonly Pick<BattleEnemy, "id">[]): number {
+  return (stat(groupId) + 1) * 65537 + enemies.reduce((sum, enemy) => sum + stat(enemy.id), 0);
+}
+
+export function createBattleRng(seed: number): Rng {
+  let state = stat(seed) >>> 0;
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+}
+
+export function resolveInstantWinRewards(
+  party: readonly Combatant[],
+  enemies: readonly BattleEnemy[],
+  options: InstantWinRewardOptions = {}
+): { state: BattleState; summary: BattleVictorySummary } {
+  const instantWinState: BattleState = {
+    party: party.map(cloneCombatant),
+    enemies: enemies.map((enemy) => defeatedCombatant(buildEnemyCombatant(enemy))),
+    wallet: stat(options.wallet ?? party.reduce((sum, member) => sum + member.money, 0)),
+    roundNumber: Math.max(1, stat(options.roundNumber ?? 1))
+  };
+  const rewardOptions: { rng?: Rng; items?: Array<Pick<ItemData, "id" | "name">>; psi?: PsiData[] } = {};
+  if (options.rng) {
+    rewardOptions.rng = options.rng;
+  }
+  if (options.items) {
+    rewardOptions.items = options.items;
+  }
+  if (options.psi) {
+    rewardOptions.psi = options.psi;
+  }
+  return applyVictoryRewards(instantWinState, rewardOptions);
 }
 
 export function commandsForCharId(charId: number): BattleCommand[] {
@@ -1556,6 +1638,30 @@ function newlyLearnedSkillsForCombatant(
 function learnedSkillName(psi: Pick<PsiData, "id" | "name">): string {
   const trimmed = psi.name.trim();
   return trimmed.length > 0 ? trimmed : `[psi ${stat(psi.id)}]`;
+}
+
+function encounterPartyOffense(member: EncounterAdvantagePartyMember): number {
+  return stat(member.offense ?? member.stats?.offense ?? 0);
+}
+
+function encounterEnemyMaxHp(enemy: EncounterAdvantageEnemy): number {
+  if (enemy.maxHp !== undefined) {
+    return stat(enemy.maxHp);
+  }
+  return typeof enemy.hp === "number" ? stat(enemy.hp) : 0;
+}
+
+function defeatedCombatant(combatant: Combatant): Combatant {
+  return {
+    ...combatant,
+    hp: {
+      ...combatant.hp,
+      displayed: 0,
+      target: 0,
+      isRolling: false,
+      stepRemainder: 0
+    }
+  };
 }
 
 function maxStats(left: PartyMemberStats, right: PartyMemberStats): PartyMemberStats {

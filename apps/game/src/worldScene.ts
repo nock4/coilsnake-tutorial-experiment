@@ -944,7 +944,8 @@ export class WorldScene extends Phaser.Scene {
       window: this.data_.window,
       spriteOverrides: this.data_.spriteOverrides,
       backgroundOverrides: this.data_.backgroundOverrides,
-      battleRules: this.data_.battleRules
+      battleRules: this.data_.battleRules,
+      encounterAdvantage: "normal"
     });
     return true;
   }

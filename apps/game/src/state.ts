@@ -1,6 +1,6 @@
 import type { DialoguePage, TutorialStatus } from "@eb/schemas";
 import type { BattleSfxCue } from "./audio/battleSfx";
-import type { BattleCommand } from "./battleLogic";
+import type { BattleCommand, EncounterAdvantage } from "./battleLogic";
 import type { MenuDebugState } from "./menuModel";
 import {
   DefaultResolver,
@@ -99,6 +99,7 @@ export type BattleDebug = {
   mode: "battle";
   phase: BattlePhase;
   transitionPhase: BattleTransitionPhase;
+  encounterAdvantage: EncounterAdvantage;
   autoMode: boolean;
   menuIndex: number;
   roundNumber: number;

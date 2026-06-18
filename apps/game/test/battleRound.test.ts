@@ -8,6 +8,7 @@ import {
 } from "../src/battleLogic";
 import {
   applyRoundStartGuardStance,
+  encounterAdvantageTurnOrder,
   jitteredTurnOrder,
   MIN_RUN_SUCCESS_CHANCE,
   nextInputState,
@@ -15,6 +16,7 @@ import {
   resolveRoundStartPriority,
   resolveRoundStep,
   runSuccessChance,
+  shouldRunEnemyFirstStrikeBeforeInput,
   type BattleRoundInputState,
   type QueuedCommand
 } from "../src/battleRound";
@@ -87,6 +89,50 @@ describe("jitteredTurnOrder", () => {
       actor("enemy", 0),
       actor("party", 0)
     ]);
+  });
+});
+
+describe("encounterAdvantageTurnOrder", () => {
+  it("makes partyFirstStrike a free party-only round 1 and restores normal order after that", () => {
+    const roundOne = createBattleState([opponentA, opponentB], {
+      characters: characters([partyA, partyB])
+    });
+    const roundTwo = { ...roundOne, roundNumber: 2 };
+    const queued: QueuedCommand[] = [
+      { partySlot: 0, command: "BASH" },
+      { partySlot: 1, command: "BASH" }
+    ];
+
+    const freeRound = encounterAdvantageTurnOrder(roundOne, queued, sequenceRng([0.5, 0.5, 0.5, 0.5]), {
+      advantage: "partyFirstStrike"
+    });
+    const normalRound = encounterAdvantageTurnOrder(roundTwo, queued, sequenceRng([0.5, 0.5, 0.5, 0.5]), {
+      advantage: "partyFirstStrike"
+    });
+
+    expect(freeRound.every((entry) => entry.side === "party")).toBe(true);
+    expect(freeRound).toHaveLength(2);
+    expect(normalRound.some((entry) => entry.side === "enemy")).toBe(true);
+    expect(normalRound).toHaveLength(4);
+  });
+
+  it("models enemyFirstStrike as a pre-input enemy-only round 1", () => {
+    const battle = createBattleState([opponentA, opponentB], {
+      characters: characters([partyA, partyB])
+    });
+    const queued: QueuedCommand[] = [
+      { partySlot: 0, command: "BASH" },
+      { partySlot: 1, command: "BASH" }
+    ];
+
+    const ambushOrder = encounterAdvantageTurnOrder(battle, queued, sequenceRng([0.5, 0.5, 0.5, 0.5]), {
+      advantage: "enemyFirstStrike"
+    });
+
+    expect(shouldRunEnemyFirstStrikeBeforeInput(battle, "enemyFirstStrike", false)).toBe(true);
+    expect(shouldRunEnemyFirstStrikeBeforeInput(battle, "enemyFirstStrike", true)).toBe(false);
+    expect(ambushOrder.every((entry) => entry.side === "enemy")).toBe(true);
+    expect(ambushOrder).toHaveLength(2);
   });
 });
 

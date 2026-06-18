@@ -1,8 +1,17 @@
 import Phaser from "phaser";
-import { isNpcVisibleForEventFlags, type DialoguePage, type EventEffect, type ItemData, type SpriteOverride, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
+import { isNpcVisibleForEventFlags, type BattleEnemy, type DialoguePage, type EventEffect, type ItemData, type SpriteOverride, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
 import { rollEncounter, sectorIndexForTile } from "./encounterLogic";
 import { createStatefulRng, seedFromSearch, type StatefulRng } from "./seededRng";
 import type { BattleReturnContext, BattleReturnSource, ChunkedWorldRestore } from "./battleReturn";
+import {
+  battleRngSeedForGroup,
+  computeEncounterAdvantage,
+  createBattleRng,
+  createBattleState,
+  resolveInstantWinRewards,
+  type EncounterAdvantage,
+  type InstantWinRewardOptions
+} from "./battleLogic";
 import {
   resolveAdjacentDoorIntentTrigger,
   resolveDoorWarpLanding,
@@ -245,8 +254,8 @@ const ROOM_MASK_EDGE_INSET_SCREEN_PX = 0.5;
 
 type TilePoint = { x: number; y: number };
 type ForceEncounterResult =
-  | { started: true; enemyGroup: number }
-  | { started: false; reason: string; enemyGroup?: number };
+  | { started: true; enemyGroup: number; advantage: EncounterAdvantage }
+  | { started: false; reason: string; enemyGroup?: number; advantage?: EncounterAdvantage };
 
 export class ChunkedWorldScene extends Phaser.Scene {
   private data_!: GameData;
@@ -312,7 +321,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private currentSectorIndex?: number;
   private lastPlayerTile?: TilePoint;
   private lastEncounterGroup?: number;
-  private forceEncounterHook?: (groupId?: number) => ForceEncounterResult;
+  private forceEncounterHook?: (groupId?: number, advantage?: unknown) => ForceEncounterResult;
   private newGameStartupRecord?: NewGameStartupRunDebug;
   private startupRunActive = false;
   private startupRunFinalized = false;
@@ -2658,11 +2667,19 @@ export class ChunkedWorldScene extends Phaser.Scene {
       && !this.isDoorFadeActive();
   }
 
-  private startEncounterBattle(group: number): boolean {
-    return this.startBattleWithReturn(group, "encounter");
+  private startEncounterBattle(group: number, forcedAdvantage?: EncounterAdvantage): boolean {
+    const advantage = forcedAdvantage ?? this.encounterAdvantageForGroup(group);
+    if (advantage === "instantWin") {
+      return this.resolveInstantWinEncounter(group);
+    }
+    return this.startBattleWithReturn(group, "encounter", advantage);
   }
 
-  private startBattleWithReturn(group: number, source: BattleReturnSource): boolean {
+  private startBattleWithReturn(
+    group: number,
+    source: BattleReturnSource,
+    encounterAdvantage: EncounterAdvantage = "normal"
+  ): boolean {
     if (!this.data_.battle || !this.battleGroupExists(group) || !this.player) {
       return false;
     }
@@ -2681,8 +2698,45 @@ export class ChunkedWorldScene extends Phaser.Scene {
       spriteOverrides: this.data_.spriteOverrides,
       backgroundOverrides: this.data_.backgroundOverrides,
       battleRules: this.data_.battleRules,
+      encounterAdvantage,
       returnTo: this.battleReturnContext(group, source)
     });
+    return true;
+  }
+
+  private encounterAdvantageForGroup(group: number): EncounterAdvantage {
+    const party = this.battlePartyMembers();
+    const enemies = this.enemiesForBattleGroup(group);
+    return party && enemies.length > 0 ? computeEncounterAdvantage(party, enemies) : "normal";
+  }
+
+  private resolveInstantWinEncounter(group: number): boolean {
+    if (!this.data_.battle || !this.battleGroupExists(group) || !this.player) {
+      return false;
+    }
+    const enemies = this.enemiesForBattleGroup(group);
+    if (enemies.length === 0) {
+      return false;
+    }
+    const battle = createBattleState(enemies, {
+      characters: this.data_.characters,
+      partyMembers: this.battlePartyMembers(),
+      wallet: this.partyState.wallet
+    });
+    const rewards = resolveInstantWinRewards(battle.party, enemies, instantWinRewardOptions({
+      wallet: battle.wallet,
+      roundNumber: battle.roundNumber,
+      rng: createBattleRng(battleRngSeedForGroup(group, enemies)),
+      items: this.data_.items?.items,
+      psi: this.data_.psi?.psi
+    }));
+    this.partyState.applyBattleResult(rewards.state.party, rewards.state.wallet);
+    this.lastEncounterGroup = group;
+    this.encounterCooldownMs = ENCOUNTER_RETURN_COOLDOWN_MS;
+    this.refreshMenuScreens();
+    this.dialogue.start(buildInlineDialoguePages(["You won!"]));
+    this.updatePrompt();
+    this.publish();
     return true;
   }
 
@@ -2728,8 +2782,19 @@ export class ChunkedWorldScene extends Phaser.Scene {
     return Number.isInteger(group) && group >= 0 && Boolean(this.data_.battle?.groups.some((entry) => entry.id === group));
   }
 
+  private enemiesForBattleGroup(group: number): BattleEnemy[] {
+    const battle = this.data_.battle;
+    const battleGroup = battle?.groups.find((entry) => entry.id === group);
+    if (!battle || !battleGroup) {
+      return [];
+    }
+    return battleGroup.enemyIds
+      .map((enemyId) => battle.enemies.find((enemy) => enemy.id === enemyId))
+      .filter((enemy): enemy is BattleEnemy => Boolean(enemy));
+  }
+
   private registerForceEncounter(): void {
-    this.forceEncounterHook = (groupId?: number) => this.forceEncounter(groupId);
+    this.forceEncounterHook = (groupId?: number, advantage?: unknown) => this.forceEncounter(groupId, advantage);
     (globalThis as Record<string, unknown>).__forceEncounter = this.forceEncounterHook;
   }
 
@@ -2741,15 +2806,16 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.forceEncounterHook = undefined;
   }
 
-  private forceEncounter(groupId?: number): ForceEncounterResult {
+  private forceEncounter(groupId?: number, advantage?: unknown): ForceEncounterResult {
     const enemyGroup = normalizeOptionalGroupId(groupId) ?? this.firstEncounterGroupForCurrentSector();
     if (enemyGroup === undefined) {
       return { started: false, reason: "no encounter group available" };
     }
-    const started = this.startEncounterBattle(enemyGroup);
+    const resolvedAdvantage = normalizeForcedEncounterAdvantage(advantage) ?? this.encounterAdvantageForGroup(enemyGroup);
+    const started = this.startEncounterBattle(enemyGroup, resolvedAdvantage);
     return started
-      ? { started: true, enemyGroup }
-      : { started: false, enemyGroup, reason: "battle data unavailable for encounter group" };
+      ? { started: true, enemyGroup, advantage: resolvedAdvantage }
+      : { started: false, enemyGroup, advantage: resolvedAdvantage, reason: "battle data unavailable for encounter group" };
   }
 
   private firstEncounterGroupForCurrentSector(): number | undefined {
@@ -3184,6 +3250,51 @@ function normalizeCollisionOverlayFlag(value: unknown): boolean | undefined {
     }
   }
   return undefined;
+}
+
+function normalizeForcedEncounterAdvantage(value: unknown): EncounterAdvantage | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  switch (value.trim().toLowerCase()) {
+    case "normal":
+      return "normal";
+    case "party":
+    case "partyfirststrike":
+    case "party-first-strike":
+      return "partyFirstStrike";
+    case "enemy":
+    case "enemyfirststrike":
+    case "enemy-first-strike":
+      return "enemyFirstStrike";
+    case "instant":
+    case "instantwin":
+    case "instant-win":
+      return "instantWin";
+    default:
+      return undefined;
+  }
+}
+
+function instantWinRewardOptions(options: {
+  wallet: number;
+  roundNumber: number;
+  rng: () => number;
+  items?: Array<Pick<ItemData, "id" | "name">>;
+  psi?: InstantWinRewardOptions["psi"];
+}): InstantWinRewardOptions {
+  const result: InstantWinRewardOptions = {
+    wallet: options.wallet,
+    roundNumber: options.roundNumber,
+    rng: options.rng
+  };
+  if (options.items) {
+    result.items = options.items;
+  }
+  if (options.psi) {
+    result.psi = options.psi;
+  }
+  return result;
 }
 
 function normalizeOptionalGroupId(value: number | undefined): number | undefined {

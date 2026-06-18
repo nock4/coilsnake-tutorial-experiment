@@ -9,6 +9,7 @@ import { UiScene } from "./uiScene";
 import { FallbackScene } from "./fallbackScene";
 import { BattleScene } from "./battleScene";
 import { buildPartyMember, type PartyMember } from "./characterModel";
+import type { EncounterAdvantage } from "./battleLogic";
 import { deserializeSaveState, type SaveSlotPersistence } from "./saveState";
 import { registerWindowFlavorControls } from "./windowSettings";
 import "./style.css";
@@ -52,6 +53,7 @@ class BootScene extends Phaser.Scene {
     const battleGroupId = battleGroupIdFromSearch(globalThis.location?.search);
     if (battleGroupId !== undefined && data.battle) {
       const debugPartyMembers = debugBattlePartyMembersFromSearch(globalThis.location?.search, data.characters);
+      const encounterAdvantage = debugEncounterAdvantageFromSearch(globalThis.location?.search);
       this.scene.start("battle", {
         battleData: data.battle,
         groupId: battleGroupId,
@@ -63,7 +65,8 @@ class BootScene extends Phaser.Scene {
         window: data.window,
         spriteOverrides: data.spriteOverrides,
         backgroundOverrides: data.backgroundOverrides,
-        battleRules: data.battleRules
+        battleRules: data.battleRules,
+        encounterAdvantage
       });
       return;
     }
@@ -250,6 +253,26 @@ function debugPartyCountFromSearch(search: string | undefined): number {
     return 1;
   }
   return Math.min(4, Math.max(1, parsed));
+}
+
+function debugEncounterAdvantageFromSearch(search: string | undefined): EncounterAdvantage {
+  const value = new URLSearchParams(search ?? "").get("advantage")?.trim().toLowerCase();
+  switch (value) {
+    case "party":
+    case "partyfirststrike":
+    case "party-first-strike":
+      return "partyFirstStrike";
+    case "enemy":
+    case "enemyfirststrike":
+    case "enemy-first-strike":
+      return "enemyFirstStrike";
+    case "instant":
+    case "instantwin":
+    case "instant-win":
+      return "instantWin";
+    default:
+      return "normal";
+  }
 }
 
 new Phaser.Game({
