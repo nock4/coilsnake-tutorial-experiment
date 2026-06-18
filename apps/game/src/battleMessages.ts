@@ -74,15 +74,17 @@ function actionStartedLine(event: BattleActionStartedEvent): string {
     }
     case "pray":
       return `${event.actorName} prayed.`;
-    case "attack":
     case "spy":
+      return `${event.actorName} sizes up the foe!`;
     case "mirror":
+      return `${event.actorName} mirrors the foe!`;
+    case "attack":
       return `${event.actorName}'s attack!`;
   }
 }
 
 function usesAttackImpactNarration(action: BattleActionStartedEvent | null): boolean {
-  return action?.action === "attack" || action?.action === "spy" || action?.action === "mirror";
+  return action?.action === "attack" || action?.action === "mirror";
 }
 
 function isBattleEventList(input: readonly BattleEvent[] | BattleRoundStepNarrationDetails): input is readonly BattleEvent[] {
