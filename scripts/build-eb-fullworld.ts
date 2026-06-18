@@ -1,7 +1,14 @@
 import { access, copyFile, mkdir, readFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { PsiOverridesSchema, SpriteOverridesSchema, type SpriteOverride, type SpriteOverrides } from "../packages/eb-schemas/src/index";
+import {
+  BackgroundOverridesSchema,
+  PsiOverridesSchema,
+  SpriteOverridesSchema,
+  type BackgroundOverrideEntry,
+  type SpriteOverride,
+  type SpriteOverrides
+} from "../packages/eb-schemas/src/index";
 import { DEFAULT_GENERATED_OUT } from "../packages/content-builder/src/build";
 import { convertProject } from "../packages/eb-converter/src/index";
 
@@ -16,6 +23,8 @@ export const SWAGBOUND_DIALOGUE_LIBRARY_SOURCE = "content/swagbound-dialogue-lib
 export const SWAGBOUND_DIALOGUE_LIBRARY_OUTPUT = "swagbound-dialogue-library.json";
 export const SPRITE_OVERRIDES_SOURCE = "content/sprite-overrides.json";
 export const SPRITE_OVERRIDES_OUTPUT = "sprite-overrides.json";
+export const BACKGROUND_OVERRIDES_SOURCE = "content/background-overrides.json";
+export const BACKGROUND_OVERRIDES_OUTPUT = "background-overrides.json";
 export const ITEM_OVERRIDES_SOURCE = "content/item-overrides.json";
 export const ITEM_OVERRIDES_OUTPUT = "item-overrides.json";
 export const CHARACTER_OVERRIDES_SOURCE = "content/character-overrides.json";
@@ -52,12 +61,14 @@ async function copyJsonToGenerated(source: string, out: string, outputName: stri
 
 async function copyContentOverlaysToGenerated(out: string): Promise<void> {
   await validateSpriteOverrideImages(SPRITE_OVERRIDES_SOURCE);
+  await validateBackgroundOverrideImages(BACKGROUND_OVERRIDES_SOURCE);
   await validatePsiOverrides(PSI_OVERRIDES_SOURCE);
   await Promise.all([
     copyJsonToGenerated(ADDED_NPCS_SOURCE, out, ADDED_NPCS_OUTPUT),
     copyJsonToGenerated(CUSTOM_DIALOGUE_SOURCE, out, CUSTOM_DIALOGUE_OUTPUT),
     copyJsonToGenerated(SWAGBOUND_DIALOGUE_LIBRARY_SOURCE, out, SWAGBOUND_DIALOGUE_LIBRARY_OUTPUT),
     copyJsonToGenerated(SPRITE_OVERRIDES_SOURCE, out, SPRITE_OVERRIDES_OUTPUT),
+    copyJsonToGenerated(BACKGROUND_OVERRIDES_SOURCE, out, BACKGROUND_OVERRIDES_OUTPUT),
     copyJsonToGenerated(ITEM_OVERRIDES_SOURCE, out, ITEM_OVERRIDES_OUTPUT),
     copyJsonToGenerated(CHARACTER_OVERRIDES_SOURCE, out, CHARACTER_OVERRIDES_OUTPUT),
     copyJsonToGenerated(PSI_OVERRIDES_SOURCE, out, PSI_OVERRIDES_OUTPUT)
@@ -72,13 +83,7 @@ async function validateSpriteOverrideImages(source: string): Promise<void> {
   const raw = JSON.parse(await readFile(resolve(source), "utf8"));
   const overrides = SpriteOverridesSchema.parse(raw);
   await Promise.all(spriteOverrideEntries(overrides).map(async (override) => {
-    const publicRoot = resolve(GAME_PUBLIC_ROOT);
-    const imagePath = resolve(publicRoot, override.image);
-    const relativeImagePath = relative(publicRoot, imagePath);
-    if (relativeImagePath.startsWith("..") || isAbsolute(relativeImagePath)) {
-      throw new Error(`Sprite override image escapes ${GAME_PUBLIC_ROOT}: ${override.image}`);
-    }
-    await access(imagePath);
+    await validatePublicAssetImage(override.image, "Sprite override image");
   }));
 }
 
@@ -88,6 +93,28 @@ function spriteOverrideEntries(overrides: SpriteOverrides): SpriteOverride[] {
     ...Object.values(overrides.byNpcId ?? {}),
     ...Object.values(overrides.byEnemyId ?? {})
   ].filter((override): override is SpriteOverride => Boolean(override));
+}
+
+async function validateBackgroundOverrideImages(source: string): Promise<void> {
+  const raw = JSON.parse(await readFile(resolve(source), "utf8"));
+  const overrides = BackgroundOverridesSchema.parse(raw);
+  await Promise.all(backgroundOverrideEntries(overrides.entries).map(async (entry) => {
+    await validatePublicAssetImage(entry.image, "Background override image");
+  }));
+}
+
+function backgroundOverrideEntries(entries: Record<string, BackgroundOverrideEntry>): BackgroundOverrideEntry[] {
+  return Object.values(entries);
+}
+
+async function validatePublicAssetImage(image: string, label: string): Promise<void> {
+  const publicRoot = resolve(GAME_PUBLIC_ROOT);
+  const imagePath = resolve(publicRoot, image);
+  const relativeImagePath = relative(publicRoot, imagePath);
+  if (relativeImagePath.startsWith("..") || isAbsolute(relativeImagePath)) {
+    throw new Error(`${label} escapes ${GAME_PUBLIC_ROOT}: ${image}`);
+  }
+  await access(imagePath);
 }
 
 async function main(): Promise<void> {

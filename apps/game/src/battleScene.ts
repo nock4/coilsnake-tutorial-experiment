@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import {
   ItemCollectionSchema,
   PsiCollectionSchema,
+  type BackgroundOverrides,
   type BattleBackground,
   type BattleData,
   type BattleEnemy,
@@ -117,6 +118,12 @@ import {
   spriteOverrideEnemyImageKey,
   spriteOverrideForEnemyId
 } from "./spriteOverrides";
+import {
+  backgroundOverrideAssetUrl,
+  backgroundOverrideImageKey,
+  resolveBackgroundOverrideEntry,
+  toBattleBackground
+} from "./backgroundOverrides";
 import {
   createRollingMeter,
   setTarget,
@@ -252,6 +259,7 @@ export class BattleScene extends Phaser.Scene {
   private font_?: FontCollection;
   private window_?: WindowCollection;
   private spriteOverrides_?: SpriteOverrides;
+  private backgroundOverrides_?: BackgroundOverrides;
   private rng_: Rng = () => 0.5;
   private phase_: BattlePhase = "enter-transition";
   private transitionPhase_: BattleTransitionPhase = "enter";
@@ -308,6 +316,7 @@ export class BattleScene extends Phaser.Scene {
     font?: FontCollection;
     window?: WindowCollection;
     spriteOverrides?: SpriteOverrides;
+    backgroundOverrides?: BackgroundOverrides;
     partyMembers?: PartyMember[];
     wallet?: number;
     returnTo?: BattleReturnContext;
@@ -319,6 +328,7 @@ export class BattleScene extends Phaser.Scene {
     this.font_ = data.font;
     this.window_ = data.window;
     this.spriteOverrides_ = data.spriteOverrides ?? data.returnTo?.gameData.spriteOverrides;
+    this.backgroundOverrides_ = data.backgroundOverrides ?? data.returnTo?.gameData.backgroundOverrides;
     const enemies = enemiesForGroup(data.battleData, this.group_);
     if (enemies.length === 0) {
       throw new Error(`Battle group ${this.group_.id} has no matching runtime enemy.`);
@@ -363,6 +373,13 @@ export class BattleScene extends Phaser.Scene {
   }
 
   preload(): void {
+    const override = resolveBackgroundOverrideEntry(this.backgroundOverrides_, this.group_.background1);
+    if (override) {
+      const key = backgroundOverrideImageKey(override.entryId, override.entry.image);
+      if (!this.textures.exists(key)) {
+        this.load.image(key, backgroundOverrideAssetUrl(override.entry.image));
+      }
+    }
     for (const backgroundId of unique([this.group_.background1, this.group_.background2])) {
       this.load.image(backgroundKey(backgroundId), generatedAssetUrl(this.battleData_.assetLayout.backgroundDir, backgroundId));
     }
@@ -1120,11 +1137,32 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private drawBackground(): void {
+    const override = resolveBackgroundOverrideEntry(this.backgroundOverrides_, this.group_.background1);
+    const backgroundHeight = this.scale.height;
+    if (override) {
+      const key = backgroundOverrideImageKey(override.entryId, override.entry.image);
+      if (this.textures.exists(key)) {
+        this.backgroundAnimation = createAnimatedBattleBackground(
+          this,
+          key,
+          toBattleBackground(override.entry),
+          this.scale.width,
+          backgroundHeight
+        );
+        if (this.backgroundAnimation) {
+          this.backgroundDebug = this.backgroundAnimation.debug();
+          return;
+        }
+        this.backgroundDebug = staticBattleBackgroundDebug();
+        this.add.image(0, 0, key).setOrigin(0, 0).setDisplaySize(this.scale.width, backgroundHeight);
+        return;
+      }
+    }
+
     const backgroundId = this.textures.exists(backgroundKey(this.group_.background1))
       ? this.group_.background1
       : this.group_.background2;
     const key = backgroundKey(backgroundId);
-    const backgroundHeight = this.scale.height;
     if (this.textures.exists(key)) {
       this.backgroundAnimation = createAnimatedBattleBackground(
         this,

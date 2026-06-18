@@ -2679,6 +2679,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       font: this.data_.font,
       window: this.data_.window,
       spriteOverrides: this.data_.spriteOverrides,
+      backgroundOverrides: this.data_.backgroundOverrides,
       returnTo: this.battleReturnContext(group, source)
     });
     return true;
