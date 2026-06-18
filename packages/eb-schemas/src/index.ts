@@ -746,7 +746,7 @@ export const BattleBackgroundScrollSchema = z.object({
 });
 
 export const BattleBackgroundDistortionSchema = z.object({
-  kind: z.string(),
+  kind: z.string().optional(),
   amplitude: z.number().nonnegative(),
   frequency: z.number().nonnegative(),
   speed: z.number()
@@ -757,6 +757,19 @@ export const BattleBackgroundSchema = z.object({
   scroll: BattleBackgroundScrollSchema.optional(),
   distortion: BattleBackgroundDistortionSchema.optional()
 });
+
+export const BackgroundOverrideEntrySchema = z.object({
+  image: z.string().min(1),
+  distortion: BattleBackgroundDistortionSchema,
+  scroll: BattleBackgroundScrollSchema.optional()
+}).strict();
+
+export const BackgroundOverridesSchema = z.object({
+  schema: z.literal("swagbound.background-overrides.v1"),
+  default: z.string().min(1).optional(),
+  entries: z.record(BackgroundOverrideEntrySchema),
+  byBackgroundId: z.record(z.string().regex(/^\d+$/), z.string().min(1)).optional()
+}).strict();
 
 export const BattleEnemySchema = z.object({
   id: z.number().int().nonnegative(),
@@ -1140,6 +1153,8 @@ export type SpriteAnimations = z.infer<typeof SpriteAnimationsSchema>;
 export type SpriteSheetCollection = z.infer<typeof SpriteSheetCollectionSchema>;
 export type SpriteOverride = z.infer<typeof SpriteOverrideSchema>;
 export type SpriteOverrides = z.infer<typeof SpriteOverridesSchema>;
+export type BackgroundOverrideEntry = z.infer<typeof BackgroundOverrideEntrySchema>;
+export type BackgroundOverrides = z.infer<typeof BackgroundOverridesSchema>;
 export type ItemOverrides = z.infer<typeof ItemOverridesSchema>;
 export type CharacterOverrides = z.infer<typeof CharacterOverridesSchema>;
 export type EncounterCandidate = z.infer<typeof EncounterCandidateSchema>;

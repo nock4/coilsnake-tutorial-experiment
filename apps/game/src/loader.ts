@@ -3,6 +3,7 @@ import {
   ADDED_NPC_MIN_ID,
   AddedNpcsSchema,
   BattleDataSchema,
+  BackgroundOverridesSchema,
   CharacterCollectionSchema,
   CharacterOverridesSchema,
   CustomDialogueSchema,
@@ -30,6 +31,7 @@ import {
   type DialoguePage,
   type AddedNpc,
   type AddedNpcs,
+  type BackgroundOverrides,
   type BattleData,
   type CharacterCollection,
   type CharacterOverrides,
@@ -62,6 +64,7 @@ const ADDED_NPCS_FILE = "added-npcs.json";
 const CUSTOM_DIALOGUE_FILE = "custom-dialogue.json";
 const SWAGBOUND_DIALOGUE_LIBRARY_FILE = "swagbound-dialogue-library.json";
 const SPRITE_OVERRIDES_FILE = "sprite-overrides.json";
+const BACKGROUND_OVERRIDES_FILE = "background-overrides.json";
 const ITEM_OVERRIDES_FILE = "item-overrides.json";
 const CHARACTER_OVERRIDES_FILE = "character-overrides.json";
 const PSI_OVERRIDES_FILE = "psi-overrides.json";
@@ -79,6 +82,7 @@ export type GameData = {
   world?: WorldArtifact;
   sprites?: SpriteSheetCollection;
   spriteOverrides?: SpriteOverrides;
+  backgroundOverrides?: BackgroundOverrides;
   teleportDestinations?: TeleportDestinations;
   encounters?: Encounters;
   battle?: BattleData;
@@ -138,6 +142,7 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     world,
     sprites,
     spriteOverrides,
+    backgroundOverrides,
     teleportDestinations,
     encounters,
     battle,
@@ -162,6 +167,7 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     loadJson(`/generated/${manifest.files.world}`, WorldArtifactSchema),
     loadJson(`/generated/${manifest.files.sprites}`, SpriteSheetCollectionSchema),
     loadJson(`/generated/${SPRITE_OVERRIDES_FILE}`, SpriteOverridesSchema),
+    loadJson(`/generated/${BACKGROUND_OVERRIDES_FILE}`, BackgroundOverridesSchema),
     manifest.files.teleportDestinations
       ? loadJson(`/generated/${manifest.files.teleportDestinations}`, TeleportDestinationsSchema)
       : Promise.resolve(undefined),
@@ -213,6 +219,7 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     world,
     sprites,
     spriteOverrides,
+    backgroundOverrides,
     teleportDestinations,
     encounters,
     battle,
