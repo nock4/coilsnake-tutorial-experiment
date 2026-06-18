@@ -108,7 +108,9 @@ import {
   type BattleBackgroundDebug
 } from "./battleBackground";
 import {
+  ENEMY_SHADOW_ALPHA,
   enemyDefeatVisualState,
+  enemyShadowEllipse,
   menuCursorVisible
 } from "./battleVisuals";
 import { swirlMask, type SwirlMask } from "./transitions";
@@ -292,6 +294,7 @@ export class BattleScene extends Phaser.Scene {
   private ppMeters = new Map<number, RollingMeterState>();
   private transitionGraphics?: Phaser.GameObjects.Graphics;
   private enemySprites: Phaser.GameObjects.Image[] = [];
+  private enemyShadowGraphics?: Phaser.GameObjects.Graphics;
   private enemySpriteBasePoints: Array<SpritePoint | undefined> = [];
   private enemySpriteRedrawScheduled = false;
   private enemySpriteRedrawAttempts = 0;
@@ -1302,7 +1305,9 @@ export class BattleScene extends Phaser.Scene {
     this.statusAccentGraphics?.destroy();
     this.targetCursor?.destroy();
     this.menuCursorGraphics?.destroy();
+    this.enemyShadowGraphics?.destroy();
     this.destroyBattleUiText();
+    this.enemyShadowGraphics = this.add.graphics().setDepth(9);
     this.statusGraphics = this.add.graphics().setDepth(20);
     this.statusFieldGraphics = this.add.graphics().setDepth(20.5);
     this.statusAccentGraphics = this.add.graphics().setDepth(26);
@@ -2013,6 +2018,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private renderEnemySpriteEffects(now: number): void {
+    this.enemyShadowGraphics?.clear();
     this.enemySprites.forEach((sprite, index) => {
       const enemy = this.battle_.enemies[index];
       const alive = Boolean(enemy && isCombatantAlive(enemy));
@@ -2027,6 +2033,10 @@ export class BattleScene extends Phaser.Scene {
         sprite.setPosition(basePoint.x + effect.wobble.dx, basePoint.y + effect.wobble.dy);
       }
       const defeat = enemyDefeatVisualState(now, alive, this.enemyDefeatedAt[index]);
+      // Steady ground shadow under the sprite (does not wobble with it).
+      if (basePoint && defeat.visible) {
+        this.drawEnemyShadow(basePoint, sprite, ENEMY_SHADOW_ALPHA * defeat.alpha);
+      }
       if (!defeat.visible) {
         sprite.clearTint();
         sprite.setAlpha(0);
@@ -2051,6 +2061,20 @@ export class BattleScene extends Phaser.Scene {
       sprite.setTint(0xffffff);
       sprite.setAlpha(Math.max(0.35, 1 - effect.flashIntensity * 0.55));
     });
+  }
+
+  private drawEnemyShadow(
+    basePoint: SpritePoint,
+    sprite: Phaser.GameObjects.Image,
+    alpha: number
+  ): void {
+    const graphics = this.enemyShadowGraphics;
+    if (!graphics || alpha <= 0) {
+      return;
+    }
+    const ellipse = enemyShadowEllipse(basePoint.x, basePoint.y, sprite.displayWidth, sprite.displayHeight);
+    graphics.fillStyle(0x000000, alpha);
+    graphics.fillEllipse(ellipse.x, ellipse.y, ellipse.radiusX * 2, ellipse.radiusY * 2);
   }
 
   private renderMenuCursors(menuVisible: boolean, layout: BattleStatusLayout): void {
