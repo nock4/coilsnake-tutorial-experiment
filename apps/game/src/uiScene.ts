@@ -31,8 +31,8 @@ const MENU_FONT_SIZE = 14;
 const MENU_TITLE_FONT_SIZE = 13;
 const DEBUG_FONT_SIZE = 11;
 const DIALOGUE_HORIZONTAL_PADDING = 18;
-const DIALOGUE_VERTICAL_PADDING = 14;
-const DIALOGUE_VISIBLE_LINES = 4;
+const DIALOGUE_VERTICAL_PADDING = 12;
+const DIALOGUE_VISIBLE_LINES = 3;
 const DIALOGUE_BOTTOM_MARGIN = 12;
 const DIALOGUE_SIDE_MARGIN = 12;
 const DIALOGUE_MORE_ARROW_BOB_PX = 2;
@@ -135,14 +135,16 @@ export class UiScene extends Phaser.Scene {
     const panelVisible = world.debugPanelVisible;
     const runtimeLines = panelVisible ? world.runtimeLines() : [];
     const menuScreens = world.menuRenderStack();
-    const signature = `${open}|${JSON.stringify(textRuns)}|${footer}|${showAdvanceIndicator}|${world.prompt}|${panelVisible}|${runtimeLines.join("/")}|${JSON.stringify(menuScreens)}`;
+    const promptVisible = !open && menuScreens.length === 0;
+    const signature = `${open}|${JSON.stringify(textRuns)}|${footer}|${showAdvanceIndicator}|${world.prompt}|${promptVisible}|${panelVisible}|${runtimeLines.join("/")}|${JSON.stringify(menuScreens)}`;
     if (signature === this.lastSignature) {
       this.renderMenuCursors();
       return;
     }
     this.lastSignature = signature;
 
-    this.promptText?.setText(world.prompt);
+    this.promptText?.setText(promptVisible ? world.prompt : "");
+    this.promptText?.setVisible(promptVisible);
     this.drawDialogue(open, text, textRuns, footer, showAdvanceIndicator);
     this.drawPanel(panelVisible ? [...world.statusLines(), "", ...world.metadataLines(), "", ...runtimeLines] : []);
     this.drawMenu(menuScreens);
