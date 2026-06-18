@@ -88,6 +88,13 @@ export type BattleBackgroundDebug = {
   warpSample: number;
 };
 
+export type BattleFxDebug = {
+  shakeCount: number;
+  sparkCount: number;
+  flashCount: number;
+  lungeCount: number;
+};
+
 export type BattleDebug = {
   mode: "battle";
   phase: BattlePhase;
@@ -109,6 +116,7 @@ export type BattleDebug = {
   executionMessage: string;
   lastSfx: BattleSfxCue | null;
   sfxCount: number;
+  fx: BattleFxDebug;
   lastEnemyAction: LastEnemyActionDebug | null;
   party: BattleCombatantDebug[];
   enemies: BattleEnemyCombatantDebug[];
