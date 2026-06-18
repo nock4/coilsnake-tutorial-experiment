@@ -50,12 +50,18 @@ import {
   resolveRoundStep,
   resolveRoundStartPriority,
   shouldRunEnemyFirstStrikeBeforeInput,
-  type BattleRoundStepNarrationDetails,
   type BattleRoundStepResult,
   type BattleRoundInputState,
   type QueuedCommand
 } from "./battleRound";
 import { composeBattleStepLines } from "./battleMessages";
+import {
+  battleEventsHaveEnemyDefeated,
+  battleEventsHaveMiss,
+  firstBattleAction,
+  firstBattleDamage,
+  type BattleEvent
+} from "./battleEvents";
 import type { BattleReturnContext, BattleReturnOutcome } from "./battleReturn";
 import {
   DEFAULT_DAMAGE_FLASH_MS,
@@ -863,8 +869,8 @@ export class BattleScene extends Phaser.Scene {
       this.priorityStep_ = null;
       this.currentActor_ = result.actor;
       this.menuMessage_ = result.message;
-      this.executionMessageLines_ = composeBattleStepLines(result.details);
-      this.playBattleStepSfx(result.details);
+      this.executionMessageLines_ = composeBattleStepLines(result.events);
+      this.playBattleStepSfx(result.events);
       this.triggerBattleStepFx(result);
       this.actionDelayMs_ = this.executionMessageLines_.length > 0 ? ACTION_ADVANCE_DELAY_MS : 0;
       if (result.fled) {
@@ -898,8 +904,8 @@ export class BattleScene extends Phaser.Scene {
       this.recordEnemyDamageSignals(previousBattle, this.battle_, this.time.now);
       this.updateStepDebugTargets(result, queued);
       this.menuMessage_ = result.message;
-      this.executionMessageLines_ = composeBattleStepLines(result.details);
-      this.playBattleStepSfx(result.details);
+      this.executionMessageLines_ = composeBattleStepLines(result.events);
+      this.playBattleStepSfx(result.events);
       this.triggerBattleStepFx(result);
       if (this.executionMessageLines_.length === 0) {
         this.actionDelayMs_ = 0;
@@ -933,17 +939,18 @@ export class BattleScene extends Phaser.Scene {
     this.beginCommandInputRound();
   }
 
-  private playBattleStepSfx(details: BattleRoundStepNarrationDetails): void {
-    this.playBattleSfxSequence(battleStepSfx(details));
+  private playBattleStepSfx(events: readonly BattleEvent[]): void {
+    this.playBattleSfxSequence(battleStepSfx(events));
   }
 
   private triggerBattleStepFx(result: BattleRoundStepResult): void {
-    const details = result.details;
-    const damage = Math.max(0, Math.floor(details.damage ?? 0));
-    const damaging = damage > 0 && !details.missed;
+    const events = result.events;
+    const action = firstBattleAction(events);
+    const damage = Math.max(0, Math.floor(firstBattleDamage(events)?.amount ?? 0));
+    const damaging = damage > 0 && !battleEventsHaveMiss(events);
 
     if (damaging) {
-      this.startScreenShake(this.shakeIntensityForDamage(damage, Boolean(details.targetDied)));
+      this.startScreenShake(this.shakeIntensityForDamage(damage, battleEventsHaveEnemyDefeated(events)));
       let sparked = false;
       for (const target of uniqueActors(this.impactTargetsForResult(result))) {
         const point = this.impactPointForActor(target);
@@ -958,13 +965,13 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    if (details.kind === "psi" && details.damage !== undefined) {
+    if (action?.action === "psi" && (firstBattleDamage(events) || battleEventsHaveMiss(events))) {
       this.startFlashOverlay(
-        psiElementFlashColor(details.psiId ?? 0),
+        psiElementFlashColor(action.psiId ?? 0),
         BATTLE_FX_PSI_FLASH_ALPHA,
         BATTLE_FX_PSI_FLASH_MS
       );
-    } else if (details.kind === "attack" && !result.skipped) {
+    } else if (action?.action === "attack" && !result.skipped) {
       this.startFlashOverlay(
         BATTLE_FX_ATTACK_FLASH_COLOR,
         BATTLE_FX_ATTACK_FLASH_ALPHA,
@@ -975,7 +982,7 @@ export class BattleScene extends Phaser.Scene {
     if (
       result.actor.side === "enemy" &&
       !result.skipped &&
-      (details.kind === "attack" || details.kind === "psi")
+      (action?.action === "attack" || action?.action === "psi")
     ) {
       this.startEnemyLunge(result.actor.index);
     }
