@@ -6,6 +6,21 @@ import {
   waitForDebug
 } from "./gameHarness";
 
+type BattleSfxCueDebug =
+  | "menuMove"
+  | "menuConfirm"
+  | "menuCancel"
+  | "swing"
+  | "hit"
+  | "smash"
+  | "miss"
+  | "psi"
+  | "heal"
+  | "hpTick"
+  | "enemyDown"
+  | "run"
+  | "victory";
+
 type BattleDebug = {
   mode: "battle";
   phase:
@@ -36,6 +51,8 @@ type BattleDebug = {
   executionStepIndex: number;
   executionStepCount: number;
   executionMessage: string;
+  lastSfx: BattleSfxCueDebug | null;
+  sfxCount: number;
   lastEnemyAction: {
     enemyIndex: number;
     actionIndex: number;
@@ -87,6 +104,8 @@ type BattleRun = {
   sawEnemyDisplayedDecreaseByIndex: boolean[];
   sawEnemyRolling: boolean;
   sawPartyHpDecrease: boolean;
+  sawHpTickSfx: boolean;
+  sawVictorySfx: boolean;
   sawVictorySummary: boolean;
   sawExitTransition: boolean;
 };
@@ -97,9 +116,11 @@ test("enters battle and BASH rolls the enemy HP odometer to a win", async ({ pag
 
   expect(run.initial.enemies.some((enemy) => enemy.hpDisplayed > 0)).toBe(true);
   expect(run.sawEnemyRolling, "an enemy HP odometer should animate during at least one attack").toBe(true);
+  expect(run.sawHpTickSfx, "rolling HP/PP should dispatch hpTick SFX").toBe(true);
   expect(run.enemyDisplayedTotals.some((value) => value < totalDisplayed(run.initial.enemies))).toBe(true);
   expect(run.enemyDisplayedTotals.at(-1)).toBe(0);
   expect(run.final.outcome).toBe("win");
+  expect(run.sawVictorySfx, "winning should dispatch victory SFX").toBe(true);
   expect(run.sawVictorySummary, "victory summary should appear before battle exit").toBe(true);
   expect(run.sawExitTransition, "victory summary should dismiss into the exit transition").toBe(true);
   expect(run.final.victorySummary?.expGained).toBeGreaterThanOrEqual(0);
@@ -149,7 +170,9 @@ test("solo command input queues BASH before execution", async ({ page }) => {
     state.inputMemberIndex === null &&
     state.queuedCount === 1 &&
     state.executionStepIndex >= 0 &&
-    state.executionStepCount > 0
+    state.executionStepCount > 0 &&
+    state.sfxCount > initial.sfxCount + 1 &&
+    isExecutionBattleSfx(state.lastSfx)
   );
 
   expect(execution.party).toHaveLength(1);
@@ -177,7 +200,9 @@ test("multi-member command input supports backtracking and ally recovery targeti
     debug.phase === "command-input" &&
     debug.inputMemberIndex === 1 &&
     debug.queuedCount === 1 &&
-    debug.submenu === "command"
+    debug.submenu === "command" &&
+    debug.lastSfx === "menuConfirm" &&
+    debug.sfxCount > initial.sfxCount
   );
   expect(state.currentActor).toEqual({ side: "party", index: 1 });
   expect(state.command).toBe("BASH");
@@ -186,7 +211,9 @@ test("multi-member command input supports backtracking and ally recovery targeti
     debug.phase === "command-input" &&
     debug.inputMemberIndex === 2 &&
     debug.queuedCount === 2 &&
-    debug.submenu === "command"
+    debug.submenu === "command" &&
+    debug.lastSfx === "menuConfirm" &&
+    debug.sfxCount > state.sfxCount
   );
   expect(state.currentActor).toEqual({ side: "party", index: 2 });
 
@@ -194,7 +221,9 @@ test("multi-member command input supports backtracking and ally recovery targeti
     debug.phase === "command-input" &&
     debug.inputMemberIndex === 1 &&
     debug.queuedCount === 1 &&
-    debug.submenu === "command"
+    debug.submenu === "command" &&
+    debug.lastSfx === "menuCancel" &&
+    debug.sfxCount > state.sfxCount
   );
   expect(state.currentActor).toEqual({ side: "party", index: 1 });
   expect(state.command).toBe("BASH");
@@ -204,7 +233,9 @@ test("multi-member command input supports backtracking and ally recovery targeti
     debug.inputMemberIndex === 1 &&
     debug.queuedCount === 1 &&
     debug.submenu === "command" &&
-    debug.command === "GOODS"
+    debug.command === "GOODS" &&
+    debug.lastSfx === "menuMove" &&
+    debug.sfxCount > state.sfxCount
   );
   expect(state.menuIndex).toBe(1);
 
@@ -213,7 +244,9 @@ test("multi-member command input supports backtracking and ally recovery targeti
     debug.inputMemberIndex === 1 &&
     debug.queuedCount === 1 &&
     debug.submenu === "goods" &&
-    debug.selection === "item:0:103"
+    debug.selection === "item:0:103" &&
+    debug.lastSfx === "menuConfirm" &&
+    debug.sfxCount > state.sfxCount
   );
   expect(state.party[1]?.inventoryCount).toBeGreaterThanOrEqual(1);
 
@@ -223,7 +256,9 @@ test("multi-member command input supports backtracking and ally recovery targeti
     debug.queuedCount === 1 &&
     debug.submenu === "target" &&
     debug.selection === "target:item:0:103" &&
-    debug.partyTargetIndex === 0
+    debug.partyTargetIndex === 0 &&
+    debug.lastSfx === "menuConfirm" &&
+    debug.sfxCount > state.sfxCount
   );
   expect(state.party[state.partyTargetIndex]?.alive ?? false).toBe(true);
 
@@ -233,7 +268,9 @@ test("multi-member command input supports backtracking and ally recovery targeti
     debug.queuedCount === 1 &&
     debug.submenu === "target" &&
     debug.selection === "target:item:0:103" &&
-    debug.partyTargetIndex === 1
+    debug.partyTargetIndex === 1 &&
+    debug.lastSfx === "menuMove" &&
+    debug.sfxCount > state.sfxCount
   );
   expect(state.targetIndex).toBe(0);
   expect(state.party[state.partyTargetIndex]?.alive ?? false).toBe(true);
@@ -242,7 +279,9 @@ test("multi-member command input supports backtracking and ally recovery targeti
     debug.phase === "command-input" &&
     debug.inputMemberIndex === 2 &&
     debug.queuedCount === 2 &&
-    debug.submenu === "command"
+    debug.submenu === "command" &&
+    debug.lastSfx === "menuConfirm" &&
+    debug.sfxCount > state.sfxCount
   );
   expect(state.currentActor).toEqual({ side: "party", index: 2 });
 
@@ -274,6 +313,8 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
   const targetedEnemyIndexes = new Set<number>();
   let sawEnemyRolling = initial.enemies.some((enemy) => enemy.isRolling);
   let sawPartyHpDecrease = false;
+  let sawHpTickSfx = initial.lastSfx === "hpTick";
+  let sawVictorySfx = initial.lastSfx === "victory";
   let sawVictorySummary = false;
   let sawExitTransition = false;
   let final = initial;
@@ -298,6 +339,8 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
     );
     sawEnemyRolling ||= state.enemies.some((enemy) => enemy.isRolling);
     sawPartyHpDecrease ||= partyDisplayed < initialPartyDisplayed;
+    sawHpTickSfx ||= state.lastSfx === "hpTick";
+    sawVictorySfx ||= state.lastSfx === "victory";
     sawVictorySummary ||= state.phase === "victory-summary" && Boolean(state.victorySummary);
     sawExitTransition ||= state.phase === "exit-transition";
 
@@ -318,6 +361,8 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
         sawEnemyDisplayedDecreaseByIndex,
         sawEnemyRolling,
         sawPartyHpDecrease,
+        sawHpTickSfx,
+        sawVictorySfx,
         sawVictorySummary,
         sawExitTransition
       };
@@ -357,6 +402,8 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
   );
   sawEnemyRolling ||= final.enemies.some((enemy) => enemy.isRolling);
   sawPartyHpDecrease ||= totalDisplayed(final.party) < initialPartyDisplayed;
+  sawHpTickSfx ||= final.lastSfx === "hpTick";
+  sawVictorySfx ||= final.lastSfx === "victory";
   sawVictorySummary ||= final.phase === "victory-summary" && Boolean(final.victorySummary);
   if (final.phase === "victory-summary") {
     final = await dismissVictorySummary(page);
@@ -372,6 +419,8 @@ async function runBattleToWin(page: Page): Promise<BattleRun> {
     sawEnemyDisplayedDecreaseByIndex,
     sawEnemyRolling,
     sawPartyHpDecrease,
+    sawHpTickSfx,
+    sawVictorySfx,
     sawVictorySummary,
     sawExitTransition
   };
@@ -539,6 +588,9 @@ function expectBattleNumbers(state: BattleDebug): void {
   expect(Number.isInteger(state.executionStepIndex)).toBe(true);
   expect(Number.isInteger(state.executionStepCount)).toBe(true);
   expect(typeof state.executionMessage).toBe("string");
+  expect(state.lastSfx === null || typeof state.lastSfx === "string").toBe(true);
+  expect(Number.isInteger(state.sfxCount)).toBe(true);
+  expect(state.sfxCount).toBeGreaterThanOrEqual(0);
   expect(["none", "enter", "summary", "exit"]).toContain(state.transitionPhase);
   expect(Array.isArray(state.turnOrder)).toBe(true);
   expect(state.party.length).toBeGreaterThan(0);
@@ -567,6 +619,18 @@ function expectNeverIncreases(values: number[], label: string): void {
   for (let index = 1; index < values.length; index += 1) {
     expect(values[index], `${label} should not increase`).toBeLessThanOrEqual(values[index - 1]);
   }
+}
+
+function isExecutionBattleSfx(cue: BattleSfxCueDebug | null): boolean {
+  return cue === "swing" ||
+    cue === "hit" ||
+    cue === "smash" ||
+    cue === "miss" ||
+    cue === "psi" ||
+    cue === "heal" ||
+    cue === "enemyDown" ||
+    cue === "run" ||
+    cue === "hpTick";
 }
 
 function totalDisplayed(combatants: BattleCombatantDebug[]): number {

@@ -41,6 +41,7 @@ import {
   nextInputState,
   partyInputOrder,
   resolveRoundStep,
+  type BattleRoundStepNarrationDetails,
   type BattleRoundInputState,
   type QueuedCommand
 } from "./battleRound";
@@ -126,6 +127,12 @@ import {
   tick as tickRollingMeter,
   type RollingMeterState
 } from "./rollingMeter";
+import {
+  createBattleSfx,
+  type BattleSfx,
+  type BattleSfxCue
+} from "./audio/battleSfx";
+import { battleStepSfx } from "./battleSfxPlan";
 
 const TAU = Math.PI * 2;
 export const COMMANDS = commandsForCharId(0);
@@ -310,6 +317,10 @@ export class BattleScene extends Phaser.Scene {
   private enemyDefeatedAt: Array<number | null> = [];
   private backgroundAnimation?: AnimatedBattleBackgroundHandle;
   private backgroundDebug: BattleBackgroundDebug = staticBattleBackgroundDebug();
+  private battleSfx_: BattleSfx = createBattleSfx();
+  private lastSfx_: BattleSfxCue | null = null;
+  private sfxCount_ = 0;
+  private nextHpTickSfxAtMs_ = 0;
   private returnTo_?: BattleReturnContext;
   private exitOutcome_: BattleReturnOutcome | null = null;
 
@@ -330,6 +341,7 @@ export class BattleScene extends Phaser.Scene {
     partyMembers?: PartyMember[];
     wallet?: number;
     returnTo?: BattleReturnContext;
+    battleSfx?: BattleSfx;
   }): void {
     this.battleData_ = data.battleData;
     this.group_ = selectBattleGroup(data.battleData, data.groupId);
@@ -383,6 +395,10 @@ export class BattleScene extends Phaser.Scene {
     this.ppMeters.clear();
     this.backgroundAnimation = undefined;
     this.backgroundDebug = staticBattleBackgroundDebug();
+    this.battleSfx_ = data.battleSfx ?? createBattleSfx();
+    this.lastSfx_ = null;
+    this.sfxCount_ = 0;
+    this.nextHpTickSfxAtMs_ = 0;
     this.exitOutcome_ = null;
   }
 
@@ -413,6 +429,7 @@ export class BattleScene extends Phaser.Scene {
     });
     this.drawEnemySprites();
     this.createStatusWindow();
+    this.registerBattleSfxResume();
     registerDiscreteKeys(this.input.keyboard, MENU_UP_KEY_NAMES, () => this.moveMenu("up"));
     registerDiscreteKeys(this.input.keyboard, MENU_DOWN_KEY_NAMES, () => this.moveMenu("down"));
     registerDiscreteKeys(this.input.keyboard, MENU_LEFT_KEY_NAMES, () => this.moveMenu("left"));
@@ -424,6 +441,16 @@ export class BattleScene extends Phaser.Scene {
     this.renderTransition();
     this.renderStatus();
     this.publish();
+  }
+
+  private registerBattleSfxResume(): void {
+    const resume = () => this.battleSfx_.resume();
+    this.input.once("pointerdown", resume);
+    this.input.keyboard?.once("keydown", resume);
+    this.events.once("shutdown", () => {
+      this.input.off("pointerdown", resume);
+      this.input.keyboard?.off("keydown", resume);
+    });
   }
 
   update(_: number, delta: number): void {
@@ -459,6 +486,7 @@ export class BattleScene extends Phaser.Scene {
       const previousBattle = this.battle_;
       this.battle_ = tickBattleMeters(this.battle_, delta);
       this.recordEnemyDamageSignals(previousBattle, this.battle_, this.time.now);
+      this.playRollingMeterSfx();
       this.actionDelayMs_ = Math.max(0, this.actionDelayMs_ - delta);
       this.advanceBattleFlow();
     }
@@ -475,6 +503,7 @@ export class BattleScene extends Phaser.Scene {
     if (delta === null) {
       return;
     }
+    this.playBattleSfxCue("menuMove");
     this.applyInputTransition(nextInputState(this.inputState_, { kind: "move", delta }, this.inputContext()));
     this.renderStatus();
     this.publish();
@@ -495,6 +524,7 @@ export class BattleScene extends Phaser.Scene {
     if (!this.isCommandInputActive()) {
       return;
     }
+    this.playBattleSfxCue("menuConfirm");
     const transition = nextInputState(this.inputState_, { kind: "confirm" }, this.inputContext());
     this.menuMessage_ = transition.input === this.inputState_ ? this.blockedInputMessage() : "";
     this.applyInputTransition(transition);
@@ -507,6 +537,7 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     this.menuMessage_ = "";
+    this.playBattleSfxCue("menuCancel");
     this.applyInputTransition(nextInputState(this.inputState_, { kind: "cancel" }, this.inputContext()));
     this.renderStatus();
     this.publish();
@@ -562,6 +593,7 @@ export class BattleScene extends Phaser.Scene {
     this.pendingFlee_ = false;
     this.roundOrder_ = order;
     this.actionDelayMs_ = 0;
+    this.nextHpTickSfxAtMs_ = 0;
     this.syncMenuFromInputState();
   }
 
@@ -577,6 +609,7 @@ export class BattleScene extends Phaser.Scene {
     this.currentActor_ = null;
     this.resetMenuForActor();
     this.actionDelayMs_ = 0;
+    this.nextHpTickSfxAtMs_ = 0;
     if (this.executionOrder_.length === 0) {
       this.finishExecutionRound();
       return;
@@ -647,6 +680,7 @@ export class BattleScene extends Phaser.Scene {
       this.updateStepDebugTargets(result, queued);
       this.menuMessage_ = result.message;
       this.executionMessageLines_ = composeBattleStepLines(result.details);
+      this.playBattleStepSfx(result.details);
       if (this.executionMessageLines_.length === 0) {
         this.actionDelayMs_ = 0;
         continue;
@@ -669,6 +703,97 @@ export class BattleScene extends Phaser.Scene {
     this.executionMessageLines_ = [];
     this.pendingFlee_ = false;
     this.beginCommandInputRound();
+  }
+
+  private playBattleStepSfx(details: BattleRoundStepNarrationDetails): void {
+    this.playBattleSfxSequence(battleStepSfx(details));
+  }
+
+  private playBattleSfxSequence(cues: readonly BattleSfxCue[]): void {
+    let delayMs = 0;
+    cues.forEach((cue, index) => {
+      if (index > 0) {
+        delayMs += this.battleSfxCueDelay(cues[index - 1], cue);
+      }
+      if (delayMs <= 0) {
+        this.playBattleSfxCue(cue);
+        return;
+      }
+      this.time.delayedCall(delayMs, () => this.playBattleSfxCue(cue));
+    });
+  }
+
+  private battleSfxCueDelay(previous: BattleSfxCue, cue: BattleSfxCue): number {
+    if (cue === "enemyDown") {
+      return 135;
+    }
+    if (previous === "swing" && isBattleImpactCue(cue)) {
+      return 85;
+    }
+    if (previous === "psi" && isBattleImpactCue(cue)) {
+      return 120;
+    }
+    return 45;
+  }
+
+  private playRollingMeterSfx(): void {
+    if (this.phase_ !== "execution" || this.time.now < this.nextHpTickSfxAtMs_ || !this.hasRollingMeter()) {
+      return;
+    }
+    this.playBattleSfxCue("hpTick");
+    this.nextHpTickSfxAtMs_ = this.time.now + 130;
+  }
+
+  private hasRollingMeter(): boolean {
+    return this.battle_.party.some((member) => member.hp.isRolling) ||
+      this.battle_.enemies.some((enemy) => enemy.hp.isRolling) ||
+      [...this.ppMeters.values()].some((meter) => meter.isRolling);
+  }
+
+  private playBattleSfxCue(cue: BattleSfxCue): void {
+    this.lastSfx_ = cue;
+    this.sfxCount_ += 1;
+    switch (cue) {
+      case "menuMove":
+        this.battleSfx_.menuMove();
+        break;
+      case "menuConfirm":
+        this.battleSfx_.menuConfirm();
+        break;
+      case "menuCancel":
+        this.battleSfx_.menuCancel();
+        break;
+      case "swing":
+        this.battleSfx_.swing();
+        break;
+      case "hit":
+        this.battleSfx_.hit();
+        break;
+      case "smash":
+        this.battleSfx_.smash();
+        break;
+      case "miss":
+        this.battleSfx_.miss();
+        break;
+      case "psi":
+        this.battleSfx_.psi();
+        break;
+      case "heal":
+        this.battleSfx_.heal();
+        break;
+      case "hpTick":
+        this.battleSfx_.hpTick();
+        break;
+      case "enemyDown":
+        this.battleSfx_.enemyDown();
+        break;
+      case "run":
+        this.battleSfx_.run();
+        break;
+      case "victory":
+        this.battleSfx_.victory();
+        break;
+    }
   }
 
   private updateStepDebugTargets(
@@ -848,6 +973,7 @@ export class BattleScene extends Phaser.Scene {
       this.transitionPhase_ = "summary";
       return;
     }
+    this.playBattleSfxCue("victory");
     const result = applyVictoryRewards(this.battle_, {
       rng: this.rng_,
       items: this.items_?.items,
@@ -1943,6 +2069,8 @@ export class BattleScene extends Phaser.Scene {
       executionStepIndex: this.executionStepDebugIndex(),
       executionStepCount: this.executionOrder_.length,
       executionMessage: this.executionMessageLines_.join("\n"),
+      lastSfx: this.lastSfx_,
+      sfxCount: this.sfxCount_,
       lastEnemyAction: this.lastEnemyAction_,
       party,
       enemies,
@@ -2502,6 +2630,10 @@ function debugVictorySummary(summary: BattleVictorySummary): {
       toLevel: levelUp.toLevel
     }))
   };
+}
+
+function isBattleImpactCue(cue: BattleSfxCue): boolean {
+  return cue === "hit" || cue === "smash" || cue === "miss";
 }
 
 function enemySpritePoint(stageWidth: number, count: number, index: number, widthBudget: number): { x: number; y: number } {
