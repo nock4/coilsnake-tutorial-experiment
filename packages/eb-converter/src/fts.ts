@@ -67,6 +67,10 @@ export function isSolidSurface(surfaceByte: number): boolean {
   return (surfaceByte & SURFACE_SOLID_MASK) !== 0;
 }
 
+export function isForegroundArrangementCell(cell: Pick<ArrangementCell, "priority">, surfaceByte: number): boolean {
+  return cell.priority || isSolidSurface(surfaceByte);
+}
+
 /**
  * True when every minitile of the arrangement is entirely pixel value 0 —
  * the black "void" filler between disconnected map rooms. Void tiles carry
@@ -187,8 +191,10 @@ export function parseFts(source: string): FtsTileset {
 
 /**
  * Draws one 32x32 map tile (a 4x4 minitile arrangement) into an RGBA buffer.
- * When `priorityOnly` is true, only high-priority minitiles are drawn and all
- * other pixels stay transparent (used for the above-sprites foreground layer).
+ * When `priorityOnly` is true, only above-actor minitiles are drawn and all
+ * other pixels stay transparent. CoilSnake's decompiled .fts files may not
+ * carry SNES priority bits, so solid surface cells are also promoted for
+ * walk-behind occlusion of building tops, walls, and canopies.
  */
 export function drawArrangement(options: {
   tileset: FtsTileset;
@@ -205,7 +211,8 @@ export function drawArrangement(options: {
   for (let cellY = 0; cellY < 4; cellY += 1) {
     for (let cellX = 0; cellX < 4; cellX += 1) {
       const cell = decodeArrangementCell(tileset.arrangements[base + cellY * 4 + cellX]);
-      if (priorityOnly && !cell.priority) {
+      const surfaceByte = tileset.collisions[base + cellY * 4 + cellX];
+      if (priorityOnly && !isForegroundArrangementCell(cell, surfaceByte)) {
         continue;
       }
       const minitile = tileset.minitiles[cell.minitile] ?? tileset.minitiles[0];
