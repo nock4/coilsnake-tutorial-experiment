@@ -10,6 +10,7 @@ import {
   decodeArrangementCell,
   drawArrangement,
   isBlankArrangement,
+  isForegroundArrangementCell,
   parseFts
 } from "../src/fts";
 import {
@@ -101,7 +102,13 @@ describe("fts parser", () => {
     expect(isBlankArrangement(tileset, 1)).toBe(false);
   });
 
-  it("draws background pixels and priority-only foreground pixels", () => {
+  it("classifies priority and solid surface cells as foreground occluders", () => {
+    expect(isForegroundArrangementCell({ priority: true }, 0x00)).toBe(true);
+    expect(isForegroundArrangementCell({ priority: false }, 0x80)).toBe(true);
+    expect(isForegroundArrangementCell({ priority: false }, 0x00)).toBe(false);
+  });
+
+  it("draws background pixels and above-actor foreground pixels", () => {
     const background = new Uint8Array(32 * 32 * 4);
     const foreground = new Uint8Array(32 * 32 * 4);
     drawArrangement({
@@ -126,6 +133,18 @@ describe("fts parser", () => {
     });
     expect([...background.slice(0, 4)]).toEqual([255, 0, 0, 255]); // red minitile pixel
     expect(foreground[3]).toBe(0); // not a priority tile -> transparent
+
+    drawArrangement({
+      tileset,
+      arrangementIndex: 2,
+      palette: tileset.palettes[0],
+      target: foreground,
+      targetWidth: 32,
+      targetX: 0,
+      targetY: 0,
+      priorityOnly: true
+    });
+    expect([...foreground.slice(0, 4)]).toEqual([255, 0, 0, 255]); // solid surfaces occlude actors
 
     drawArrangement({
       tileset,
@@ -655,8 +674,12 @@ describe("world artifact build (synthetic project)", () => {
         foreground: "assets/world/chunks/foreground-0-1.png",
         void: false
       });
-      expect(byChunk.get("1,1")).toMatchObject({ background: "assets/world/chunks/background-1-1.png", foreground: null, void: false });
-      expect(world.counts).toMatchObject({ chunks: 4, chunksWritten: 3, voidChunks: 1, chunkFiles: 4 });
+      expect(byChunk.get("1,1")).toMatchObject({
+        background: "assets/world/chunks/background-1-1.png",
+        foreground: "assets/world/chunks/foreground-1-1.png",
+        void: false
+      });
+      expect(world.counts).toMatchObject({ chunks: 4, chunksWritten: 3, voidChunks: 1, chunkFiles: 5 });
       expect(world.counts.doors).toBe(2);
       expect(world.counts.doorTypes).toEqual({ door: 1, object: 1, stairway: 1 });
       expect(world.doors).toEqual([
@@ -728,6 +751,7 @@ describe("world artifact build (synthetic project)", () => {
         "assets/world/chunks/background-0-1.png",
         "assets/world/chunks/foreground-0-1.png",
         "assets/world/chunks/background-1-1.png",
+        "assets/world/chunks/foreground-1-1.png",
         "assets/sprites/001.png",
         "assets/sprites/005.png",
         "assets/sprites/006.png"
@@ -743,7 +767,7 @@ describe("world artifact build (synthetic project)", () => {
       expect(validated.worldNpcs).toBe(3);
       expect(validated.spriteSheets).toBe(3);
       expect(validated.teleportDestinations).toBe(2);
-      expect(validated.worldAssetsChecked).toBe(7);
+      expect(validated.worldAssetsChecked).toBe(8);
     } finally {
       await rm(temp, { recursive: true, force: true });
     }

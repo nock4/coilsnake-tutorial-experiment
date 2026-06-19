@@ -181,6 +181,7 @@ import {
   spriteOverrideSheet,
   type SpriteOverrideSheet
 } from "./spriteOverrides";
+import { spriteBottomY, spriteSortDepth } from "./renderDepth";
 import {
   resolveConnectedRoomBounds,
   resolveSectorAreaBounds,
@@ -227,6 +228,8 @@ type NpcRuntime = {
   frames: DirectionFrameSequence;
   sprite?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle;
 };
+
+type SortableActor = Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle;
 
 type ActiveNpcDialogue = {
   key: string;
@@ -1135,7 +1138,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (actor instanceof Phaser.GameObjects.Sprite) {
       actor.setFrame(npc.state.player.animFrame);
     }
-    actor.setDepth(npc.state.player.y);
+    this.setActorSortDepth(actor);
     actor.setVisible(this.npcInsideActiveRoom(npc));
   }
 
@@ -1260,7 +1263,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       const frames = this.framesForGroup(spriteGroup);
       const sprite = this.add.sprite(x, y, key, frames[toFacing(direction)][0]);
       sprite.setOrigin(0.5, 1);
-      sprite.setDepth(y);
+      this.setActorSortDepth(sprite);
       return sprite;
     }
     return this.spawnPlaceholderActor(x, y);
@@ -1269,7 +1272,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private spawnPlaceholderActor(x: number, y: number): Phaser.GameObjects.Rectangle {
     const placeholder = this.add.rectangle(x, y, 16, 24, 0x9aa7b8).setStrokeStyle(1, 0xe2e8f0);
     placeholder.setOrigin(0.5, 1);
-    placeholder.setDepth(y);
+    this.setActorSortDepth(placeholder);
     return placeholder;
   }
 
@@ -1284,7 +1287,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     const sprite = this.add.sprite(x, y, textureKey, spriteOverrideFrame(facing, 0, override));
     sprite.setOrigin(override.originX ?? 0.5, override.originY ?? 1);
     sprite.setScale(spriteOverrideScale(override.displayHeight, override.frameHeight));
-    sprite.setDepth(y);
+    this.setActorSortDepth(sprite);
     return sprite;
   }
 
@@ -1519,7 +1522,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       if (this.player instanceof Phaser.GameObjects.Sprite) {
         this.player.setFrame(this.playerState.animFrame);
       }
-      this.player.setDepth(to.y);
+      this.setActorSortDepth(this.player);
     }
     this.refreshStreaming(true);
     this.syncEncounterTileState();
@@ -2990,7 +2993,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       if (this.player instanceof Phaser.GameObjects.Sprite) {
         this.player.setFrame(this.playerState.animFrame);
       }
-      this.player.setDepth(spawn.y);
+      this.setActorSortDepth(this.player);
     }
     this.refreshStreaming(true);
     this.refreshRoomBounds(true);
@@ -3083,7 +3086,15 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (this.player instanceof Phaser.GameObjects.Sprite) {
       this.player.setFrame(this.playerState.animFrame);
     }
-    this.player.setDepth(this.player.y);
+    this.setActorSortDepth(this.player);
+  }
+
+  private setActorSortDepth(actor: SortableActor): void {
+    actor.setDepth(spriteSortDepth(spriteBottomY({
+      y: actor.y,
+      originY: actor.originY,
+      displayHeight: actor.displayHeight
+    })));
   }
 
   private loadedChunkCount(): number {
