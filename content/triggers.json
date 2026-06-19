@@ -1,58 +1,62 @@
 {
   "schema": "swagbound.story-triggers.v1",
-  "comment": "Act-1 Onett gate chain (Swagbound). Bosses are milady-derivatives resolved via enemy-overrides. Structure mirrors EB Onett: arcade boss -> police chief opens the road -> first Sanctuary boss. Coordinates are world pixels near the control spawn (2112,1768) and are tunable to the real arcade/police/Giant-Step spots. Boss-cleared flags are set when each fight starts (bosses block RUN). Dev: ?flags=onett:road_open to skip ahead. Dialogue text is placeholder Swagbound voice — refine freely.",
+  "comment": "Act-1 Swagbound story gate-chain (Signal Town). Maps to the Narrative Flow Map (swagbound-narrative-flowchart-map.md): the public version of Bosch is already moving through town; gates don't ask who Bosch is, they ask which Bosch is processable. Chain: card clique (B7/B8/D8, sets signal:clique_cleared) -> civic proof gate forces the route open (D1/D2/D3, req clique_cleared, sets signal:route_open) -> solid route barrier opens on route_open -> first threshold boss reveals Malady as a symptom and records the first private memory (D4/C6, req route_open). Bosses are milady-derivatives resolved via enemy-overrides (group 448/450 -> Malady, group 36 -> Returnless King). Cleared-flags are set when each fight starts (bosses block RUN). Coordinates are world pixels near the control spawn (2112,1768) and remain tunable to the real clique/gate/threshold spots. Dev: ?flags=signal:route_open to skip ahead.",
   "triggers": [
     {
-      "id": "onett-arcade-malady",
+      "id": "signal-town-card-clique",
       "area": { "x": 2016, "y": 1748, "w": 40, "h": 40 },
       "once": true,
       "dialogue": [
-        "Something oily peels itself off the air. It is wearing your launch announcement as a face.",
-        "MALADY: \"You minted hesitation. I mint certainty. Let's settle which one the town remembers.\""
+        "The arcade light flattens Bosch into a better-lit rumor. A clean copy of his face grins from a card nobody remembers printing.",
+        "MALADY: \"You're late to your own read. The clique already traded the portable you.\"",
+        "These cards don't start here. They point up the line, toward the yard that prints them."
       ],
-      "setFlags": ["onett:frank_cleared"],
+      "setFlags": ["signal:clique_cleared"],
       "battleGroup": 448
     },
     {
-      "id": "onett-police-returnless-king",
+      "id": "relay-gate-returnless-king",
       "area": { "x": 2152, "y": 1760, "w": 40, "h": 24 },
       "once": true,
-      "requireFlags": ["onett:frank_cleared"],
+      "requireFlags": ["signal:clique_cleared"],
       "dialogue": [
-        "The precinct's pride steps out, badge polished to a mirror, opinion already filed.",
-        "RETURNLESS KING: \"No refunds, no exits, no road north. Unless you out-certainty me. Try.\""
+        "The gate files Bosch before it ever looks at him.",
+        "RETURNLESS KING: \"Source. Vessel. Claimant. Derivative. Pick the lie that travels.\"",
+        "Bosch refuses the stamp. The route unlocks anyway -- not because it agreed, because he forced it."
       ],
-      "setFlags": ["onett:road_open"],
+      "setFlags": ["signal:route_open"],
       "battleGroup": 36
     },
     {
-      "id": "onett-road-north-warning",
+      "id": "north-route-gate-warning",
       "area": { "x": 2064, "y": 1740, "w": 96, "h": 16 },
       "once": false,
-      "blockFlags": ["onett:road_open"],
+      "blockFlags": ["signal:route_open"],
       "dialogue": [
-        "Faithful servants are planted across the road north, humming the same three notes.",
-        "The precinct won't lift the line until the Returnless King says so."
+        "The road north is open enough to see and closed enough to mean something.",
+        "A smiling line of route aides keeps checking the same card, never once looking at Bosch.",
+        "\"The road opens once the gate decides which Bosch is leaving. Please hold.\""
       ]
     },
     {
-      "id": "onett-giant-step-malady",
+      "id": "first-threshold-malady",
       "area": { "x": 2072, "y": 1664, "w": 88, "h": 40 },
       "once": true,
-      "requireFlags": ["onett:road_open"],
+      "requireFlags": ["signal:route_open"],
       "dialogue": [
-        "At the first sanctuary the ground remembers a melody it never agreed to.",
-        "MALADY: \"You made it past the gate. Cute. The Step is mine to overwrite.\""
+        "The first threshold hums with a memory too small to sell.",
+        "MALADY: \"A private thing is just a public thing with poor distribution. I'm only the symptom you can see.\"",
+        "The card warms, then fails to describe him. Bosch keeps the damaged version -- and the threshold records it."
       ],
-      "setFlags": ["onett:giant_step_cleared"],
+      "setFlags": ["signal:threshold_cleared", "source:first_witness"],
       "battleGroup": 450
     }
   ],
   "barriers": [
     {
-      "id": "onett-road-north-barrier",
+      "id": "north-route-barrier",
       "area": { "x": 2064, "y": 1716, "w": 96, "h": 24 },
-      "blockFlags": ["onett:road_open"],
+      "blockFlags": ["signal:route_open"],
       "image": "assets/swagbound/overworld-npc/faithful-servants.png"
     }
   ]
