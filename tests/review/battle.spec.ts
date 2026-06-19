@@ -203,6 +203,42 @@ test("solo command input queues BASH before execution", async ({ page }) => {
   assertNoRuntimeIssues(issues);
 });
 
+test("multi-character command input collects every member's command before the round resolves", async ({ page }) => {
+  const issues = attachRuntimeIssueCapture(page);
+  const initial = await gotoBattleCommandInput(page, 3, 38);
+
+  expect(initial.party).toHaveLength(3);
+  expect(initial.inputMemberIndex).toBe(0);
+  expect(initial.queuedCount).toBe(0);
+
+  // Queue member 0 -> input advances to member 1.
+  const afterFirst = await tapBattleKeyUntil(page, "Space", (state) =>
+    state.phase === "execution" || (state.queuedCount === 1 && state.inputMemberIndex === 1)
+  );
+  expect(afterFirst.phase).toBe("command-input");
+  expect(afterFirst.inputMemberIndex).toBe(1);
+
+  // Queue member 1 -> input advances to member 2.
+  const afterSecond = await tapBattleKeyUntil(page, "Space", (state) =>
+    state.phase === "execution" || (state.queuedCount === 2 && state.inputMemberIndex === 2)
+  );
+  expect(afterSecond.phase).toBe("command-input");
+  expect(afterSecond.inputMemberIndex).toBe(2);
+
+  // Queue the last member -> all commands in, round enters execution.
+  // Queue the last member -> all three commands in, the round resolves by speed.
+  const execution = await tapBattleKeyUntil(page, "Space", (state) =>
+    state.phase === "execution" && state.inputMemberIndex === null && state.queuedCount === 3
+  );
+  expect(execution.executionStepCount).toBeGreaterThan(0);
+  // Turn order interleaves all three party members with the live enemies.
+  expect(execution.turnOrder.filter((entry) => entry.side === "party")).toHaveLength(3);
+  expect(execution.turnOrder.some((entry) => entry.side === "enemy")).toBe(true);
+  // (Round resolution itself is covered by the solo + win tests; the multi-character
+  // value asserted here is collecting every member's command, then a unified turn order.)
+  assertNoRuntimeIssues(issues);
+});
+
 test("AUTO persists across rounds and B cancels back to manual command input", async ({ page }) => {
   const issues = attachRuntimeIssueCapture(page);
   const groupId = await readAutoPersistenceBattleGroupId(page);

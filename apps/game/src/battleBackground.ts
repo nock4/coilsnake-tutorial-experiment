@@ -175,6 +175,17 @@ export function createAnimatedBattleBackground(
   }
   context.imageSmoothingEnabled = false;
 
+  // Scratch canvas: per-row scroll/distortion is composited here filter-free, then
+  // copied to the visible canvas with ONE hue-rotate (vs a filter on every row).
+  const scratchCanvas = document.createElement("canvas");
+  scratchCanvas.width = width;
+  scratchCanvas.height = height;
+  const scratch = scratchCanvas.getContext("2d", { willReadFrequently: true });
+  if (!scratch) {
+    return undefined;
+  }
+  scratch.imageSmoothingEnabled = false;
+
   const textureKey = `${sourceTextureKey}-animated`;
   if (scene.textures.exists(textureKey)) {
     scene.textures.remove(textureKey);
@@ -184,7 +195,7 @@ export function createAnimatedBattleBackground(
     return undefined;
   }
   const image = scene.add.image(0, 0, textureKey).setOrigin(0, 0).setDisplaySize(displayWidth, displayHeight);
-  const handle = new CanvasAnimatedBattleBackground(textureKey, source, context, texture, image, background);
+  const handle = new CanvasAnimatedBattleBackground(textureKey, source, context, scratch, texture, image, background);
   handle.update(scene.time.now);
   return handle;
 }
@@ -196,13 +207,14 @@ class CanvasAnimatedBattleBackground implements AnimatedBattleBackgroundHandle {
     private readonly textureKey: string,
     private readonly source: HTMLImageElement | HTMLCanvasElement,
     private readonly context: CanvasRenderingContext2D,
+    private readonly scratch: CanvasRenderingContext2D,
     private readonly texture: Phaser.Textures.CanvasTexture,
     private readonly image: Phaser.GameObjects.Image,
     private readonly background: BattleBackground
   ) {}
 
   update(now: number): BattleBackgroundDebug {
-    this.currentDebug = drawBattleBackgroundFrame(this.context, this.source, this.background, now);
+    this.currentDebug = drawBattleBackgroundFrame(this.context, this.scratch, this.source, this.background, now);
     this.texture.refresh();
     return this.debug();
   }
@@ -219,6 +231,7 @@ class CanvasAnimatedBattleBackground implements AnimatedBattleBackgroundHandle {
 
 function drawBattleBackgroundFrame(
   context: CanvasRenderingContext2D,
+  scratch: CanvasRenderingContext2D,
   source: HTMLImageElement | HTMLCanvasElement,
   background: BattleBackground,
   now: number
@@ -231,15 +244,18 @@ function drawBattleBackgroundFrame(
   const mode = normalizeDistortionMode(background.distortion?.kind);
   const hueDeg = hueRotation(now, background.colorCycle);
 
-  context.clearRect(0, 0, width, height);
-  context.imageSmoothingEnabled = false;
-  // Hue-rotate the whole frame for the light palette-cycle shimmer. Applies to
-  // each per-row drawImage below; reset afterward so it never leaks.
-  context.filter = hueDeg !== 0 ? `hue-rotate(${hueDeg}deg)` : "none";
+  // Composite scroll + distortion to the scratch canvas WITHOUT a filter.
+  scratch.clearRect(0, 0, width, height);
   for (let y = 0; y < height; y += 1) {
     const { sourceX, sourceY } = rowSampleOffsets(mode, y, now, background.distortion, scrollX, scrollY, width, height);
-    drawWrappedRow(context, source, sourceX, sourceY, y, width);
+    drawWrappedRow(scratch, source, sourceX, sourceY, y, width);
   }
+
+  // Copy to the visible canvas with ONE hue-rotate (the light palette-cycle
+  // shimmer) — far cheaper than a filter on every row.
+  context.clearRect(0, 0, width, height);
+  context.filter = hueDeg !== 0 ? `hue-rotate(${hueDeg}deg)` : "none";
+  context.drawImage(scratch.canvas, 0, 0);
   context.filter = "none";
 
   return {
