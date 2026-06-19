@@ -671,6 +671,20 @@ export function tokenizeCcsString(value: string): DialogueSegment[] {
           continue;
         }
       }
+    } else if (value[index] === "<") {
+      // CoilSnake writes EarthBound "compressed text" (saved-phrase dictionary)
+      // references as the decompressed phrase wrapped in angle brackets. The
+      // brackets are annotation only — in-game the phrase renders as plain text.
+      // Recurse on the inner content so nested {macros} (e.g. {itemname(n)}) still
+      // resolve, and drop the delimiters.
+      const close = value.indexOf(">", index + 1);
+      if (close >= 0) {
+        flushText(index);
+        segments.push(...tokenizeCcsString(value.slice(index + 1, close)));
+        index = close + 1;
+        textStart = index;
+        continue;
+      }
     }
     index += 1;
   }

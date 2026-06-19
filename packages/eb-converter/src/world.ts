@@ -15,7 +15,7 @@ import {
   type WorldNpc,
   type WorldRegion
 } from "@eb/schemas";
-import { parseFts, drawArrangement, isBlankArrangement, isSolidSurface, type FtsTileset, type FtsPalette } from "./fts";
+import { parseFts, drawArrangement, isBlankArrangement, isSolidSurface, isOccluderTile, type FtsTileset, type FtsPalette } from "./fts";
 import {
   DOOR_WARP_UNIT_PX,
   doorTriggerToWorldPixel,
@@ -149,6 +149,12 @@ export function composeRegion(options: {
   const missingSectors = new Set<string>();
   const missingTilesets = new Set<number>();
 
+  // Solid-cell count (0..16) per map tile, used after the pass below to decide
+  // which solid tiles occlude actors (see isOccluderTile).
+  const tileSolidCount = new Int16Array(bounds.widthTiles * bounds.heightTiles);
+  type ForegroundTile = { tx: number; ty: number; tileset: FtsTileset; palette: FtsPalette; arrangementIndex: number };
+  const foregroundTiles: ForegroundTile[] = [];
+
   for (let ty = 0; ty < bounds.heightTiles; ty += 1) {
     const mapY = bounds.originTileY + ty;
     const row = mapRows[mapY];
@@ -188,16 +194,9 @@ export function composeRegion(options: {
         targetY: ty * TILE_SIZE,
         priorityOnly: false
       });
-      drawArrangement({
-        tileset: graphics.tileset,
-        arrangementIndex,
-        palette,
-        target: foreground,
-        targetWidth: widthPixels,
-        targetX: tx * TILE_SIZE,
-        targetY: ty * TILE_SIZE,
-        priorityOnly: true
-      });
+      // Foreground is drawn in a second pass once every tile's solidity is known,
+      // so each solid tile can consult the tile directly below it.
+      foregroundTiles.push({ tx, ty, tileset: graphics.tileset, palette, arrangementIndex });
 
       const blankKey = `${sector.tileset}:${arrangementIndex}`;
       let blank = blankCache.get(blankKey);
@@ -214,9 +213,35 @@ export function composeRegion(options: {
           const gy = ty * 4 + cellY;
           surface[gy * collisionWidth + gx] = surfaceByte;
           voidSolid[gy * collisionWidth + gx] = blank ? 1 : 0;
+          if (isSolidSurface(surfaceByte)) {
+            tileSolidCount[ty * bounds.widthTiles + tx] += 1;
+          }
         }
       }
     }
+  }
+
+  // Second pass: draw the above-actor foreground. A solid tile is promoted only
+  // when the tile directly below is also solid (isOccluderTile) — the front face
+  // the player overlaps stays in the background so the player draws over it.
+  // Priority-bit cells always go to the foreground.
+  const solidCountAt = (tx: number, ty: number): number =>
+    tx < 0 || ty < 0 || tx >= bounds.widthTiles || ty >= bounds.heightTiles
+      ? 0
+      : tileSolidCount[ty * bounds.widthTiles + tx];
+  for (const tile of foregroundTiles) {
+    const occluder = isOccluderTile(solidCountAt(tile.tx, tile.ty), solidCountAt(tile.tx, tile.ty + 1));
+    drawArrangement({
+      tileset: tile.tileset,
+      arrangementIndex: tile.arrangementIndex,
+      palette: tile.palette,
+      target: foreground,
+      targetWidth: widthPixels,
+      targetX: tile.tx * TILE_SIZE,
+      targetY: tile.ty * TILE_SIZE,
+      priorityOnly: true,
+      cellInForeground: (cell, surfaceByte) => cell.priority || (occluder && isSolidSurface(surfaceByte))
+    });
   }
 
   if (missingSectors.size > 0) {

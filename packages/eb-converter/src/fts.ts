@@ -72,6 +72,25 @@ export function isForegroundArrangementCell(cell: Pick<ArrangementCell, "priorit
 }
 
 /**
+ * A 4x4 map tile has 16 collision cells. A solid tile is only promoted into the
+ * above-actor foreground layer when the tile directly below it is also at least
+ * this solid — i.e. it is the upper body / roof of a structure, not the front
+ * face the player stands in front of (which must stay below the player so the
+ * player's head draws over it).
+ */
+export const FOREGROUND_SOLID_BELOW_THRESHOLD = 8;
+
+/**
+ * Decides whether a solid map tile should occlude actors (draw on the foreground
+ * layer). `selfSolidCells` / `belowSolidCells` are the solid-cell counts (0..16)
+ * of the tile and the tile directly south of it. Priority-bit cells are handled
+ * separately and always draw on the foreground regardless of this result.
+ */
+export function isOccluderTile(selfSolidCells: number, belowSolidCells: number): boolean {
+  return selfSolidCells > 0 && belowSolidCells >= FOREGROUND_SOLID_BELOW_THRESHOLD;
+}
+
+/**
  * True when every minitile of the arrangement is entirely pixel value 0 —
  * the black "void" filler between disconnected map rooms. Void tiles carry
  * surface byte 0 in the source data (they are unreachable in the original
@@ -205,15 +224,26 @@ export function drawArrangement(options: {
   targetX: number;
   targetY: number;
   priorityOnly: boolean;
+  /**
+   * Optional override deciding which cells land on the foreground layer when
+   * `priorityOnly` is true. Receives the decoded cell and its surface byte. When
+   * omitted, falls back to `isForegroundArrangementCell` (priority OR solid).
+   */
+  cellInForeground?: (cell: ArrangementCell, surfaceByte: number) => boolean;
 }): void {
-  const { tileset, arrangementIndex, palette, target, targetWidth, targetX, targetY, priorityOnly } = options;
+  const { tileset, arrangementIndex, palette, target, targetWidth, targetX, targetY, priorityOnly, cellInForeground } = options;
   const base = arrangementIndex * FTS_CELLS_PER_ARRANGEMENT;
   for (let cellY = 0; cellY < 4; cellY += 1) {
     for (let cellX = 0; cellX < 4; cellX += 1) {
       const cell = decodeArrangementCell(tileset.arrangements[base + cellY * 4 + cellX]);
       const surfaceByte = tileset.collisions[base + cellY * 4 + cellX];
-      if (priorityOnly && !isForegroundArrangementCell(cell, surfaceByte)) {
-        continue;
+      if (priorityOnly) {
+        const include = cellInForeground
+          ? cellInForeground(cell, surfaceByte)
+          : isForegroundArrangementCell(cell, surfaceByte);
+        if (!include) {
+          continue;
+        }
       }
       const minitile = tileset.minitiles[cell.minitile] ?? tileset.minitiles[0];
       for (let py = 0; py < 8; py += 1) {
