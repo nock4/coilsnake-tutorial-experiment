@@ -209,25 +209,25 @@ function footprintCellBounds(
   };
 }
 
-function resolveProbeCellRange(cellSize: number, options: DoorIntentProbeOptions): number {
+function resolveProbeCellRange(_cellSize: number, options: DoorIntentProbeOptions): number {
+  // Probe distances start at the foot box's leading edge (distance 0, see the
+  // probe loops), so the foot box's own reach is already covered by the cell
+  // bounds — we only extend ONE extra cell past it. This makes the warp fire
+  // when the player is right at / one cell from the door, instead of up to ~3
+  // cells early (the previous footprint-derived range double-counted the foot
+  // box and triggered transitions well before the door).
   if (options.maxProbeCells !== undefined) {
     return Math.max(1, Math.floor(options.maxProbeCells));
   }
-  if (!options.footBox || cellSize <= 0) {
-    return 1;
-  }
-  const footprintReachPixels = Math.max(
-    Math.abs(options.footBox.left),
-    Math.abs(options.footBox.right),
-    Math.abs(options.footBox.top),
-    Math.abs(options.footBox.bottom)
-  );
-  return 1 + Math.ceil(footprintReachPixels / cellSize) + 1;
+  return 1;
 }
 
+// Probes start at distance 0 — the foot box's leading edge cell. A door mounted
+// on a solid wall sits exactly at that edge when the player presses against it,
+// so distance 0 catches it on contact; distance 1 gives a single cell of lead.
 function xProbeCells(bounds: CellBounds, dx: -1 | 1, maxDistanceCells: number): DoorCell[] {
   const cells: DoorCell[] = [];
-  for (let distance = 1; distance <= maxDistanceCells; distance += 1) {
+  for (let distance = 0; distance <= maxDistanceCells; distance += 1) {
     const x = dx > 0 ? bounds.maxX + distance : bounds.minX - distance;
     for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
       cells.push({ x, y });
@@ -238,7 +238,7 @@ function xProbeCells(bounds: CellBounds, dx: -1 | 1, maxDistanceCells: number): 
 
 function yProbeCells(bounds: CellBounds, dy: -1 | 1, maxDistanceCells: number): DoorCell[] {
   const cells: DoorCell[] = [];
-  for (let distance = 1; distance <= maxDistanceCells; distance += 1) {
+  for (let distance = 0; distance <= maxDistanceCells; distance += 1) {
     const y = dy > 0 ? bounds.maxY + distance : bounds.minY - distance;
     for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
       cells.push({ x, y });
