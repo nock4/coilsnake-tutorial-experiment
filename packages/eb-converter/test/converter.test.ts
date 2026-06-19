@@ -1307,6 +1307,28 @@ describe("CCScript text segments", () => {
     ]);
   });
 
+  it("unwraps CoilSnake compressed-text <...> annotations to plain text", () => {
+    expect(tokenizeCcsString("@Or... <Mushroomized,> where you have a mushroom on your head.")).toEqual([
+      { kind: "text", value: "Or... " },
+      { kind: "text", value: "Mushroomized," },
+      { kind: "text", value: " where you have a mushroom on your head." }
+    ]);
+  });
+
+  it("resolves macros nested inside a compressed-text <...> reference", () => {
+    expect(tokenizeCcsString("You got the <{itemname(211)}>!")).toEqual([
+      { kind: "text", value: "You got the " },
+      { kind: "substitution", name: "item", args: [211] },
+      { kind: "text", value: "!" }
+    ]);
+  });
+
+  it("leaves an unclosed '<' as literal text", () => {
+    expect(tokenizeCcsString("2 < 3 is true")).toEqual([
+      { kind: "text", value: "2 < 3 is true" }
+    ]);
+  });
+
   it("flattens linebreak and newline segments to newlines", () => {
     const parsed = parseCcsFile("ccscript/example.ccs", 'label:\n"Alpha[00]Beta[01]Gamma" end\n');
     const pages = buildDialoguePages(parsed.commands.slice(1));

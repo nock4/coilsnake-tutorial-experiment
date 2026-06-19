@@ -11,6 +11,8 @@ import {
   drawArrangement,
   isBlankArrangement,
   isForegroundArrangementCell,
+  isOccluderTile,
+  FOREGROUND_SOLID_BELOW_THRESHOLD,
   parseFts
 } from "../src/fts";
 import {
@@ -106,6 +108,18 @@ describe("fts parser", () => {
     expect(isForegroundArrangementCell({ priority: true }, 0x00)).toBe(true);
     expect(isForegroundArrangementCell({ priority: false }, 0x80)).toBe(true);
     expect(isForegroundArrangementCell({ priority: false }, 0x00)).toBe(false);
+  });
+
+  it("promotes a solid tile to the foreground only when the tile below is also solid", () => {
+    // Upper body / roof: solid tile with a solid tile beneath it occludes actors.
+    expect(isOccluderTile(16, 16)).toBe(true);
+    expect(isOccluderTile(16, FOREGROUND_SOLID_BELOW_THRESHOLD)).toBe(true);
+    // Front face: solid tile sitting on a walkable tile stays below the player so
+    // the player's head draws over it (this was the over-occlusion regression).
+    expect(isOccluderTile(16, 0)).toBe(false);
+    expect(isOccluderTile(16, FOREGROUND_SOLID_BELOW_THRESHOLD - 1)).toBe(false);
+    // A non-solid tile never occludes regardless of what is below it.
+    expect(isOccluderTile(0, 16)).toBe(false);
   });
 
   it("draws background pixels and above-actor foreground pixels", () => {
