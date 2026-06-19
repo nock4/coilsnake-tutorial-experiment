@@ -10,6 +10,10 @@ export class GameFlags {
     return this.flags.has(flag);
   }
 
+  unset(flag: string): void {
+    this.flags.delete(flag);
+  }
+
   /** Numeric EarthBound event flags are session-only and start all clear. */
   setNum(flag: number): void {
     this.numericFlags.add(normalizeNum(flag));

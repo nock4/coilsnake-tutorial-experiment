@@ -417,6 +417,44 @@ export const SwagboundDialogueLibrarySchema = z.object({
   }))
 });
 
+/**
+ * Authored story-progression gate. When the player's feet enter `area` and the
+ * flag conditions hold, the trigger fires its effects (dialogue, then flags /
+ * warp / battle). Drives prerequisite gating: e.g. a road area that warps the
+ * player back until the boss-cleared flag is set. Coordinates are world pixels.
+ */
+export const StoryTriggerAreaSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  w: z.number().positive(),
+  h: z.number().positive()
+});
+
+export const StoryTriggerSchema = z.object({
+  id: z.string().min(1),
+  area: StoryTriggerAreaSchema,
+  /** All of these flags must be set for the trigger to fire. */
+  requireFlags: z.array(z.string()).optional(),
+  /** None of these flags may be set for the trigger to fire. */
+  blockFlags: z.array(z.string()).optional(),
+  /** Fire at most once (records trigger:<id>). Default true. Set false for re-armable gates (barricades). */
+  once: z.boolean().optional(),
+  /** Pages shown first (authored Swagbound text); effects run after they close. */
+  dialogue: z.array(z.string()).optional(),
+  setFlags: z.array(z.string()).optional(),
+  clearFlags: z.array(z.string()).optional(),
+  /** Battle group id to start after dialogue (mutually exclusive with warp). */
+  battleGroup: z.number().int().nonnegative().optional(),
+  /** Teleport the player here after dialogue (world pixels). */
+  warp: z.object({ x: z.number(), y: z.number() }).optional()
+});
+
+export const StoryTriggersSchema = z.object({
+  schema: z.literal("swagbound.story-triggers.v1"),
+  comment: z.string().optional(),
+  triggers: z.array(StoryTriggerSchema)
+});
+
 export const TutorialStepStatusSchema = z.enum(["pass", "fail", "blocked", "unknown"]);
 
 export const TutorialStepSchema = z.object({
@@ -1219,6 +1257,9 @@ export type ScriptCommand = z.infer<typeof ScriptCommandSchema>;
 export type NpcReferenceCollection = z.infer<typeof NpcReferenceCollectionSchema>;
 export type CustomDialogue = z.infer<typeof CustomDialogueSchema>;
 export type SwagboundDialogueLibrary = z.infer<typeof SwagboundDialogueLibrarySchema>;
+export type StoryTriggers = z.infer<typeof StoryTriggersSchema>;
+export type StoryTrigger = z.infer<typeof StoryTriggerSchema>;
+export type StoryTriggerArea = z.infer<typeof StoryTriggerAreaSchema>;
 export type SpriteGroupCollection = z.infer<typeof SpriteGroupCollectionSchema>;
 export type TutorialStatus = z.infer<typeof TutorialStatusSchema>;
 export type TutorialStep = z.infer<typeof TutorialStepSchema>;

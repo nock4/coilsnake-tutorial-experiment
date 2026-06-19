@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { isNpcVisibleForEventFlags, type BattleEnemy, type DialoguePage, type EventEffect, type ItemData, type SpriteOverride, type SpriteSheet, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
+import { isNpcVisibleForEventFlags, type BattleEnemy, type DialoguePage, type EventEffect, type ItemData, type SpriteOverride, type SpriteSheet, type StoryTrigger, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
+import { isOnce, resolveSuppression, selectStoryTrigger, triggerFiredFlag } from "./storyTriggers";
 import { rollEncounter, sectorIndexForTile } from "./encounterLogic";
 import { createStatefulRng, seedFromSearch, type StatefulRng } from "./seededRng";
 import type { BattleReturnContext, BattleReturnSource, ChunkedWorldRestore } from "./battleReturn";
@@ -350,6 +351,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private warnedIntroMeteorSkips = new Set<string>();
   private warnedIntroFirstBossSkips = new Set<string>();
   private warnedIntroActorVmStubs = new Set<string>();
+  private warnedStoryTriggerSkips = new Set<string>();
+  private suppressedTriggerId?: string;
+  private lastStoryTriggerId?: string;
   private pendingScriptedDialogueComplete?: () => void;
   private pendingInteractionShopStoreId?: number;
   targetReference = TARGET_REFERENCE;
@@ -610,6 +614,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (this.maybeStartIntroFirstBossBeat()) {
       return;
     }
+    if (this.maybeFireStoryTrigger()) {
+      return;
+    }
     if (this.handleEncounterStep()) {
       return;
     }
@@ -678,6 +685,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.warnedIntroMeteorSkips.clear();
     this.warnedIntroFirstBossSkips.clear();
     this.warnedIntroActorVmStubs.clear();
+    this.warnedStoryTriggerSkips.clear();
+    this.suppressedTriggerId = undefined;
+    this.lastStoryTriggerId = undefined;
     this.prompt = "";
     this.assetsLoaded = false;
     this.pendingInteractionShopStoreId = undefined;
@@ -2588,6 +2598,91 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private startOverriddenScriptedDialogue(pages: DialoguePage[], onComplete: () => void): void {
     this.pendingScriptedDialogueComplete = onComplete;
     this.dialogue.start(pages);
+  }
+
+  /**
+   * Authored story gates (content/triggers.json): when the player's feet enter a
+   * trigger area and its flag conditions hold, fire its effects. Generalizes the
+   * intro-beat pattern to data-driven progression gating (prerequisite flags,
+   * boss battles, flag-gated barricades). Returns true when a trigger fired.
+   */
+  private maybeFireStoryTrigger(): boolean {
+    const triggers = this.data_.storyTriggers?.triggers;
+    if (!triggers || triggers.length === 0) {
+      return false;
+    }
+    if (
+      this.menuState.open ||
+      this.dialogue.open ||
+      this.eventSequence?.running ||
+      this.isDoorFadeActive() ||
+      this.playerState.inputLocked
+    ) {
+      return false;
+    }
+    // Re-arm: drop the suppression once the player walks out of that area.
+    this.suppressedTriggerId = resolveSuppression(this.suppressedTriggerId, triggers, this.playerState);
+    const trigger = selectStoryTrigger(
+      triggers,
+      this.playerState,
+      (flag) => this.gameFlags.has(flag),
+      this.suppressedTriggerId
+    );
+    if (!trigger) {
+      return false;
+    }
+
+    this.suppressedTriggerId = trigger.id;
+    this.lastStoryTriggerId = trigger.id;
+    if (isOnce(trigger)) {
+      this.gameFlags.set(triggerFiredFlag(trigger.id));
+    }
+
+    if (trigger.dialogue && trigger.dialogue.length > 0) {
+      lockPlayer(this.playerState, this.playerFrames);
+      this.startOverriddenScriptedDialogue(
+        buildInlineDialoguePages(trigger.dialogue),
+        () => this.applyStoryTriggerEffects(trigger)
+      );
+    } else {
+      this.applyStoryTriggerEffects(trigger);
+    }
+    this.syncPlayerObject();
+    this.updatePrompt();
+    this.publish();
+    return true;
+  }
+
+  private applyStoryTriggerEffects(trigger: StoryTrigger): void {
+    trigger.setFlags?.forEach((flag) => this.gameFlags.set(flag));
+    trigger.clearFlags?.forEach((flag) => this.gameFlags.unset(flag));
+
+    if (trigger.warp) {
+      this.applyDoorWarp(
+        { x: trigger.warp.x, y: trigger.warp.y, worldPixel: trigger.warp, direction: this.playerState.facing },
+        { kind: "teleport" }
+      );
+      return;
+    }
+
+    if (trigger.battleGroup !== undefined) {
+      if (this.startEventBattle(trigger.battleGroup)) {
+        return;
+      }
+      this.warnStoryTriggerSkip(`battle_unavailable:${trigger.id}`);
+    }
+
+    this.afterDialogueClosed();
+    this.updatePrompt();
+    this.publish();
+  }
+
+  private warnStoryTriggerSkip(reason: string): void {
+    if (this.warnedStoryTriggerSkips.has(reason)) {
+      return;
+    }
+    this.warnedStoryTriggerSkips.add(reason);
+    console.warn("Story trigger effect skipped.", reason);
   }
 
   private completeIntroMeteorDialogue(beat: IntroMeteorBeatStart): void {

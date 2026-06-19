@@ -23,6 +23,7 @@ import {
   ShopDataSchema,
   SpriteOverridesSchema,
   SwagboundDialogueLibrarySchema,
+  StoryTriggersSchema,
   SpriteGroupCollectionSchema,
   SpriteSheetCollectionSchema,
   TeleportDestinationsSchema,
@@ -53,6 +54,7 @@ import {
   type ShopData,
   type SpriteOverrides,
   type SwagboundDialogueLibrary,
+  type StoryTriggers,
   type SpriteGroupCollection,
   type SpriteSheetCollection,
   type TeleportDestinations,
@@ -74,6 +76,7 @@ const CHARACTER_OVERRIDES_FILE = "character-overrides.json";
 const PSI_OVERRIDES_FILE = "psi-overrides.json";
 const ENEMY_OVERRIDES_FILE = "enemy-overrides.json";
 const BATTLE_RULES_FILE = "battle-rules.json";
+const STORY_TRIGGERS_FILE = "triggers.json";
 
 export type GameData = {
   manifest: Manifest;
@@ -82,6 +85,7 @@ export type GameData = {
   addedNpcs: AddedNpcs;
   customDialogue: CustomDialogue;
   dialogueLibrary: SwagboundDialogueLibrary;
+  storyTriggers?: StoryTriggers;
   spriteGroups?: SpriteGroupCollection;
   tutorialStatus?: TutorialStatus;
   validationReport?: ValidationReport;
@@ -166,7 +170,8 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     shops,
     addedNpcs,
     customDialogue,
-    dialogueLibrary
+    dialogueLibrary,
+    storyTriggers
   ] = await Promise.all([
     loadJson(`/generated/${manifest.files.scripts}`, ScriptCollectionSchema),
     loadJson(`/generated/${manifest.files.npcs}`, NpcReferenceCollectionSchema),
@@ -211,7 +216,8 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
       : Promise.resolve(undefined),
     loadJson(`/generated/${ADDED_NPCS_FILE}`, AddedNpcsSchema),
     loadJson(`/generated/${CUSTOM_DIALOGUE_FILE}`, CustomDialogueSchema),
-    loadJson(`/generated/${SWAGBOUND_DIALOGUE_LIBRARY_FILE}`, SwagboundDialogueLibrarySchema)
+    loadJson(`/generated/${SWAGBOUND_DIALOGUE_LIBRARY_FILE}`, SwagboundDialogueLibrarySchema),
+    loadJson(`/generated/${STORY_TRIGGERS_FILE}`, StoryTriggersSchema)
   ]);
   const resolvedCharacters = applyCharacterOverrides(characters, characterOverrides);
   const resolvedItems = applyItemOverrides(items, itemOverrides);
@@ -225,6 +231,7 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     addedNpcs: addedNpcs ?? emptyAddedNpcs(),
     customDialogue: customDialogue ?? emptyCustomDialogue(),
     dialogueLibrary: dialogueLibrary ?? emptyDialogueLibrary(),
+    storyTriggers,
     spriteGroups,
     tutorialStatus,
     validationReport,

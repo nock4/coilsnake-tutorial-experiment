@@ -7,6 +7,7 @@ import {
   EnemyOverridesSchema,
   PsiOverridesSchema,
   SpriteOverridesSchema,
+  StoryTriggersSchema,
   type BackgroundOverrideEntry,
   type SpriteOverride,
   type SpriteOverrides
@@ -37,6 +38,8 @@ export const ENEMY_OVERRIDES_SOURCE = "content/enemy-overrides.json";
 export const ENEMY_OVERRIDES_OUTPUT = "enemy-overrides.json";
 export const BATTLE_RULES_SOURCE = "content/battle-rules.json";
 export const BATTLE_RULES_OUTPUT = "battle-rules.json";
+export const STORY_TRIGGERS_SOURCE = "content/triggers.json";
+export const STORY_TRIGGERS_OUTPUT = "triggers.json";
 const GAME_PUBLIC_ROOT = "apps/game/public";
 
 /**
@@ -71,7 +74,9 @@ async function copyContentOverlaysToGenerated(out: string): Promise<void> {
   await validatePsiOverrides(PSI_OVERRIDES_SOURCE);
   await validateEnemyOverrides(ENEMY_OVERRIDES_SOURCE);
   await validateBattleRules(BATTLE_RULES_SOURCE);
+  await validateStoryTriggers(STORY_TRIGGERS_SOURCE);
   await Promise.all([
+    copyJsonToGenerated(STORY_TRIGGERS_SOURCE, out, STORY_TRIGGERS_OUTPUT),
     copyJsonToGenerated(ADDED_NPCS_SOURCE, out, ADDED_NPCS_OUTPUT),
     copyJsonToGenerated(CUSTOM_DIALOGUE_SOURCE, out, CUSTOM_DIALOGUE_OUTPUT),
     copyJsonToGenerated(SWAGBOUND_DIALOGUE_LIBRARY_SOURCE, out, SWAGBOUND_DIALOGUE_LIBRARY_OUTPUT),
@@ -95,6 +100,10 @@ async function validateEnemyOverrides(source: string): Promise<void> {
 
 async function validateBattleRules(source: string): Promise<void> {
   BattleRulesSchema.parse(JSON.parse(await readFile(resolve(source), "utf8")));
+}
+
+async function validateStoryTriggers(source: string): Promise<void> {
+  StoryTriggersSchema.parse(JSON.parse(await readFile(resolve(source), "utf8")));
 }
 
 async function validateSpriteOverrideImages(source: string): Promise<void> {
