@@ -257,6 +257,31 @@ describe("adjacent door movement intent", () => {
     expect(result.suppressUntilClear).toBe(false);
   });
 
+  it("fires only at / one cell past the foot box, so the transition lands at the door", () => {
+    // The probe reaches the foot box's leading edge plus one cell. A door one cell
+    // beyond the foot box fires; a door two cells beyond does not (it used to fire
+    // up to ~3 cells early because the footprint reach was double-counted).
+    const near = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 304 },
+      { dx: 0, dy: -1 },
+      [door],
+      { suppressUntilClear: false },
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+    const far = resolveAdjacentDoorIntentTrigger(
+      { x: 540, y: 312 },
+      { dx: 0, dy: -1 },
+      [door],
+      { suppressUntilClear: false },
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+
+    expect(near.door).toBe(door); // foot box one cell below the door -> fires
+    expect(far.door).toBeUndefined(); // two cells below -> no early fire
+  });
+
   it("uses the preferred axis first for diagonal input", () => {
     const leftDoor: WorldDoor = {
       ...door,
@@ -283,13 +308,23 @@ describe("adjacent door movement intent", () => {
     expect(preferX.door).toBe(leftDoor);
   });
 
-  it("fires a set-back door when the pressed footprint can reach it through one gap cell", () => {
+  it("fires a wall door one cell past the foot box but not two cells away", () => {
     const setBackDoor: WorldDoor = {
       ...door,
-      worldPixel: { x: 32, y: 32 }
+      worldPixel: { x: 32, y: 32 } // cell (4, 4)
     };
 
-    const result = resolveAdjacentDoorIntentTrigger(
+    // Foot box leading edge one cell from the door -> fires (walk right into it).
+    const adjacent = resolveAdjacentDoorIntentTrigger(
+      { x: 24, y: 32 },
+      { dx: 1, dy: 0 },
+      [setBackDoor],
+      { suppressUntilClear: false },
+      8,
+      { footBox: PLAYER_FOOT_BOX }
+    );
+    // Two cells away -> no early fire; the player must walk closer first.
+    const twoCells = resolveAdjacentDoorIntentTrigger(
       { x: 16, y: 32 },
       { dx: 1, dy: 0 },
       [setBackDoor],
@@ -298,9 +333,10 @@ describe("adjacent door movement intent", () => {
       { footBox: PLAYER_FOOT_BOX }
     );
 
-    expect(result.door).toBe(setBackDoor);
-    expect(result.suppressUntilClear).toBe(true);
-    expect(result.suppressedDoorCell).toEqual({ x: 4, y: 4 });
+    expect(adjacent.door).toBe(setBackDoor);
+    expect(adjacent.suppressUntilClear).toBe(true);
+    expect(adjacent.suppressedDoorCell).toEqual({ x: 4, y: 4 });
+    expect(twoCells.door).toBeUndefined();
   });
 
   it("does not fire footprint-range doors to the side or behind", () => {
@@ -362,7 +398,7 @@ describe("adjacent door movement intent", () => {
     };
 
     const first = resolveAdjacentDoorIntentTrigger(
-      { x: 16, y: 32 },
+      { x: 24, y: 32 },
       { dx: 1, dy: 0 },
       [setBackDoor],
       { suppressUntilClear: false },
@@ -370,7 +406,7 @@ describe("adjacent door movement intent", () => {
       { footBox: PLAYER_FOOT_BOX }
     );
     const held = resolveAdjacentDoorIntentTrigger(
-      { x: 16, y: 32 },
+      { x: 24, y: 32 },
       { dx: 1, dy: 0 },
       [setBackDoor],
       stateFrom(first),
