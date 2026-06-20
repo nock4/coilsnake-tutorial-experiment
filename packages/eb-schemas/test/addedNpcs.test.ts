@@ -3,6 +3,7 @@ import {
   ADDED_NPC_MIN_ID,
   AddedNpcsSchema,
   CustomDialogueSchema,
+  DrifellaBarksSchema,
   SpriteOverridesSchema
 } from "../src/index";
 
@@ -121,6 +122,28 @@ describe("CustomDialogueSchema shop entries", () => {
       schema: "swagbound.custom-dialogue.v1",
       byNpcId: { "1": { heal: false } },
       byTextPointer: {}
+    }).success).toBe(false);
+  });
+});
+
+describe("DrifellaBarksSchema", () => {
+  it("parses the generated NPC-bark phrase pool", () => {
+    const parsed = DrifellaBarksSchema.parse({
+      schema: "swagbound.drifella-barks.v1",
+      comment: "test pool",
+      phrases: ["TAKE ALL YOUR MONEY OUT OF THE BANK", "wake up we gotta turn the power on"]
+    });
+
+    expect(parsed.phrases).toEqual([
+      "TAKE ALL YOUR MONEY OUT OF THE BANK",
+      "wake up we gotta turn the power on"
+    ]);
+  });
+
+  it("rejects an empty phrase pool", () => {
+    expect(DrifellaBarksSchema.safeParse({
+      schema: "swagbound.drifella-barks.v1",
+      phrases: []
     }).success).toBe(false);
   });
 });

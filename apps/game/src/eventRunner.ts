@@ -4,6 +4,7 @@ import {
   type CustomDialogueLookup,
   type DialogueLibraryLookup
 } from "./scriptedDialogueResolver";
+import { isGeneratedDrifellaBarkEntry } from "./customDialogueLookup";
 import type { NpcInteraction } from "@eb/schemas";
 
 export type ReferenceDialogueEvent = { kind: "dialogue"; reference: string; pages?: never };
@@ -137,7 +138,8 @@ export function interactionEvents(
   const reference = (useTextPointer2 ? ccsReference(npc.textPointer2) : undefined)
     ?? ccsReference(npc.textPointer)
     ?? fallbackReference;
-  const customEntry = customDialogue?.byNpcId[String(npc.npcId)]
+  const npcEntry = customDialogue?.byNpcId[String(npc.npcId)];
+  const customEntry = (isGeneratedDrifellaBarkEntry(npcEntry) ? undefined : npcEntry)
     ?? customDialogue?.byTextPointer[reference];
   return [
     ...interactionEntryEvents(customEntry, {

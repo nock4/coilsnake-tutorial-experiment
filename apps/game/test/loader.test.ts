@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { BattleData, CharacterCollection, ItemCollection, Manifest, PsiCollection, ScriptCollection, ScriptCommand } from "@eb/schemas";
-import { applyEnemyOverrides, buildDialogueForReference, loadGameData } from "../src/loader";
+import type { BattleData, CharacterCollection, CustomDialogue, DrifellaBarks, ItemCollection, Manifest, PsiCollection, ScriptCollection, ScriptCommand } from "@eb/schemas";
+import { applyEnemyOverrides, buildCustomDialogueWithDrifellaBarks, buildDialogueForReference, loadGameData } from "../src/loader";
+import { isGeneratedDrifellaBarkEntry } from "../src/customDialogueLookup";
+import { drifellaBarkForNpcId } from "../src/drifellaBarks";
 
 const file = "ccscript/alpha.ccs";
 const sourceLocation = { file, line: 1, column: 1 };
@@ -110,7 +112,62 @@ describe("applyEnemyOverrides", () => {
   });
 });
 
+describe("buildCustomDialogueWithDrifellaBarks", () => {
+  it("layers generated NPC barks under authored byNpcId entries", () => {
+    const customDialogue: CustomDialogue = {
+      schema: "swagbound.custom-dialogue.v1",
+      byNpcId: {
+        "7": { pages: ["Authored page."] }
+      },
+      byTextPointer: {
+        "data_00.l_0x1": { pages: ["Pointer page."] }
+      }
+    };
+    const barks: DrifellaBarks = {
+      schema: "swagbound.drifella-barks.v1",
+      phrases: ["alpha", "beta", "gamma", "delta"]
+    };
+
+    const merged = buildCustomDialogueWithDrifellaBarks(
+      customDialogue,
+      [{ npcId: 7 }, { npcId: 8 }, { npcId: 9 }],
+      barks
+    );
+
+    expect(merged.byNpcId["7"]).toEqual({ pages: ["Authored page."] });
+    expect(isGeneratedDrifellaBarkEntry(merged.byNpcId["7"])).toBe(false);
+    expect(merged.byNpcId["8"]).toMatchObject({
+      pages: [drifellaBarkForNpcId(8, barks.phrases)]
+    });
+    expect(isGeneratedDrifellaBarkEntry(merged.byNpcId["8"])).toBe(true);
+    expect(merged.byNpcId["9"]).toMatchObject({
+      pages: [drifellaBarkForNpcId(9, barks.phrases)]
+    });
+    expect(merged.byTextPointer).toEqual(customDialogue.byTextPointer);
+  });
+});
+
 describe("loadGameData", () => {
+  it("loads the generated Drifella bark pool overlay", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: unknown) => {
+      const path = String(url);
+      if (path.endsWith("/drifella-barks.json")) {
+        return jsonResponse({
+          schema: "swagbound.drifella-barks.v1",
+          phrases: ["wake up we gotta turn the power on"]
+        });
+      }
+      throw new Error(`No fixture for ${path}`);
+    }));
+
+    const data = await loadGameData(syntheticManifest());
+
+    expect(data.drifellaBarks).toEqual({
+      schema: "swagbound.drifella-barks.v1",
+      phrases: ["wake up we gotta turn the power on"]
+    });
+  });
+
   it("applies enemy override names after loading the battle collection", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: unknown) => {
       const path = String(url);

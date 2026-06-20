@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { interactionEvents } from "../src/eventRunner";
+import { GENERATED_DRIFELLA_BARK_SOURCE } from "../src/customDialogueLookup";
 import { GameFlags, talkedFlag } from "../src/gameFlags";
 
 const FALLBACK_REFERENCE = "robot.hello_world";
@@ -142,6 +143,26 @@ describe("interactionEvents", () => {
       }
     })).toEqual([
       { kind: "dialogue", pages: ["NPC page one.", "NPC page two."] },
+      { kind: "setFlag", flag: "npc:745:talked" }
+    ]);
+  });
+
+  it("does not short-circuit generated Drifella barks into direct dialogue pages", () => {
+    const flags = new GameFlags();
+
+    expect(interactionEvents({
+      npcId: 745,
+      textPointer: "robot.greeter"
+    }, FALLBACK_REFERENCE, flags, {
+      byNpcId: {
+        "745": {
+          pages: ["Generated bark."],
+          generated: { source: GENERATED_DRIFELLA_BARK_SOURCE }
+        }
+      },
+      byTextPointer: {}
+    })).toEqual([
+      { kind: "dialogue", reference: "robot.greeter" },
       { kind: "setFlag", flag: "npc:745:talked" }
     ]);
   });

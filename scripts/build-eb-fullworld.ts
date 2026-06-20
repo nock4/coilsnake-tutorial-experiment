@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import {
   BattleRulesSchema,
   BackgroundOverridesSchema,
+  DrifellaBarksSchema,
   EnemyNameFamiliesSchema,
   expandEnemyNameFamilies,
   expandOverworldEnemySkins,
@@ -47,6 +48,8 @@ export const STORY_TRIGGERS_SOURCE = "content/triggers.json";
 export const STORY_TRIGGERS_OUTPUT = "triggers.json";
 export const MUSIC_MANIFEST_SOURCE = "content/music-manifest.json";
 export const MUSIC_MANIFEST_OUTPUT = "music-manifest.json";
+export const DRIFELLA_BARKS_SOURCE = "content/drifella-barks.json";
+export const DRIFELLA_BARKS_OUTPUT = "drifella-barks.json";
 const GAME_PUBLIC_ROOT = "apps/game/public";
 
 /**
@@ -81,6 +84,7 @@ async function copyContentOverlaysToGenerated(out: string): Promise<void> {
   await validateBattleRules(BATTLE_RULES_SOURCE);
   await validateStoryTriggers(STORY_TRIGGERS_SOURCE);
   await validateMusicManifest(MUSIC_MANIFEST_SOURCE);
+  await validateDrifellaBarks(DRIFELLA_BARKS_SOURCE);
   await Promise.all([
     copyJsonToGenerated(STORY_TRIGGERS_SOURCE, out, STORY_TRIGGERS_OUTPUT),
     copyJsonToGenerated(ADDED_NPCS_SOURCE, out, ADDED_NPCS_OUTPUT),
@@ -93,7 +97,8 @@ async function copyContentOverlaysToGenerated(out: string): Promise<void> {
     copyJsonToGenerated(PSI_OVERRIDES_SOURCE, out, PSI_OVERRIDES_OUTPUT),
     generateEnemyOverridesFromFamilies(ENEMY_NAME_FAMILIES_SOURCE, out, ENEMY_OVERRIDES_OUTPUT),
     copyJsonToGenerated(BATTLE_RULES_SOURCE, out, BATTLE_RULES_OUTPUT),
-    copyJsonToGenerated(MUSIC_MANIFEST_SOURCE, out, MUSIC_MANIFEST_OUTPUT)
+    copyJsonToGenerated(MUSIC_MANIFEST_SOURCE, out, MUSIC_MANIFEST_OUTPUT),
+    copyJsonToGenerated(DRIFELLA_BARKS_SOURCE, out, DRIFELLA_BARKS_OUTPUT)
   ]);
 }
 
@@ -151,6 +156,10 @@ async function validateStoryTriggers(source: string): Promise<void> {
 
 async function validateMusicManifest(source: string): Promise<void> {
   MusicManifestSchema.parse(JSON.parse(await readFile(resolve(source), "utf8")));
+}
+
+async function validateDrifellaBarks(source: string): Promise<void> {
+  DrifellaBarksSchema.parse(JSON.parse(await readFile(resolve(source), "utf8")));
 }
 
 function spriteOverrideEntries(overrides: SpriteOverrides): SpriteOverride[] {
