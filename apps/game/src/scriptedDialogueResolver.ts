@@ -1,13 +1,13 @@
 import type {
-  CustomDialogue,
   DialoguePage,
   NumericFlagState,
   ScriptCollection,
   SwagboundDialogueLibrary
 } from "@eb/schemas";
 import { buildDialogueForReference, buildInlineDialoguePages } from "./loader";
+import type { CustomDialogueLookup } from "./customDialogueLookup";
 
-export type CustomDialogueLookup = Pick<CustomDialogue, "byNpcId" | "byTextPointer">;
+export type { CustomDialogueLookup } from "./customDialogueLookup";
 export type DialogueLibraryLookup = Pick<SwagboundDialogueLibrary, "entries">;
 
 export type ScriptedBeatDialogueStartResult = "override" | "eventSequence" | "unavailable";

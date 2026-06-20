@@ -16,6 +16,7 @@ import {
   teleportDirectionToFacing,
   type EventWarpDestination
 } from "../src/eventHost";
+import { GENERATED_DRIFELLA_BARK_SOURCE } from "../src/customDialogueLookup";
 import { GameFlags } from "../src/gameFlags";
 import { PartyState } from "../src/partyState";
 import { DialogueController } from "../src/state";
@@ -269,6 +270,69 @@ describe("RuntimeEventHost", () => {
 
     expect(plainSequence.start("events.plain")).toBe(true);
     expect(plainDialogue.pages.map((page) => page.text)).toEqual(["Plain EB script page."]);
+
+    vi.useRealTimers();
+  });
+
+  it("uses generated NPC barks without skipping shop effects", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+    const file = "ccscript/shop.ccs";
+    const collection = scripts({
+      [file]: [
+        label(file, "start", 1),
+        text(file, "Raw shopkeeper text.", 2),
+        effect(file, 3, { kind: "shop", storeId: 4, raw: "shop" }),
+        runtime(file, "end", 4)
+      ]
+    });
+    const dialogue = new DialogueController();
+    const shops: number[] = [];
+    const host = new RuntimeEventHost({
+      dialogue,
+      flags: new GameFlags(),
+      partyState: new PartyState(),
+      openShop: (storeId) => {
+        shops.push(storeId);
+      },
+      customDialogue: {
+        byNpcId: {
+          "404": {
+            pages: ["wake up we gotta turn the power on"],
+            generated: { source: GENERATED_DRIFELLA_BARK_SOURCE }
+          }
+        },
+        byTextPointer: {}
+      }
+    });
+    const sequence = new RuntimeEventSequence(collection, host);
+    let completed: NonNullable<ReturnType<typeof host.debug>["result"]> | undefined;
+
+    expect(sequence.start("shop.start", {
+      npcId: 404,
+      onComplete: (result) => {
+        completed = result;
+      }
+    })).toBe(true);
+
+    expect(dialogue.open).toBe(true);
+    expect(dialogue.pages.map((page) => page.text)).toEqual(["wake up we gotta turn the power on"]);
+    expect(shops).toEqual([]);
+
+    vi.advanceTimersByTime(200);
+    expect(dialogue.advance()).toBe(false);
+    sequence.confirm();
+
+    expect(shops).toEqual([4]);
+    expect(completed).toMatchObject({
+      status: "aborted",
+      reason: "transition_requested"
+    });
+    expect(host.debug().records).toMatchObject({
+      shops: 1,
+      lastShopStoreId: 4
+    });
 
     vi.useRealTimers();
   });

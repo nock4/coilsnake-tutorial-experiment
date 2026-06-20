@@ -8,6 +8,7 @@ import {
   CharacterCollectionSchema,
   CharacterOverridesSchema,
   CustomDialogueSchema,
+  DrifellaBarksSchema,
   EnemyOverridesSchema,
   EncountersSchema,
   FontCollectionSchema,
@@ -41,6 +42,7 @@ import {
   type CharacterCollection,
   type CharacterOverrides,
   type CustomDialogue,
+  type DrifellaBarks,
   type EnemyOverrides,
   type Encounters,
   type FontCollection,
@@ -66,6 +68,11 @@ import {
   type WorldArtifact,
   type WorldChunkedNpc
 } from "@eb/schemas";
+import {
+  GENERATED_DRIFELLA_BARK_SOURCE,
+  type RuntimeCustomDialogue
+} from "./customDialogueLookup";
+import { drifellaBarkForNpcId } from "./drifellaBarks";
 
 export const TARGET_REFERENCE = "robot.hello_world";
 const ADDED_NPCS_FILE = "added-npcs.json";
@@ -80,13 +87,15 @@ const ENEMY_OVERRIDES_FILE = "enemy-overrides.json";
 const BATTLE_RULES_FILE = "battle-rules.json";
 const STORY_TRIGGERS_FILE = "triggers.json";
 const MUSIC_MANIFEST_FILE = "music-manifest.json";
+const DRIFELLA_BARKS_FILE = "drifella-barks.json";
 
 export type GameData = {
   manifest: Manifest;
   scripts?: ScriptCollection;
   npcs?: NpcReferenceCollection;
   addedNpcs: AddedNpcs;
-  customDialogue: CustomDialogue;
+  customDialogue: RuntimeCustomDialogue;
+  drifellaBarks: DrifellaBarks;
   dialogueLibrary: SwagboundDialogueLibrary;
   storyTriggers?: StoryTriggers;
   spriteGroups?: SpriteGroupCollection;
@@ -146,6 +155,13 @@ function emptyDialogueLibrary(): SwagboundDialogueLibrary {
   };
 }
 
+function emptyDrifellaBarks(): DrifellaBarks {
+  return {
+    schema: "swagbound.drifella-barks.v1",
+    phrases: []
+  };
+}
+
 /** Loads every generated file referenced by an already-validated manifest. */
 export async function loadGameData(manifest: Manifest): Promise<GameData> {
   const [
@@ -176,7 +192,8 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     customDialogue,
     dialogueLibrary,
     storyTriggers,
-    musicManifest
+    musicManifest,
+    drifellaBarks
   ] = await Promise.all([
     loadJson(`/generated/${manifest.files.scripts}`, ScriptCollectionSchema),
     loadJson(`/generated/${manifest.files.npcs}`, NpcReferenceCollectionSchema),
@@ -223,19 +240,27 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     loadJson(`/generated/${CUSTOM_DIALOGUE_FILE}`, CustomDialogueSchema),
     loadJson(`/generated/${SWAGBOUND_DIALOGUE_LIBRARY_FILE}`, SwagboundDialogueLibrarySchema),
     loadJson(`/generated/${STORY_TRIGGERS_FILE}`, StoryTriggersSchema),
-    loadJson(`/generated/${MUSIC_MANIFEST_FILE}`, MusicManifestSchema)
+    loadJson(`/generated/${MUSIC_MANIFEST_FILE}`, MusicManifestSchema),
+    loadJson(`/generated/${DRIFELLA_BARKS_FILE}`, DrifellaBarksSchema)
   ]);
   const resolvedCharacters = applyCharacterOverrides(characters, characterOverrides);
   const resolvedItems = applyItemOverrides(items, itemOverrides);
   const resolvedPsi = applyPsiOverrides(psi, psiOverrides);
   const resolvedBattle = applyEnemyOverrides(battle, enemyOverrides);
+  const resolvedDrifellaBarks = drifellaBarks ?? emptyDrifellaBarks();
+  const resolvedCustomDialogue = buildCustomDialogueWithDrifellaBarks(
+    customDialogue ?? emptyCustomDialogue(),
+    world?.npcs ?? [],
+    resolvedDrifellaBarks
+  );
 
   return {
     manifest,
     scripts,
     npcs,
     addedNpcs: addedNpcs ?? emptyAddedNpcs(),
-    customDialogue: customDialogue ?? emptyCustomDialogue(),
+    customDialogue: resolvedCustomDialogue,
+    drifellaBarks: resolvedDrifellaBarks,
     dialogueLibrary: dialogueLibrary ?? emptyDialogueLibrary(),
     storyTriggers,
     spriteGroups,
@@ -256,6 +281,36 @@ export async function loadGameData(manifest: Manifest): Promise<GameData> {
     items: resolvedItems,
     psi: resolvedPsi,
     shops
+  };
+}
+
+export function buildCustomDialogueWithDrifellaBarks(
+  customDialogue: CustomDialogue,
+  worldNpcs: readonly Pick<WorldChunkedNpc, "npcId">[],
+  drifellaBarks: DrifellaBarks
+): RuntimeCustomDialogue {
+  const byNpcId: RuntimeCustomDialogue["byNpcId"] = { ...customDialogue.byNpcId };
+  if (drifellaBarks.phrases.length === 0) {
+    return {
+      ...customDialogue,
+      byNpcId,
+      byTextPointer: { ...customDialogue.byTextPointer }
+    };
+  }
+  for (const npc of worldNpcs) {
+    const key = String(npc.npcId);
+    if (byNpcId[key]) {
+      continue;
+    }
+    byNpcId[key] = {
+      pages: [drifellaBarkForNpcId(npc.npcId, drifellaBarks.phrases)],
+      generated: { source: GENERATED_DRIFELLA_BARK_SOURCE }
+    };
+  }
+  return {
+    ...customDialogue,
+    byNpcId,
+    byTextPointer: { ...customDialogue.byTextPointer }
   };
 }
 

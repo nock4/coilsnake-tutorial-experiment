@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   AddedNpcsSchema,
   CustomDialogueSchema,
+  DrifellaBarksSchema,
   SwagboundDialogueLibrarySchema,
   WorldChunkedSchema,
   FontCollectionSchema,
@@ -15,7 +16,9 @@ import {
   type GameEvent,
   type FlagReader
 } from "../src/eventRunner";
-import { buildDialogueForReference } from "../src/loader";
+import { buildCustomDialogueWithDrifellaBarks, buildDialogueForReference } from "../src/loader";
+import { isGeneratedDrifellaBarkEntry } from "../src/customDialogueLookup";
+import { drifellaBarkForNpcId } from "../src/drifellaBarks";
 import { measureBitmapTextForFontId } from "../src/bitmapFont";
 import {
   dialogueWindowRect,
@@ -37,9 +40,11 @@ const read = (rel: string) => JSON.parse(readFileSync(resolve(rel), "utf8"));
 const customDialogue = CustomDialogueSchema.parse(read("content/custom-dialogue.json"));
 const dialogueLibrary = SwagboundDialogueLibrarySchema.parse(read("content/swagbound-dialogue-library.json"));
 const addedNpcs = AddedNpcsSchema.parse(read("content/added-npcs.json"));
+const drifellaBarks = DrifellaBarksSchema.parse(read("content/drifella-barks.json"));
 const world = WorldChunkedSchema.parse(read("apps/game/public/generated/world.json"));
 const font = FontCollectionSchema.parse(read("apps/game/public/generated/font.json"));
 const scripts = ScriptCollectionSchema.parse(read("apps/game/public/generated/scripts.json"));
+const runtimeCustomDialogue = buildCustomDialogueWithDrifellaBarks(customDialogue, world.npcs, drifellaBarks);
 
 const customLookup = { byNpcId: customDialogue.byNpcId, byTextPointer: customDialogue.byTextPointer };
 const libLookup = { entries: dialogueLibrary.entries };
@@ -182,6 +187,39 @@ describe("qa npc-dialogue: authored content resolution", () => {
     const events = interactionEvents(npc!, FALLBACK_REFERENCE, unsetFlags, customLookup, libLookup);
     const dialogue = events.find((event) => event.kind === "dialogue");
     expect(dialogue && "pages" in dialogue && dialogue.pages && dialogue.pages.length > 0).toBeTruthy();
+  });
+
+  it("covers every world NPC with an authored override or generated Drifella bark", () => {
+    const missing: number[] = [];
+    let authoredByNpcId = 0;
+    let authoredByTextPointer = 0;
+    let generated = 0;
+
+    for (const npc of world.npcs) {
+      const key = String(npc.npcId);
+      const entry = runtimeCustomDialogue.byNpcId[key];
+      if (!entry) {
+        missing.push(npc.npcId);
+        continue;
+      }
+      if (customDialogue.byNpcId[key]) {
+        authoredByNpcId += 1;
+        expect(entry).toBe(customDialogue.byNpcId[key]);
+        continue;
+      }
+      if (npc.textPointer && customDialogue.byTextPointer[npc.textPointer]) {
+        authoredByTextPointer += 1;
+        continue;
+      }
+
+      generated += 1;
+      expect(isGeneratedDrifellaBarkEntry(entry)).toBe(true);
+      expect(entry.pages).toEqual([drifellaBarkForNpcId(npc.npcId, drifellaBarks.phrases)]);
+    }
+
+    expect(missing).toEqual([]);
+    expect(authoredByNpcId + authoredByTextPointer + generated).toBe(world.npcs.length);
+    expect(generated).toBeGreaterThan(1000);
   });
 });
 

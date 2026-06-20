@@ -521,6 +521,12 @@ export const SwagboundDialogueLibrarySchema = z.object({
   }))
 });
 
+export const DrifellaBarksSchema = z.object({
+  schema: z.literal("swagbound.drifella-barks.v1"),
+  comment: z.string().optional(),
+  phrases: z.array(z.string().trim().min(1)).min(1)
+}).strict();
+
 /**
  * Authored story-progression gate. Area gates fire when the player's feet enter
  * `area` and the flag conditions hold; visible-boss gates instead render a fixed
@@ -1421,6 +1427,7 @@ export type ScriptCommand = z.infer<typeof ScriptCommandSchema>;
 export type NpcReferenceCollection = z.infer<typeof NpcReferenceCollectionSchema>;
 export type CustomDialogue = z.infer<typeof CustomDialogueSchema>;
 export type SwagboundDialogueLibrary = z.infer<typeof SwagboundDialogueLibrarySchema>;
+export type DrifellaBarks = z.infer<typeof DrifellaBarksSchema>;
 export type StoryTriggers = z.infer<typeof StoryTriggersSchema>;
 export type StoryTrigger = z.infer<typeof StoryTriggerSchema>;
 export type StoryTriggerArea = z.infer<typeof StoryTriggerAreaSchema>;
