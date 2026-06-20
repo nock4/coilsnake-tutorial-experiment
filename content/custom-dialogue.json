@@ -1,7 +1,55 @@
 {
   "schema": "swagbound.custom-dialogue.v1",
-  "comment": "Act-1 opening-area placeholder distribution. npcId->character is a FIRST PASS to refine during the upcoming sprite work (e.g. Biscuit should land on the actual dog sprite). House beats wired here; town beats (neighbor Bonkle / corner-shop Sal / burger Morrow) are deferred to the town pass since those NPCs live in separate Onett buildings. See docs/swagbound-eb-act1-arc-mapping.md.",
+  "comment": "Hand-authored Act-1 dialogue (takes precedence over the generated Drifella barks in content/drifella-barks.json). Two passes: (1) the opening-house cast (npcId->character is a first pass to refine during sprite work, e.g. Biscuit on the dog sprite); (2) a Signal Town MILADY-LORE pass on reachable path NPCs (166/167/191/1410/163/136/202/138/146/1411/135/137) seeding the antagonist's lore through townsfolk rumor: Little Swag World is the organic source, Milady/Remilia corrupts it into hostile classification infrastructure (provenance gates, the public version, the Malady as visible symptom). See docs/swagbound-eb-act1-arc-mapping.md.",
   "byNpcId": {
+    "166": { "pages": [
+      "Milady doesn't run Signal Town. The town runs ON her, like a charge nobody itemized.",
+      "You'll meet her paperwork long before you meet her. Most people stop at the paperwork."
+    ] },
+    "167": { "pages": [
+      "I got FREAKING FIRED FROM MILADY'S for asking what the job actually was.",
+      "Turned out the job was being me, at scale, badly. They had a cleaner me by lunch."
+    ] },
+    "191": { "pages": [
+      "Used to be Little Swag World was just where we were from. No stamp, no fee.",
+      "Then Milady filed it as a 'source' and started charging us rent on ourselves. She calls that provenance."
+    ] },
+    "1410": { "pages": [
+      "The gate isn't cruel. It just needs you to prove normal, show left, match background.",
+      "Milady wrote the form. Nobody has ever passed it clean. That part isn't a bug."
+    ] },
+    "163": { "pages": [
+      "Remilia's the one holding the stamp.",
+      "Milady's the one who decided there'd BE a stamp. Different job. Same smirk."
+    ] },
+    "136": { "pages": [
+      "Seen your public version yet? Smiles better than you. Answers before you do.",
+      "Milady prefers it, honestly. Less upkeep, no opinions of its own."
+    ] },
+    "202": { "pages": [
+      "Don't stare at the cards too long. The cards read you back.",
+      "Whatever they find, they file straight up the line. Everything up the line is Milady's."
+    ] },
+    "138": { "pages": [
+      "They say Milady was born down in the source somewhere. They say she's already pregnant with the next one.",
+      "They say a lot. The saying sticks better than the truth. That stickiness IS the machine."
+    ] },
+    "146": { "pages": [
+      "That Malady up the route? That's only the part you're allowed to see.",
+      "Milady's the part already inside your distribution. You can't out-run your own reach."
+    ] },
+    "1411": { "pages": [
+      "My cousin tried to opt out of provenance.",
+      "Now there's a cleaner cousin downtown, doing my cousin better than he ever did. We don't speak. He files reports."
+    ] },
+    "135": { "pages": [
+      "Everything here points up the line. Up the line is the yard, and the yard is Milady's.",
+      "And Milady's is everywhere, which is exactly how you know it's nowhere good."
+    ] },
+    "137": { "pages": [
+      "I'm not scared of Milady.",
+      "I'm scared of how reasonable she makes the paperwork sound. You sign before you notice you agreed."
+    ] },
     "3": {
       "ref": "target:bosch-main-room-v0:signal-pet-gate"
     },
