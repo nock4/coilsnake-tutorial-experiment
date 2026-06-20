@@ -30,6 +30,30 @@ export const EventActorMoveSelectorSchema = z.union([
 
 export type EventActorMoveSelector = z.infer<typeof EventActorMoveSelectorSchema>;
 
+const OpeningCutsceneActorMoveStepSchema = z.object({
+  actorMove: z.object({
+    actor: EventActorMoveSelectorSchema,
+    to: z.object({
+      x: z.number(),
+      y: z.number()
+    }).strict(),
+    run: z.boolean().optional()
+  }).strict()
+}).strict();
+
+export const OpeningCutsceneStepSchema = z.union([
+  OpeningCutsceneActorMoveStepSchema,
+  z.object({
+    wait: z.number().int().nonnegative()
+  }).strict()
+]);
+
+export const OpeningCutsceneSchema = z.object({
+  schema: z.literal("swagbound.opening-cutscene.v1"),
+  comment: z.string().optional(),
+  steps: z.array(OpeningCutsceneStepSchema)
+}).strict();
+
 const PartyStatOpSchema = z.enum([
   "heal_percent",
   "hurt_percent",
@@ -1467,6 +1491,8 @@ export type ShopData = z.infer<typeof ShopDataSchema>;
 export type ShopEntry = z.infer<typeof ShopEntrySchema>;
 export type DialogueSegment = z.infer<typeof DialogueSegmentSchema>;
 export type EventEffect = z.infer<typeof EventEffectSchema>;
+export type OpeningCutscene = z.infer<typeof OpeningCutsceneSchema>;
+export type OpeningCutsceneStep = z.infer<typeof OpeningCutsceneStepSchema>;
 export type EventRecoveryEffect = Extract<
   EventEffect,
   { kind: "healHp" | "healHpPercent" | "recoverPp" | "recoverPpPercent" }

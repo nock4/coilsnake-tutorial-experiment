@@ -9,6 +9,7 @@ import {
   expandEnemyNameFamilies,
   expandOverworldEnemySkins,
   MusicManifestSchema,
+  OpeningCutsceneSchema,
   OverworldEnemySkinsSchema,
   PsiOverridesSchema,
   SpriteOverridesSchema,
@@ -50,6 +51,8 @@ export const MUSIC_MANIFEST_SOURCE = "content/music-manifest.json";
 export const MUSIC_MANIFEST_OUTPUT = "music-manifest.json";
 export const DRIFELLA_BARKS_SOURCE = "content/drifella-barks.json";
 export const DRIFELLA_BARKS_OUTPUT = "drifella-barks.json";
+export const OPENING_CUTSCENE_SOURCE = "content/opening-cutscene.json";
+export const OPENING_CUTSCENE_OUTPUT = "opening-cutscene.json";
 const GAME_PUBLIC_ROOT = "apps/game/public";
 
 /**
@@ -78,6 +81,13 @@ async function copyJsonToGenerated(source: string, out: string, outputName: stri
   await copyFile(resolve(source), target);
 }
 
+async function copyOptionalJsonToGenerated(source: string, out: string, outputName: string): Promise<void> {
+  if (!(await fileExists(source))) {
+    return;
+  }
+  await copyJsonToGenerated(source, out, outputName);
+}
+
 async function copyContentOverlaysToGenerated(out: string): Promise<void> {
   await validateBackgroundOverrideImages(BACKGROUND_OVERRIDES_SOURCE);
   await validatePsiOverrides(PSI_OVERRIDES_SOURCE);
@@ -85,6 +95,7 @@ async function copyContentOverlaysToGenerated(out: string): Promise<void> {
   await validateStoryTriggers(STORY_TRIGGERS_SOURCE);
   await validateMusicManifest(MUSIC_MANIFEST_SOURCE);
   await validateDrifellaBarks(DRIFELLA_BARKS_SOURCE);
+  await validateOpeningCutscene(OPENING_CUTSCENE_SOURCE);
   await Promise.all([
     copyJsonToGenerated(STORY_TRIGGERS_SOURCE, out, STORY_TRIGGERS_OUTPUT),
     copyJsonToGenerated(ADDED_NPCS_SOURCE, out, ADDED_NPCS_OUTPUT),
@@ -98,7 +109,8 @@ async function copyContentOverlaysToGenerated(out: string): Promise<void> {
     generateEnemyOverridesFromFamilies(ENEMY_NAME_FAMILIES_SOURCE, out, ENEMY_OVERRIDES_OUTPUT),
     copyJsonToGenerated(BATTLE_RULES_SOURCE, out, BATTLE_RULES_OUTPUT),
     copyJsonToGenerated(MUSIC_MANIFEST_SOURCE, out, MUSIC_MANIFEST_OUTPUT),
-    copyJsonToGenerated(DRIFELLA_BARKS_SOURCE, out, DRIFELLA_BARKS_OUTPUT)
+    copyJsonToGenerated(DRIFELLA_BARKS_SOURCE, out, DRIFELLA_BARKS_OUTPUT),
+    copyOptionalJsonToGenerated(OPENING_CUTSCENE_SOURCE, out, OPENING_CUTSCENE_OUTPUT)
   ]);
 }
 
@@ -162,6 +174,13 @@ async function validateDrifellaBarks(source: string): Promise<void> {
   DrifellaBarksSchema.parse(JSON.parse(await readFile(resolve(source), "utf8")));
 }
 
+async function validateOpeningCutscene(source: string): Promise<void> {
+  if (!(await fileExists(source))) {
+    return;
+  }
+  OpeningCutsceneSchema.parse(JSON.parse(await readFile(resolve(source), "utf8")));
+}
+
 function spriteOverrideEntries(overrides: SpriteOverrides): SpriteOverride[] {
   return [
     overrides.player,
@@ -192,6 +211,15 @@ async function validatePublicAssetImage(image: string, label: string): Promise<v
     throw new Error(`${label} escapes ${GAME_PUBLIC_ROOT}: ${image}`);
   }
   await access(imagePath);
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(resolve(path));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function main(): Promise<void> {

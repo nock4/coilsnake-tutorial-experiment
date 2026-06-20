@@ -72,6 +72,7 @@ import {
   resolveScriptedDialoguePages,
   startScriptedBeatDialogue
 } from "./scriptedDialogueResolver";
+import { OpeningCutsceneActorHoldSet } from "./openingCutsceneActorHold";
 import {
   resolveTeleportDestination,
   RuntimeEventHost,
@@ -118,9 +119,11 @@ import {
 } from "./state";
 import { createDialogueResolver, textSpeedCpsFromSearch } from "./dialogueRenderer";
 import {
+  AUTHORED_OPENING_CUTSCENE_REF,
   INTRO_ACTOR_VM_STUBS,
   INTRO_BEDROOM_OPENING_DONE_FLAG,
   INTRO_METEOR_BEAT_FIRED_FLAG,
+  buildOpeningCutsceneScript,
   decideIntroMeteorBattleTransition,
   decideIntroMeteorBeatFire,
   resolveIntroMeteorBeatStart,
@@ -292,6 +295,7 @@ type CutsceneMoveState = {
   actorLabel: string;
   npcKey?: string;
   restoreNpcPaused?: boolean;
+  holdNpcUntilStartupFinalize?: boolean;
   target: { x: number; y: number };
   run: boolean;
   elapsedMs: number;
@@ -428,6 +432,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private startupMode: "startup" | "opening" = "startup";
   private startupInitialSpawn?: { x: number; y: number };
   private startupFallbackReason?: string;
+  private authoredOpeningCutsceneRunActive = false;
+  private readonly openingCutsceneActorHolds = new OpeningCutsceneActorHoldSet();
   private newGameOpening?: NewGameOpeningStart;
   private introMeteorBeat?: IntroMeteorBeatStart;
   private warnedIntroMeteorSkips = new Set<string>();
@@ -785,6 +791,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.startupMode = "startup";
     this.startupInitialSpawn = undefined;
     this.startupFallbackReason = undefined;
+    this.authoredOpeningCutsceneRunActive = false;
+    this.openingCutsceneActorHolds.clear();
     this.newGameOpening = undefined;
     this.introMeteorBeat = undefined;
     this.warnedIntroMeteorSkips.clear();
@@ -2561,6 +2569,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       actor,
       actorLabel,
       ...(npc ? { npcKey: npc.key, restoreNpcPaused: npc.state.paused } : {}),
+      ...(npc && this.authoredOpeningCutsceneRunActive ? { holdNpcUntilStartupFinalize: true } : {}),
       target,
       run: effect.run === true,
       elapsedMs: 0,
@@ -2697,8 +2706,16 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     const npc = this.npcRuntimes.get(move.npcKey);
     if (npc) {
+      if (move.holdNpcUntilStartupFinalize) {
+        this.openingCutsceneActorHolds.hold(move.npcKey, npc.state, move.restoreNpcPaused);
+        return;
+      }
       npc.state.paused = move.restoreNpcPaused;
     }
+  }
+
+  private releaseOpeningCutsceneActorHolds(): void {
+    this.openingCutsceneActorHolds.release((key) => this.npcRuntimes.get(key)?.state);
   }
 
   private setCutsceneActorPosition(runtime: CutsceneMoveActorRuntime, point: { x: number; y: number }): void {
@@ -2751,22 +2768,67 @@ export class ChunkedWorldScene extends Phaser.Scene {
       finalPlayerControllable: false
     });
 
-    const started = this.eventSequence?.start(decision.reference, {
+    if (!this.startAuthoredOpeningCutsceneBeforeStartup(opening, decision.reference)) {
+      this.startNewGameStartupEvent(decision.reference);
+    }
+  }
+
+  private startAuthoredOpeningCutsceneBeforeStartup(
+    opening: NewGameOpeningStart | undefined,
+    startupReference: string
+  ): boolean {
+    if (!opening) {
+      return false;
+    }
+    const script = buildOpeningCutsceneScript(this.data_.openingCutscene);
+    if (!script) {
+      return false;
+    }
+
+    const sequence = new RuntimeEventSequence(script, this.createRuntimeEventHost());
+    this.eventSequence = sequence;
+    this.authoredOpeningCutsceneRunActive = true;
+    const started = sequence.start(AUTHORED_OPENING_CUTSCENE_REF, {
+      onComplete: () => {
+        this.authoredOpeningCutsceneRunActive = false;
+        this.startNewGameStartupEvent(startupReference, { resetEventRuntime: true });
+      }
+    });
+    if (!started) {
+      this.authoredOpeningCutsceneRunActive = false;
+      this.configureEventRuntime();
+      return false;
+    }
+    this.updatePrompt();
+    return true;
+  }
+
+  private startNewGameStartupEvent(
+    reference: string,
+    options: { resetEventRuntime?: boolean } = {}
+  ): void {
+    if (options.resetEventRuntime) {
+      this.configureEventRuntime();
+    }
+
+    const started = this.eventSequence?.start(reference, {
       onComplete: (result) => this.finalizeNewGameStartup(result)
     }) ?? false;
     if (!started) {
+      this.authoredOpeningCutsceneRunActive = false;
+      this.releaseOpeningCutsceneActorHolds();
       this.startupRunActive = false;
       this.startupMode = "startup";
       unlockPlayer(this.playerState);
       this.newGameStartupRecord = this.startupRecord({
         attempted: true,
         started: false,
-        reference: decision.reference,
+        reference,
         status: "skipped",
         skippedReason: "unresolved_ref",
         fallbackApplied: true,
         fallbackReason: "unresolved_ref",
-        initialPlayer: spawn,
+        initialPlayer: this.startupInitialSpawn,
         finalPlayer: this.currentPlayerPoint(),
         finalPlayerControllable: this.isPlayerControllable()
       });
@@ -2776,7 +2838,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
 
     if (this.startupRunActive && this.eventSequence?.running && this.startupMode === "startup") {
-      this.abortStartupAtControlStart(decision.reference);
+      this.abortStartupAtControlStart(reference);
       return;
     }
     this.updatePrompt();
@@ -2798,6 +2860,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     this.startupRunActive = false;
     this.startupMode = "startup";
+    this.authoredOpeningCutsceneRunActive = false;
     if (completedOpening) {
       this.gameFlags.set(INTRO_BEDROOM_OPENING_DONE_FLAG);
       void this.music.play("overworld");
@@ -2806,6 +2869,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       this.dialogue.close();
     }
     this.afterDialogueClosed();
+    this.releaseOpeningCutsceneActorHolds();
     const finalPlayer = this.currentPlayerPoint();
     this.newGameStartupRecord = this.startupRecord({
       attempted: true,
@@ -2851,6 +2915,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.eventSequence?.abort("startup_control_start");
     this.startupRunActive = false;
     this.startupMode = "startup";
+    this.authoredOpeningCutsceneRunActive = false;
     if (completedOpening) {
       this.gameFlags.set(INTRO_BEDROOM_OPENING_DONE_FLAG);
       void this.music.play("overworld");
@@ -2859,6 +2924,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       this.dialogue.close();
     }
     this.afterDialogueClosed();
+    this.releaseOpeningCutsceneActorHolds();
     const eventDebug = this.eventSequence?.debug();
     const result = eventDebug?.result;
     this.newGameStartupRecord = this.startupRecord({
