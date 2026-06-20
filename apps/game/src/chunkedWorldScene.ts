@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { isNpcVisibleForEventFlags, type BattleEnemy, type DialoguePage, type EventEffect, type ItemData, type SpriteOverride, type SpriteSheet, type StoryBarrier, type StoryTrigger, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
 import { barrierBlocksPoint, isBarrierActive, isOnce, resolveStoryGateReturn, resolveSuppression, selectStoryTrigger, triggerFiredFlag } from "./storyTriggers";
-import { rollEncounter, sectorIndexForTile } from "./encounterLogic";
+import { sectorIndexForTile } from "./encounterLogic";
+import { selectSectorEnemyGroup, sectorSpawnBudget, touchAdvantage } from "./overworldEnemies";
 import { createStatefulRng, seedFromSearch, type StatefulRng } from "./seededRng";
 import type { BattleReturnContext, BattleReturnSource, ChunkedWorldRestore, PendingStoryGate } from "./battleReturn";
 import {
@@ -235,6 +236,16 @@ type NpcRuntime = {
   sprite?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle;
 };
 
+/** A visible roaming overworld enemy that starts a battle on contact with the player. */
+type OverworldEnemyRuntime = {
+  key: string;
+  enemyGroup: number;
+  spriteGroup: number | undefined;
+  state: NpcRuntimeState;
+  frames: DirectionFrameSequence;
+  sprite?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle;
+};
+
 type NpcSpriteOverrideResolution = {
   source: "npc" | "spriteGroup";
   id: number;
@@ -267,6 +278,16 @@ type DoorFadePhase = "none" | "fade-out" | "fade-in";
 const DOOR_FADE_OVERLAY_DEPTH = 1_000_000;
 const COLLISION_OVERLAY_DEPTH = 150_000;
 const ENCOUNTER_RETURN_COOLDOWN_MS = 1_500;
+// Visible overworld enemies (EarthBound-style touch-to-battle): tuning.
+const OVERWORLD_ENEMY_GLOBAL_CAP = 4;
+const OVERWORLD_ENEMY_SPAWN_INTERVAL_MS = 900;
+const OVERWORLD_ENEMY_CONTACT_PX = 12;
+const OVERWORLD_ENEMY_MIN_SPAWN_DIST_PX = 64;
+const OVERWORLD_ENEMY_MAX_SPAWN_DIST_PX = 140;
+const OVERWORLD_ENEMY_DESPAWN_DIST_PX = 320;
+const OVERWORLD_ENEMY_WANDER_RADIUS_PX = 40;
+const OVERWORLD_ENEMY_WANDER_SPEED_PX_PER_SEC = 30;
+const OVERWORLD_ENEMY_SPAWN_ATTEMPTS = 8;
 const ROOM_MASK_EDGE_INSET_SCREEN_PX = 0.5;
 
 type TilePoint = { x: number; y: number };
@@ -339,6 +360,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private currentSectorIndex?: number;
   private lastPlayerTile?: TilePoint;
   private lastEncounterGroup?: number;
+  private overworldEnemies = new Map<string, OverworldEnemyRuntime>();
+  private overworldEnemySeq = 0;
+  private overworldEnemySpawnCooldownMs = 0;
   private forceEncounterHook?: (groupId?: number, advantage?: unknown) => ForceEncounterResult;
   private newGameStartupRecord?: NewGameStartupRunDebug;
   private startupRunActive = false;
@@ -632,7 +656,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (this.maybeFireStoryTrigger()) {
       return;
     }
-    if (this.handleEncounterStep()) {
+    if (this.manageOverworldEnemies(delta)) {
       return;
     }
     this.updatePrompt();
@@ -657,6 +681,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.chunkByKey.clear();
     this.npcPlacementsByChunk.clear();
     this.npcRuntimes.clear();
+    this.clearOverworldEnemies();
     this.chunkObjects.clear();
     this.loadingTextureKeys.clear();
     this.loadingSheetGroups.clear();
@@ -2915,28 +2940,203 @@ export class ChunkedWorldScene extends Phaser.Scene {
     console.warn("Skipping unsupported new-game opening event op.", detail);
   }
 
-  private handleEncounterStep(): boolean {
-    const crossedTile = this.syncEncounterTileState();
-    if (!crossedTile || !this.canRollEncounter()) {
+  // --- Visible overworld enemies (EarthBound-style touch-to-battle) -----------
+
+  /**
+   * Step, spawn, and collide visible roaming enemies in danger sectors. This
+   * replaces invisible step-based random encounters: a battle starts only when
+   * an enemy sprite actually touches the player. Returns true when a battle
+   * was started (so the update loop bails for the scene transition).
+   */
+  private manageOverworldEnemies(deltaMs: number): boolean {
+    if (!this.data_.encounters || !this.data_.battle || !this.player) {
       return false;
     }
-    const result = rollEncounter(this.currentEncounterSector(), () => this.encounterRng.next(), {
-      isFlagSet: (flag) => this.gameFlags.isSet(flag)
-    });
-    if (!result) {
-      return false;
+    this.syncEncounterTileState();
+    this.overworldEnemySpawnCooldownMs = Math.max(0, this.overworldEnemySpawnCooldownMs - deltaMs);
+    this.stepOverworldEnemies(deltaMs);
+    if (this.canSpawnOverworldEnemy()) {
+      this.trySpawnOverworldEnemy();
     }
-    return this.startEncounterBattle(result.enemyGroup);
+    this.publishOverworldEnemyDebug();
+    return this.checkOverworldEnemyContact();
   }
 
-  private canRollEncounter(): boolean {
-    return this.encounterEnabled
-      && this.encounterCooldownMs <= 0
-      && Boolean(this.data_.encounters && this.data_.battle)
-      && !this.menuState.open
+  private publishOverworldEnemyDebug(): void {
+    (globalThis as Record<string, unknown>).__overworldEnemies = {
+      count: this.overworldEnemies.size,
+      enemies: [...this.overworldEnemies.values()].map((enemy) => ({
+        enemyGroup: enemy.enemyGroup,
+        spriteGroup: enemy.spriteGroup,
+        x: Math.round(enemy.state.player.x),
+        y: Math.round(enemy.state.player.y)
+      }))
+    };
+  }
+
+  /** Enemies roam and battles trigger only while the player has free control. */
+  private overworldPlayActive(): boolean {
+    return !this.menuState.open
       && !this.dialogue.open
       && !this.eventSequence?.running
-      && !this.isDoorFadeActive();
+      && !this.isDoorFadeActive()
+      && !this.playerState.inputLocked;
+  }
+
+  private stepOverworldEnemies(deltaMs: number): void {
+    const active = this.overworldPlayActive();
+    for (const [key, enemy] of this.overworldEnemies) {
+      if (this.distanceToPlayer(enemy.state.player) > OVERWORLD_ENEMY_DESPAWN_DIST_PX) {
+        enemy.sprite?.destroy();
+        this.overworldEnemies.delete(key);
+        continue;
+      }
+      if (active) {
+        stepNpc(enemy.state, {
+          deltaMs,
+          bounds: this.movementBounds(),
+          // Respect terrain (walls/water) but pass through actors so they can reach the player.
+          blocked: (x, y) => this.blocked(x, y),
+          frames: enemy.frames
+        });
+      }
+      this.upgradeOverworldEnemySprite(enemy);
+      this.syncOverworldEnemy(enemy);
+    }
+  }
+
+  /** Swap a placeholder for the real sprite once its overworld sheet finishes loading. */
+  private upgradeOverworldEnemySprite(enemy: OverworldEnemyRuntime): void {
+    if (enemy.sprite instanceof Phaser.GameObjects.Sprite || enemy.spriteGroup === undefined) {
+      return;
+    }
+    if (!this.textures.exists(`sheet-${enemy.spriteGroup}`)) {
+      return;
+    }
+    enemy.sprite?.destroy();
+    enemy.sprite = this.spawnActor(enemy.state.player.x, enemy.state.player.y, enemy.spriteGroup, enemy.state.player.facing);
+  }
+
+  private syncOverworldEnemy(enemy: OverworldEnemyRuntime): void {
+    const actor = enemy.sprite;
+    if (!actor) {
+      return;
+    }
+    actor.x = enemy.state.player.x;
+    actor.y = enemy.state.player.y;
+    if (actor instanceof Phaser.GameObjects.Sprite) {
+      actor.setFrame(enemy.state.player.animFrame);
+    }
+    this.setActorSortDepth(actor);
+  }
+
+  private canSpawnOverworldEnemy(): boolean {
+    return this.encounterEnabled
+      && this.encounterCooldownMs <= 0
+      && this.overworldEnemySpawnCooldownMs <= 0
+      && this.overworldEnemies.size < OVERWORLD_ENEMY_GLOBAL_CAP
+      && this.overworldPlayActive();
+  }
+
+  private trySpawnOverworldEnemy(): void {
+    const sector = this.currentEncounterSector();
+    const budget = sectorSpawnBudget(sector, { maxPerSector: OVERWORLD_ENEMY_GLOBAL_CAP });
+    if (budget <= 0 || this.overworldEnemies.size >= budget) {
+      return;
+    }
+    const enemyGroup = selectSectorEnemyGroup(sector, () => this.encounterRng.next(), {
+      isFlagSet: (flag) => this.gameFlags.isSet(flag)
+    });
+    if (enemyGroup === null) {
+      return;
+    }
+    const lead = this.enemiesForBattleGroup(enemyGroup)[0];
+    if (!lead) {
+      return;
+    }
+    const spot = this.findOverworldEnemySpawnPoint();
+    if (!spot) {
+      return;
+    }
+    this.overworldEnemySpawnCooldownMs = OVERWORLD_ENEMY_SPAWN_INTERVAL_MS;
+    const spriteGroup = lead.overworldSprite;
+    if (spriteGroup !== undefined && this.requestNpcSheet(spriteGroup)) {
+      this.load.start();
+    }
+    const frames = this.framesForGroup(spriteGroup);
+    this.overworldEnemySeq += 1;
+    const key = `enemy-${this.overworldEnemySeq}`;
+    const sprite = this.spawnActor(spot.x, spot.y, spriteGroup, undefined);
+    // Hide the placeholder rectangle while the real overworld sheet streams in;
+    // upgradeOverworldEnemySprite() swaps in the sprite (visible) once it loads.
+    if (spriteGroup !== undefined && !(sprite instanceof Phaser.GameObjects.Sprite)) {
+      sprite.setVisible(false);
+    }
+    this.overworldEnemies.set(key, {
+      key,
+      enemyGroup,
+      spriteGroup,
+      frames,
+      state: createNpcState(spot.x, spot.y, toFacing(undefined), {
+        kind: "wander",
+        radiusPx: OVERWORLD_ENEMY_WANDER_RADIUS_PX,
+        speedPxPerSec: OVERWORLD_ENEMY_WANDER_SPEED_PX_PER_SEC,
+        seed: (Math.imul(this.overworldEnemySeq, 0x9e3779b1) ^ enemyGroup) >>> 0
+      }, frames),
+      sprite
+    });
+  }
+
+  private findOverworldEnemySpawnPoint(): { x: number; y: number } | undefined {
+    const bounds = this.movementBounds();
+    const span = OVERWORLD_ENEMY_MAX_SPAWN_DIST_PX - OVERWORLD_ENEMY_MIN_SPAWN_DIST_PX;
+    for (let attempt = 0; attempt < OVERWORLD_ENEMY_SPAWN_ATTEMPTS; attempt += 1) {
+      const angle = this.encounterRng.next() * Math.PI * 2;
+      const dist = OVERWORLD_ENEMY_MIN_SPAWN_DIST_PX + this.encounterRng.next() * span;
+      const x = Math.min(bounds.maxX, Math.max(bounds.minX, Math.round(this.playerState.x + Math.cos(angle) * dist)));
+      const y = Math.min(bounds.maxY, Math.max(bounds.minY, Math.round(this.playerState.y + Math.sin(angle) * dist)));
+      if (!this.blocked(x, y) && this.distanceToPlayer({ x, y }) >= OVERWORLD_ENEMY_MIN_SPAWN_DIST_PX) {
+        return { x, y };
+      }
+    }
+    return undefined;
+  }
+
+  private checkOverworldEnemyContact(): boolean {
+    if (!this.overworldPlayActive() || this.encounterCooldownMs > 0) {
+      return false;
+    }
+    for (const [key, enemy] of this.overworldEnemies) {
+      if (this.distanceToPlayer(enemy.state.player) <= OVERWORLD_ENEMY_CONTACT_PX) {
+        this.overworldEnemies.delete(key);
+        enemy.sprite?.destroy();
+        return this.triggerOverworldEnemyBattle(enemy);
+      }
+    }
+    return false;
+  }
+
+  private triggerOverworldEnemyBattle(enemy: OverworldEnemyRuntime): boolean {
+    if (this.encounterAdvantageForGroup(enemy.enemyGroup) === "instantWin") {
+      return this.resolveInstantWinEncounter(enemy.enemyGroup);
+    }
+    const advantage = touchAdvantage(
+      { x: this.playerState.x, y: this.playerState.y, facing: this.playerState.facing },
+      { x: enemy.state.player.x, y: enemy.state.player.y, facing: enemy.state.player.facing }
+    );
+    return this.startBattleWithReturn(enemy.enemyGroup, "encounter", advantage);
+  }
+
+  private distanceToPlayer(point: { x: number; y: number }): number {
+    return Math.hypot(point.x - this.playerState.x, point.y - this.playerState.y);
+  }
+
+  private clearOverworldEnemies(): void {
+    for (const enemy of this.overworldEnemies.values()) {
+      enemy.sprite?.destroy();
+    }
+    this.overworldEnemies.clear();
+    this.overworldEnemySpawnCooldownMs = 0;
   }
 
   private startEncounterBattle(group: number, forcedAdvantage?: EncounterAdvantage): boolean {
