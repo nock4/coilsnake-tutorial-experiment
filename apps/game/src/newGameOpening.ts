@@ -1,4 +1,14 @@
-import { resolveScriptReference, type BattleData, type ScriptCollection, type WorldChunked, type WorldDoor } from "@eb/schemas";
+import {
+  resolveScriptReference,
+  type BattleData,
+  type DialogueSegment,
+  type OpeningCutscene,
+  type OpeningCutsceneStep,
+  type ScriptCollection,
+  type ScriptCommand,
+  type WorldChunked,
+  type WorldDoor
+} from "@eb/schemas";
 import { resolveDoorWarpLanding } from "./doorTriggers";
 
 export const EARTHBOUND_OPENING_KNOCK_REF = "data_20.l_0xc66b97";
@@ -7,8 +17,11 @@ export const EARTHBOUND_BUZZ_BUZZ_METEOR_REF = "data_15.l_0xc5eb0b";
 export const EARTHBOUND_STARMAN_JUNIOR_ENEMY_ID = 214;
 export const INTRO_BEDROOM_OPENING_DONE_FLAG = "intro:bedroom-opening-done";
 export const INTRO_METEOR_BEAT_FIRED_FLAG = "intro:meteor-beat-fired";
+export const AUTHORED_OPENING_CUTSCENE_REF = "openingCutscene.main";
 
 const INTRO_METEOR_TRIGGER_RADIUS_TILES = 3;
+const AUTHORED_OPENING_CUTSCENE_PATH = "openingCutscene.ccs";
+const FRAMES_PER_MS = 60 / 1000;
 
 export const INTRO_ACTOR_VM_STUBS = [
   {
@@ -143,6 +156,44 @@ export function introSpineProgression(flags: {
   return { monotonic: true, next: "complete" };
 }
 
+export function buildOpeningCutsceneScript(cutscene: OpeningCutscene | undefined): ScriptCollection | undefined {
+  const steps = cutscene?.steps ?? [];
+  if (steps.length === 0) {
+    return undefined;
+  }
+
+  const commands: ScriptCommand[] = [
+    openingCutsceneCommand({ cmd: "label", raw: "label main", name: "main" }, 1),
+    ...steps.map((step, index) => openingCutsceneStepCommand(step, index + 2)),
+    openingCutsceneCommand({ cmd: "end", raw: "end" }, steps.length + 2)
+  ];
+
+  return {
+    schemaVersion: "swagbound.opening-cutscene.v1",
+    sourceProjectPath: "content/opening-cutscene.json",
+    files: [{
+      path: AUTHORED_OPENING_CUTSCENE_PATH,
+      commands,
+      labels: ["main"],
+      counts: {
+        commands: commands.length,
+        labels: 1,
+        textCommands: commands.filter((command) => command.cmd === "text").length,
+        unknownCommands: 0
+      },
+      warnings: []
+    }],
+    counts: {
+      files: 1,
+      commands: commands.length,
+      labels: 1,
+      textCommands: commands.filter((command) => command.cmd === "text").length,
+      unknownCommands: 0
+    },
+    warnings: []
+  };
+}
+
 export function decideIntroMeteorBattleTransition(options: {
   battleGroupResolved: boolean;
   battleStarted: boolean;
@@ -164,6 +215,35 @@ export function decideIntroMeteorBattleTransition(options: {
     };
   }
   return { action: "battle", clearIntroActive: true, returnControl: false };
+}
+
+function openingCutsceneStepCommand(step: OpeningCutsceneStep, line: number): ScriptCommand {
+  if ("actorMove" in step) {
+    return openingCutsceneCommand({
+      cmd: "control",
+      raw: "actorMove",
+      code: "actorMove",
+      segments: [{
+        kind: "actorMove",
+        ...step.actorMove
+      }]
+    }, line);
+  }
+
+  const frames = Math.ceil(step.wait * FRAMES_PER_MS);
+  const segments: DialogueSegment[] = frames > 0 ? [{ kind: "pause", frames }] : [];
+  return openingCutsceneCommand({
+    cmd: "text",
+    raw: `wait(${step.wait})`,
+    segments
+  }, line);
+}
+
+function openingCutsceneCommand(input: Omit<ScriptCommand, "sourceLocation">, line: number): ScriptCommand {
+  return {
+    ...input,
+    sourceLocation: { file: AUTHORED_OPENING_CUTSCENE_PATH, line, column: 1 }
+  };
 }
 
 export function resolveNewGameOpeningStart(
