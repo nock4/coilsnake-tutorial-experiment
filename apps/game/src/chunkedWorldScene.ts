@@ -152,6 +152,7 @@ import {
   moveMenu,
   openMenu,
   parseMenuAction,
+  refreshMenuStackScreens,
   resolveTalkMenuAction,
   MAIN_MENU_ID,
   TALK_MENU_ACTION_ID,
@@ -2168,18 +2169,18 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return;
     }
     const item = this.itemById(action.itemId) ?? fallbackShopItem(action.itemId);
-    const result = this.partyState.buyItem(action.char, item);
-    this.showMenuResult(result.ok ? "Bought." : "Not enough $swag.");
+    this.partyState.buyItem(action.char, item);
+    this.refreshOpenMenuAfterAction();
   }
 
   private handleShopSellAction(action: Extract<MenuAction, { kind: "shopSell" }>): void {
     if (this.partyState.inventory(action.char)[action.inventorySlot] !== action.itemId) {
-      this.showMenuResult("You can't sell that.");
+      this.refreshOpenMenuAfterAction();
       return;
     }
     const item = this.itemById(action.itemId) ?? fallbackShopItem(action.itemId);
-    const result = this.partyState.sellItem(action.char, item);
-    this.showMenuResult(result.ok ? "Sold." : "You can't sell that.");
+    this.partyState.sellItem(action.char, item);
+    this.refreshOpenMenuAfterAction();
   }
 
   private handleItemUseAction(action: Extract<ReturnType<typeof parseMenuAction>, { kind: "itemUse" }>): void {
@@ -2235,6 +2236,19 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.activeShopStoreId = undefined;
     this.refreshMenuScreens();
     if (!this.dialogue.open && !this.eventSequence?.running) {
+      unlockPlayer(this.playerState);
+    }
+    this.updatePrompt();
+    this.publish();
+  }
+
+  private refreshOpenMenuAfterAction(): void {
+    this.refreshMenuScreens();
+    this.menuState = refreshMenuStackScreens(this.menuState, (id) => this.menuScreens.get(id));
+    if (!this.menuState.open) {
+      this.activeShopStoreId = undefined;
+    }
+    if (!this.menuState.open && !this.dialogue.open && !this.eventSequence?.running) {
       unlockPlayer(this.playerState);
     }
     this.updatePrompt();

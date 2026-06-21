@@ -338,6 +338,27 @@ export function cancelMenu(state: MenuState): MenuState {
   };
 }
 
+export function refreshMenuStackScreens(
+  state: MenuState,
+  screenById: (id: string) => MenuScreen | undefined
+): MenuState {
+  if (!state.open || state.stack.length === 0) {
+    return closedMenu();
+  }
+  const stack: MenuFrame[] = [];
+  for (const frame of state.stack) {
+    const screen = screenById(frame.screen.id);
+    if (!screen) {
+      return closedMenu();
+    }
+    stack.push({
+      screen,
+      cursorIndex: refreshedCursorIndex(screen, frame.cursorIndex)
+    });
+  }
+  return { open: true, stack };
+}
+
 export function currentItem(state: MenuState): MenuItem | undefined {
   const active = currentFrame(state);
   return active?.screen.items[active.cursorIndex];
@@ -1018,6 +1039,18 @@ function initialCursor(screen: MenuScreen): number {
     return firstEnabled;
   }
   return screen.items.length > 0 ? 0 : -1;
+}
+
+function refreshedCursorIndex(screen: MenuScreen, previousIndex: number): number {
+  if (screen.items.length === 0) {
+    return -1;
+  }
+  const boundedIndex = clamp(previousIndex, 0, screen.items.length - 1);
+  if (screen.items[boundedIndex]?.enabled) {
+    return boundedIndex;
+  }
+  const firstEnabled = screen.items.findIndex((item) => item.enabled);
+  return firstEnabled >= 0 ? firstEnabled : boundedIndex;
 }
 
 function neutralPartyMember(): PartyMember {
