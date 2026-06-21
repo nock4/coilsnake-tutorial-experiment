@@ -381,7 +381,9 @@ describe("loadGameData", () => {
         return jsonResponse({
           schema: "swagbound.music-manifest.v1",
           cues: {
-            overworld: { file: "audio/music/overworld.mp3", gain: 0.6 }
+            overworld: { file: "audio/music/overworld.mp3", gain: 0.4 },
+            interior: { file: "audio/music/interior.mp3", gain: 0.4 },
+            victory: { file: "audio/music/victory.mp3", loop: false, gain: 0.45 }
           }
         });
       }
@@ -396,7 +398,17 @@ describe("loadGameData", () => {
         overworld: {
           file: "audio/music/overworld.mp3",
           loop: true,
-          gain: 0.6
+          gain: 0.4
+        },
+        interior: {
+          file: "audio/music/interior.mp3",
+          loop: true,
+          gain: 0.4
+        },
+        victory: {
+          file: "audio/music/victory.mp3",
+          loop: false,
+          gain: 0.45
         }
       }
     });

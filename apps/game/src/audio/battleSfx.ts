@@ -24,6 +24,8 @@ export type BattleSfxOptions = {
 
 type AudioContextConstructor = new () => AudioContext;
 
+export const BATTLE_SFX_MASTER_GAIN = 0.68;
+
 export class NoopBattleSfx implements BattleSfx {
   resume(): void {}
   menuMove(): void {}
@@ -206,7 +208,7 @@ export class WebAudioBattleSfx implements BattleSfx {
     try {
       this.context = new Ctor();
       this.masterGain = this.context.createGain();
-      this.masterGain.gain.value = clamp(this.options.volume ?? 0.22, 0, 1);
+      this.masterGain.gain.value = clamp(this.options.volume ?? BATTLE_SFX_MASTER_GAIN, 0, 1);
       this.masterGain.connect(this.context.destination);
       return this.context;
     } catch {

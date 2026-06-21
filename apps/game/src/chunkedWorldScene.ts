@@ -217,6 +217,11 @@ import {
 import { createTransitionSfx, type TransitionSfx } from "./audio/transitionSfx";
 import { createMusic, musicDisabledBySearch, type Music } from "./audio/music";
 import { advanceCutsceneActorTowardTarget } from "./cutsceneActorMovement";
+import {
+  isInteriorMusicSector,
+  overworldMusicCueForInteriorState,
+  type OverworldMusicCue
+} from "./worldMusic";
 
 type ChunkLayer = "background" | "foreground";
 type WorldChunk = WorldChunked["chunks"][number];
@@ -402,6 +407,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private readonly partyState = new PartyState();
   private readonly transitionSfx: TransitionSfx = createTransitionSfx();
   private music: Music = createMusic();
+  private currentOverworldMusicCue?: OverworldMusicCue;
   private menuState: MenuState = closedMenu();
   private menuScreens = new Map<string, MenuScreen>();
   private activeShopStoreId?: number;
@@ -651,7 +657,11 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.updateCollisionOverlay();
     this.updatePrompt();
     this.scene.launch("ui", { worldSceneKey: "chunked-world", font: this.data_.font, window: this.data_.window });
-    void this.music.play(this.newGameOpening ? "intro" : "overworld");
+    if (this.newGameOpening) {
+      this.playOverworldMusicCue("intro", true);
+    } else {
+      this.syncOverworldMusicCue(true);
+    }
     this.registerCutsceneMoveDemoGlobal();
     this.registerForceEncounter();
     if (!this.restoreState) {
@@ -717,6 +727,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     });
     this.syncPlayerObject();
     this.refreshRoomBounds();
+    this.syncOverworldMusicCue();
     this.refreshStreaming();
     this.updateCollisionOverlay();
     this.refreshBarrierSprites();
@@ -785,6 +796,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.menuState = closedMenu();
     this.menuScreens.clear();
     this.activeShopStoreId = undefined;
+    this.currentOverworldMusicCue = undefined;
     this.eventSequence = undefined;
     this.newGameStartupRecord = undefined;
     this.startupRunActive = false;
@@ -992,6 +1004,25 @@ export class ChunkedWorldScene extends Phaser.Scene {
 
   private activeInteriorRoom(): ConnectedRoomBounds | undefined {
     return this.activeRoomBounds?.isInterior ? this.activeRoomBounds : undefined;
+  }
+
+  private syncOverworldMusicCue(force = false): void {
+    this.playOverworldMusicCue(
+      overworldMusicCueForInteriorState(this.playerInInteriorMusicSector()),
+      force
+    );
+  }
+
+  private playOverworldMusicCue(cue: OverworldMusicCue, force = false): void {
+    if (!force && this.currentOverworldMusicCue === cue) {
+      return;
+    }
+    this.currentOverworldMusicCue = cue;
+    void this.music.play(cue);
+  }
+
+  private playerInInteriorMusicSector(): boolean {
+    return isInteriorMusicSector(this.world_.sectors, this.playerState);
   }
 
   private applyInteriorRoomMask(): void {
@@ -1780,6 +1811,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.refreshStreaming(true);
     this.syncEncounterTileState();
     this.refreshRoomBounds(true);
+    this.syncOverworldMusicCue();
     this.cameras.main.centerOn(to.x, to.y);
     return true;
   }
@@ -2762,7 +2794,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
         finalPlayerControllable: this.isPlayerControllable()
       });
       publishNewGameStartupRecord(this.newGameStartupRecord);
-      void this.music.play("overworld");
+      this.syncOverworldMusicCue();
       return;
     }
 
@@ -2847,7 +2879,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
         finalPlayerControllable: this.isPlayerControllable()
       });
       publishNewGameStartupRecord(this.newGameStartupRecord);
-      void this.music.play("overworld");
+      this.syncOverworldMusicCue();
       return;
     }
 
@@ -2877,7 +2909,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.authoredOpeningCutsceneRunActive = false;
     if (completedOpening) {
       this.gameFlags.set(INTRO_BEDROOM_OPENING_DONE_FLAG);
-      void this.music.play("overworld");
+      this.syncOverworldMusicCue();
     }
     if (this.dialogue.open && result.status === "aborted") {
       this.dialogue.close();
@@ -2932,7 +2964,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.authoredOpeningCutsceneRunActive = false;
     if (completedOpening) {
       this.gameFlags.set(INTRO_BEDROOM_OPENING_DONE_FLAG);
-      void this.music.play("overworld");
+      this.syncOverworldMusicCue();
     }
     if (this.dialogue.open) {
       this.dialogue.close();
@@ -4007,6 +4039,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     this.refreshStreaming(true);
     this.refreshRoomBounds(true);
+    this.syncOverworldMusicCue();
     this.cameras.main.centerOn(spawn.x, spawn.y);
   }
 
@@ -4159,6 +4192,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       collisionOverlay: this.collisionOverlayEnabled,
       currentChunk: this.currentChunk,
       currentSectorIndex: this.currentSectorIndex,
+      musicCue: this.currentOverworldMusicCue,
       encounterEnabled: this.encounterEnabled,
       encounterCooldownMs: Math.ceil(this.encounterCooldownMs),
       encounterSeed: this.encounterRng.state(),
