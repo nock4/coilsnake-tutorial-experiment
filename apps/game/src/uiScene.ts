@@ -103,7 +103,7 @@ export class UiScene extends Phaser.Scene {
       fontSize: 11,
       color: CLEAN_UI_PRIMARY
     }).setDepth(11);
-    this.badgeText = createCleanText(this, this.scale.width - 12, 10, "F1: debug", {
+    this.badgeText = createCleanText(this, this.scale.width - 12, 10, "` or F1: debug", {
       fontSize: 11,
       color: CLEAN_UI_SECONDARY
     }).setOrigin(1, 0).setDepth(11);
