@@ -224,9 +224,13 @@ export class WorldScene extends Phaser.Scene {
     registerDiscreteKeys(this.input.keyboard, CONFIRM_KEY_NAMES, () => this.handleConfirm());
     registerDiscreteKeys(this.input.keyboard, CANCEL_KEY_NAMES, () => this.handleCancel());
     this.input.keyboard?.on("keydown-P", () => this.handleSaveKey());
-    this.input.keyboard?.on("keydown-F1", () => {
+    // F1 toggles the debug panel; backtick (`) is a Mac-friendly alias (top-row
+    // F-keys default to hardware controls on macOS).
+    const toggleDebugPanel = () => {
       this.debugPanelVisible = !this.debugPanelVisible;
-    });
+    };
+    this.input.keyboard?.on("keydown-F1", toggleDebugPanel);
+    this.input.keyboard?.on("keydown-BACKTICK", toggleDebugPanel);
 
     this.scene.launch("ui", { worldSceneKey: "world", font: this.data_.font, window: this.data_.window });
     this.publish();
