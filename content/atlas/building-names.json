@@ -1,13 +1,13 @@
 {
   "schema": "swagbound.atlas.building-names.v1",
   "town": "Onett",
-  "method": "Interior sign read by spawning in (drugstore/bakery/arcade/bank verified visually); overworld storefront signs are readable but their door->interior link is fuzzy, so only spawn-verified names are marked verified. Extend by spawning each interior + reading its sign.",
+  "method": "Each of Onett 18 building doors was entered (spawned in) and read. 6 carry interior storefront signs -> named shops (Drug Store, Bank, Hospital, Arcade x2, Bakery). The other 12 are spawn-confirmed residences (no sign). Overworld Burger Shop/Town Mall/Police/Motel signs exist but have no enterable interior among these doors (exterior or later-act). Naming uses INTERIOR signs; overworld-sign->door matching is unreliable.",
   "buildings": [
     {
       "id": "onett-0",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 2128,
         "y": 864
@@ -16,13 +16,14 @@
         "x": 8096,
         "y": 488
       },
-      "occupants": []
+      "occupants": [],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-1",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 2312,
         "y": 1112
@@ -37,13 +38,14 @@
           "spriteGroup": 59,
           "swagName": "park-static"
         }
-      ]
+      ],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-2",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 2408,
         "y": 1112
@@ -58,7 +60,8 @@
           "spriteGroup": 136,
           "swagName": "mirror-glitch"
         }
-      ]
+      ],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-3",
@@ -95,7 +98,7 @@
       "id": "onett-4",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 1736,
         "y": 1128
@@ -120,13 +123,14 @@
           "spriteGroup": 153,
           "swagName": "ushanka-shade"
         }
-      ]
+      ],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-5",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 1232,
         "y": 1280
@@ -135,13 +139,14 @@
         "x": 8160,
         "y": 360
       },
-      "occupants": []
+      "occupants": [],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-6",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 1656,
         "y": 1328
@@ -150,13 +155,14 @@
         "x": 8032,
         "y": 616
       },
-      "occupants": []
+      "occupants": [],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-7",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 1096,
         "y": 1368
@@ -176,13 +182,14 @@
           "spriteGroup": 127,
           "swagName": "goobdle-s"
         }
-      ]
+      ],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-8",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 2568,
         "y": 1400
@@ -191,7 +198,8 @@
         "x": 7624,
         "y": 1104
       },
-      "occupants": []
+      "occupants": [],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-9",
@@ -218,7 +226,7 @@
       "id": "onett-10",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 1064,
         "y": 1496
@@ -227,13 +235,14 @@
         "x": 7560,
         "y": 848
       },
-      "occupants": []
+      "occupants": [],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-11",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 2440,
         "y": 1592
@@ -248,7 +257,8 @@
           "spriteGroup": 121,
           "swagName": "cryptic-kids"
         }
-      ]
+      ],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-12",
@@ -331,7 +341,7 @@
       "id": "onett-15",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 1576,
         "y": 1736
@@ -346,7 +356,8 @@
           "spriteGroup": 284,
           "swagName": "ethereal-sols"
         }
-      ]
+      ],
+      "note": "spawn-confirmed residence (no storefront sign)"
     },
     {
       "id": "onett-16",
@@ -378,7 +389,7 @@
       "id": "onett-17",
       "name": null,
       "type": "residence",
-      "confidence": "unverified",
+      "confidence": "verified",
       "overworldDoor": {
         "x": 1576,
         "y": 2264
@@ -413,7 +424,8 @@
           "spriteGroup": 381,
           "swagName": "tunnel-hiss"
         }
-      ]
+      ],
+      "note": "spawn-confirmed residence (no storefront sign)"
     }
   ]
 }
