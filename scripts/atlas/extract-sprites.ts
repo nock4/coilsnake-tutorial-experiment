@@ -19,7 +19,7 @@ const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0
 type Direction = "up" | "right" | "down" | "left";
 type SpriteAnimations = Record<Direction, [number, number]>;
 type RoleGuess = "shopkeeper" | "clerk" | "save" | "enemy" | "named" | "ambient" | "unknown";
-type OverrideKind = "group" | "npc" | "none";
+type OverrideKind = "group" | "npc" | "enemy" | "none";
 
 export type SpriteAtlasGroup = {
   groupId: number;
@@ -419,8 +419,11 @@ export function buildSpriteAtlasIndex(inputs: SpriteAtlasInputs): SpriteAtlasInd
     const npcs = npcsByGroup.get(groupId) ?? [];
     const groupOverride = inputs.spriteOverrides.bySpriteGroup?.[String(groupId)] !== undefined;
     const npcOverride = npcs.some((npc) => inputs.spriteOverrides.byNpcId?.[String(npc.npcId)] !== undefined);
-    const overrideKind: OverrideKind = groupOverride ? "group" : npcOverride ? "npc" : "none";
     const enemyIds = (enemyIdsByOverworldGroup.get(groupId) ?? []).sort((a, b) => a - b);
+    // A group is also "skinned" if it appears as a battle enemy with a byEnemyId override
+    // (the overworld walk sprite is un-skinned but the character has Swagbound battle art).
+    const enemyOverride = enemyIds.some((id) => inputs.spriteOverrides.byEnemyId?.[String(id)] !== undefined);
+    const overrideKind: OverrideKind = groupOverride ? "group" : npcOverride ? "npc" : enemyOverride ? "enemy" : "none";
     const image = sheetByGroup.has(groupId) ? sheet.file : `atlas/sprites/sheets/${pad3(groupId)}.png`;
     return [{
       groupId,

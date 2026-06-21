@@ -32,8 +32,8 @@
       "sampleEnemyIds": [
         130
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -10943,8 +10943,8 @@
         57,
         58
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -10978,8 +10978,8 @@
       "sampleEnemyIds": [
         17
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11015,8 +11015,8 @@
         115,
         138
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11051,8 +11051,8 @@
         98,
         99
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11137,8 +11137,8 @@
       "sampleEnemyIds": [
         3
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11275,8 +11275,8 @@
         55,
         56
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11376,8 +11376,8 @@
         108,
         109
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11412,8 +11412,8 @@
         117,
         118
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11552,8 +11552,8 @@
       "sampleEnemyIds": [
         136
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11587,8 +11587,8 @@
       "sampleEnemyIds": [
         148
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11624,8 +11624,8 @@
         8,
         210
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11659,8 +11659,8 @@
       "sampleEnemyIds": [
         149
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11761,8 +11761,8 @@
       "sampleEnemyIds": [
         145
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11847,8 +11847,8 @@
         104,
         105
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11883,8 +11883,8 @@
         81,
         82
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -11918,8 +11918,8 @@
       "sampleEnemyIds": [
         35
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12035,8 +12035,8 @@
       "sampleEnemyIds": [
         100
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12071,8 +12071,8 @@
         70,
         71
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12153,8 +12153,8 @@
         150,
         151
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12254,8 +12254,8 @@
         51,
         52
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12289,8 +12289,8 @@
       "sampleEnemyIds": [
         126
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12387,8 +12387,8 @@
       "sampleEnemyIds": [
         61
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12482,8 +12482,8 @@
       "sampleEnemyIds": [
         4
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12517,8 +12517,8 @@
       "sampleEnemyIds": [
         36
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12552,8 +12552,8 @@
       "sampleEnemyIds": [
         38
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12590,8 +12590,8 @@
         59,
         60
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12692,8 +12692,8 @@
         112,
         209
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12728,8 +12728,8 @@
         9,
         10
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12764,8 +12764,8 @@
         157,
         158
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12800,8 +12800,8 @@
         65,
         66
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12924,8 +12924,8 @@
       "sampleEnemyIds": [
         72
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12959,8 +12959,8 @@
       "sampleEnemyIds": [
         152
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -12998,8 +12998,8 @@
         96,
         101
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -13095,8 +13095,8 @@
       "sampleEnemyIds": [
         89
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -13130,8 +13130,8 @@
       "sampleEnemyIds": [
         127
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -13307,8 +13307,8 @@
         28,
         29
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -13344,8 +13344,8 @@
         155,
         156
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -14513,8 +14513,8 @@
       "sampleEnemyIds": [
         54
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -14548,8 +14548,8 @@
       "sampleEnemyIds": [
         80
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -14583,8 +14583,8 @@
       "sampleEnemyIds": [
         24
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -14618,8 +14618,8 @@
       "sampleEnemyIds": [
         25
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -14653,8 +14653,8 @@
       "sampleEnemyIds": [
         135
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -14689,8 +14689,8 @@
         22,
         23
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -14725,8 +14725,8 @@
         32,
         33
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -15395,8 +15395,8 @@
       "sampleEnemyIds": [
         144
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -15478,8 +15478,8 @@
       "sampleEnemyIds": [
         223
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -16278,8 +16278,8 @@
       "sampleEnemyIds": [
         122
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     },
     {
@@ -16693,8 +16693,8 @@
       "sampleEnemyIds": [
         227
       ],
-      "overridden": false,
-      "overrideKind": "none",
+      "overridden": true,
+      "overrideKind": "enemy",
       "roleGuess": "enemy"
     }
   ],
@@ -17704,7 +17704,7 @@
   "counts": {
     "groups": 342,
     "usedGroups": 342,
-    "overriddenGroups": 204,
-    "unskinnedGroups": 138
+    "overriddenGroups": 253,
+    "unskinnedGroups": 89
   }
 }
