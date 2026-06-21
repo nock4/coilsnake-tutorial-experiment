@@ -13,9 +13,10 @@ import {
   type WorldChunkedNpc,
   type WorldDoor,
   type WorldNpc,
-  type WorldRegion
+  type WorldRegion,
+  type TileOverrides
 } from "@eb/schemas";
-import { parseFts, drawArrangement, isBlankArrangement, isSolidSurface, isOccluderTile, type FtsTileset, type FtsPalette } from "./fts";
+import { parseFts, drawArrangement, decodeArrangementCell, isBlankArrangement, isSolidSurface, isOccluderTile, type FtsTileset, type FtsPalette } from "./fts";
 import {
   DOOR_WARP_UNIT_PX,
   doorTriggerToWorldPixel,
@@ -28,7 +29,7 @@ import {
   type MapDoorEntry,
   type SpritePlacement
 } from "./coilsnakeYaml";
-import { encodePngRgba, readPngHeader } from "./png";
+import { decodePngRgba, encodePngRgba, readPngHeader, type PngRgba } from "./png";
 
 export const TILE_SIZE = 32;
 export const COLLISION_CELL_SIZE = 8;
@@ -123,6 +124,41 @@ export type WorldSectorAreas = {
   bounded: Array<0 | 1>;
 };
 
+export type TileOverrideImage = PngRgba;
+export type TileOverrideImages = ReadonlyMap<string, TileOverrideImage>;
+
+function tileOverrideKey(tileset: number, arrangement: number): string {
+  return `${tileset}:${arrangement}`;
+}
+
+function drawTileOverrideImage(options: {
+  image: TileOverrideImage;
+  target: Uint8Array;
+  targetWidth: number;
+  targetX: number;
+  targetY: number;
+  cellVisible?: (cellX: number, cellY: number) => boolean;
+}): void {
+  const { image, target, targetWidth, targetX, targetY, cellVisible } = options;
+  for (let cellY = 0; cellY < 4; cellY += 1) {
+    for (let cellX = 0; cellX < 4; cellX += 1) {
+      if (cellVisible && !cellVisible(cellX, cellY)) {
+        continue;
+      }
+      for (let py = 0; py < 8; py += 1) {
+        for (let px = 0; px < 8; px += 1) {
+          const sourceOffset = ((cellY * 8 + py) * image.width + cellX * 8 + px) * 4;
+          const outOffset = ((targetY + cellY * 8 + py) * targetWidth + targetX + cellX * 8 + px) * 4;
+          target[outOffset] = image.rgba[sourceOffset];
+          target[outOffset + 1] = image.rgba[sourceOffset + 1];
+          target[outOffset + 2] = image.rgba[sourceOffset + 2];
+          target[outOffset + 3] = image.rgba[sourceOffset + 3];
+        }
+      }
+    }
+  }
+}
+
 /**
  * Composes the region background/foreground RGBA buffers and the surface grid
  * from parsed map rows, per-sector tileset/palette info, and parsed tilesets.
@@ -132,8 +168,9 @@ export function composeRegion(options: {
   mapRows: number[][];
   sectorLookup: (sectorCol: number, sectorRow: number) => SectorInfo | undefined;
   tilesetForMapTileset: (mapTileset: number) => { tileset: FtsTileset; palettes: Map<number, FtsPalette> } | undefined;
+  tileOverrideImages?: TileOverrideImages;
 }): ComposedRegion {
-  const { bounds, mapRows, sectorLookup, tilesetForMapTileset } = options;
+  const { bounds, mapRows, sectorLookup, tilesetForMapTileset, tileOverrideImages } = options;
   const widthPixels = bounds.widthTiles * TILE_SIZE;
   const heightPixels = bounds.heightTiles * TILE_SIZE;
   const background = new Uint8Array(widthPixels * heightPixels * 4);
@@ -152,7 +189,14 @@ export function composeRegion(options: {
   // Solid-cell count (0..16) per map tile, used after the pass below to decide
   // which solid tiles occlude actors (see isOccluderTile).
   const tileSolidCount = new Int16Array(bounds.widthTiles * bounds.heightTiles);
-  type ForegroundTile = { tx: number; ty: number; tileset: FtsTileset; palette: FtsPalette; arrangementIndex: number };
+  type ForegroundTile = {
+    tx: number;
+    ty: number;
+    tileset: FtsTileset;
+    palette: FtsPalette;
+    arrangementIndex: number;
+    overrideImage?: TileOverrideImage;
+  };
   const foregroundTiles: ForegroundTile[] = [];
 
   for (let ty = 0; ty < bounds.heightTiles; ty += 1) {
@@ -184,19 +228,37 @@ export function composeRegion(options: {
       mapTilesetsUsed.add(sector.tileset);
       palettesUsed.add(`${sector.tileset}:${sector.palette}`);
 
-      drawArrangement({
-        tileset: graphics.tileset,
-        arrangementIndex,
-        palette,
-        target: background,
-        targetWidth: widthPixels,
-        targetX: tx * TILE_SIZE,
-        targetY: ty * TILE_SIZE,
-        priorityOnly: false
-      });
+      const overrideImage = tileOverrideImages?.get(tileOverrideKey(sector.tileset, arrangementIndex));
+      if (overrideImage) {
+        drawTileOverrideImage({
+          image: overrideImage,
+          target: background,
+          targetWidth: widthPixels,
+          targetX: tx * TILE_SIZE,
+          targetY: ty * TILE_SIZE
+        });
+      } else {
+        drawArrangement({
+          tileset: graphics.tileset,
+          arrangementIndex,
+          palette,
+          target: background,
+          targetWidth: widthPixels,
+          targetX: tx * TILE_SIZE,
+          targetY: ty * TILE_SIZE,
+          priorityOnly: false
+        });
+      }
       // Foreground is drawn in a second pass once every tile's solidity is known,
       // so each solid tile can consult the tile directly below it.
-      foregroundTiles.push({ tx, ty, tileset: graphics.tileset, palette, arrangementIndex });
+      foregroundTiles.push({
+        tx,
+        ty,
+        tileset: graphics.tileset,
+        palette,
+        arrangementIndex,
+        ...(overrideImage ? { overrideImage } : {})
+      });
 
       const blankKey = `${sector.tileset}:${arrangementIndex}`;
       let blank = blankCache.get(blankKey);
@@ -231,17 +293,34 @@ export function composeRegion(options: {
       : tileSolidCount[ty * bounds.widthTiles + tx];
   for (const tile of foregroundTiles) {
     const occluder = isOccluderTile(solidCountAt(tile.tx, tile.ty), solidCountAt(tile.tx, tile.ty + 1));
-    drawArrangement({
-      tileset: tile.tileset,
-      arrangementIndex: tile.arrangementIndex,
-      palette: tile.palette,
-      target: foreground,
-      targetWidth: widthPixels,
-      targetX: tile.tx * TILE_SIZE,
-      targetY: tile.ty * TILE_SIZE,
-      priorityOnly: true,
-      cellInForeground: (cell, surfaceByte) => cell.priority || (occluder && isSolidSurface(surfaceByte))
-    });
+    const cellInForeground = (cellX: number, cellY: number): boolean => {
+      const cellIndex = tile.arrangementIndex * 16 + cellY * 4 + cellX;
+      const cell = decodeArrangementCell(tile.tileset.arrangements[cellIndex]);
+      const surfaceByte = tile.tileset.collisions[cellIndex];
+      return cell.priority || (occluder && isSolidSurface(surfaceByte));
+    };
+    if (tile.overrideImage) {
+      drawTileOverrideImage({
+        image: tile.overrideImage,
+        target: foreground,
+        targetWidth: widthPixels,
+        targetX: tile.tx * TILE_SIZE,
+        targetY: tile.ty * TILE_SIZE,
+        cellVisible: cellInForeground
+      });
+    } else {
+      drawArrangement({
+        tileset: tile.tileset,
+        arrangementIndex: tile.arrangementIndex,
+        palette: tile.palette,
+        target: foreground,
+        targetWidth: widthPixels,
+        targetX: tile.tx * TILE_SIZE,
+        targetY: tile.ty * TILE_SIZE,
+        priorityOnly: true,
+        cellInForeground: (cell, surfaceByte) => cell.priority || (occluder && isSolidSurface(surfaceByte))
+      });
+    }
   }
 
   if (missingSectors.size > 0) {
@@ -582,6 +661,56 @@ function emitWorldDoors(entries: MapDoorEntry[], mapWidthTiles: number, mapHeigh
     });
 }
 
+async function loadTileOverrideImages(options: {
+  overrides: TileOverrides | undefined;
+  publicRoot: string | undefined;
+  warnings: Issue[];
+}): Promise<Map<string, TileOverrideImage> | undefined> {
+  const entries = Object.entries(options.overrides?.byTile ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  const publicRoot = path.resolve(options.publicRoot ?? "apps/game/public");
+  const images = new Map<string, TileOverrideImage>();
+  for (const [key, override] of entries) {
+    const imagePath = path.resolve(publicRoot, override.image);
+    const relativeImagePath = path.relative(publicRoot, imagePath);
+    if (relativeImagePath.startsWith("..") || path.isAbsolute(relativeImagePath)) {
+      options.warnings.push(issue(
+        "warning",
+        "world_tile_override_image_path_invalid",
+        `Tile override ${key} image escapes public assets and will fall back to the EB arrangement.`,
+        override.image
+      ));
+      continue;
+    }
+
+    try {
+      const image = decodePngRgba(await readFile(imagePath), `Tile override ${key}`);
+      if (image.width !== TILE_SIZE || image.height !== TILE_SIZE) {
+        options.warnings.push(issue(
+          "warning",
+          "world_tile_override_image_size",
+          `Tile override ${key} image must be ${TILE_SIZE}x${TILE_SIZE}; got ${image.width}x${image.height}. Falling back to the EB arrangement.`,
+          override.image
+        ));
+        continue;
+      }
+      images.set(key, image);
+    } catch (error) {
+      options.warnings.push(issue(
+        "warning",
+        "world_tile_override_image_unavailable",
+        `Tile override ${key} image could not be loaded and will fall back to the EB arrangement: ${error instanceof Error ? error.message : String(error)}`,
+        override.image
+      ));
+    }
+  }
+
+  return images;
+}
+
 async function copySpriteSheets(options: {
   projectAbs: string;
   outAbs: string;
@@ -663,6 +792,8 @@ export async function buildWorldArtifacts(options: {
   spawnWorldPixelDerivation?: string;
   newGameStartupRef?: string;
   newGameStartupDerivation?: string;
+  tileOverrides?: TileOverrides;
+  tileOverridePublicRoot?: string;
 }): Promise<WorldBuildResult> {
   const {
     projectAbs,
@@ -673,7 +804,9 @@ export async function buildWorldArtifacts(options: {
     spawnWorldPixel,
     spawnWorldPixelDerivation,
     newGameStartupRef,
-    newGameStartupDerivation
+    newGameStartupDerivation,
+    tileOverrides,
+    tileOverridePublicRoot
   } = options;
   const warnings: Issue[] = [];
 
@@ -789,6 +922,11 @@ export async function buildWorldArtifacts(options: {
   const sectorLookup = (sectorCol: number, sectorRow: number): SectorInfo | undefined =>
     sectorInfoFromEntry(sectorEntries.get(sectorRow * sectorsPerRow + sectorCol));
   const tilesetForMapTileset = (mapTileset: number) => tilesetByMapTileset.get(mapTileset);
+  const tileOverrideImages = await loadTileOverrideImages({
+    overrides: tileOverrides,
+    publicRoot: tileOverridePublicRoot,
+    warnings
+  });
 
   if (worldMode === "full") {
     return buildFullWorldArtifacts({
@@ -811,7 +949,8 @@ export async function buildWorldArtifacts(options: {
       spawnWorldPixelDerivation,
       newGameStartupRef,
       newGameStartupDerivation,
-      anchorWorld
+      anchorWorld,
+      tileOverrideImages
     });
   }
 
@@ -820,7 +959,8 @@ export async function buildWorldArtifacts(options: {
     bounds,
     mapRows,
     sectorLookup,
-    tilesetForMapTileset
+    tilesetForMapTileset,
+    tileOverrideImages
   });
   warnings.push(...composed.warnings);
 
@@ -971,6 +1111,7 @@ async function buildFullWorldArtifacts(options: {
   newGameStartupRef: string | undefined;
   newGameStartupDerivation: string | undefined;
   anchorWorld: { x: number; y: number };
+  tileOverrideImages?: TileOverrideImages;
 }): Promise<WorldBuildResult> {
   const {
     projectAbs,
@@ -992,7 +1133,8 @@ async function buildFullWorldArtifacts(options: {
     spawnWorldPixelDerivation,
     newGameStartupRef,
     newGameStartupDerivation,
-    anchorWorld
+    anchorWorld,
+    tileOverrideImages
   } = options;
 
   const chunkSizeTiles = FULL_CHUNK_SIZE_TILES;
@@ -1020,7 +1162,7 @@ async function buildFullWorldArtifacts(options: {
         widthTiles: Math.min(chunkSizeTiles, mapWidthTiles - cx * chunkSizeTiles),
         heightTiles: Math.min(chunkSizeTiles, mapHeightTiles - cy * chunkSizeTiles)
       };
-      const composed = composeRegion({ bounds, mapRows, sectorLookup, tilesetForMapTileset });
+      const composed = composeRegion({ bounds, mapRows, sectorLookup, tilesetForMapTileset, tileOverrideImages });
       pushUniqueIssues(warnings, composed.warnings);
       for (const mapTileset of composed.mapTilesetsUsed) {
         mapTilesetsUsed.add(mapTileset);

@@ -22,7 +22,7 @@ Source of truth: `content/atlas/*.json`. Images: `apps/game/public/atlas/*` (reg
 | 4 | Vision labeling & taxonomy | ⬜ | enriched catalog |
 | 5 | Atlas browser (HTML) | ✅ | apps/game/public/atlas/index.html (open /atlas/index.html) |
 | 6 | Design-language coverage & gaps | ✅ | content/atlas/coverage.json + docs/atlas/coverage.md |
-| 7 | Map design system (tile/motif override layer) | ⬜ | content/tile-overrides.json + converter hook (Nick's art) |
+| 7 | Map design system — tile-override ENGINE | ✅ (engine; art = Nick) | content/tile-overrides.json + world.ts hook |
 | 8 | SCOPE EXPANSION (post-critique) | ✅ | backgrounds.json, ui.json (windows+fonts+icons), townmaps.json |
 
 Scope: NOT just overworld. "Every element" = tiles + sprites + motifs/buildings + **battle backgrounds + UI/window frames + fonts + town-maps + item/PSI icons + interactables (doors/switches)**. Phase 8 closes the gaps the scope critic found.

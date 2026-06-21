@@ -390,6 +390,18 @@ export const SpriteOverridesSchema = z.object({
   overworldByEnemyId: z.record(z.string().regex(/^\d+$/), SpriteOverrideSchema).optional()
 }).strict();
 
+const TileOverrideKeySchema = z.string().regex(/^\d+:\d+$/, "tile override keys must be <tileset>:<arrangement>");
+
+const TileOverrideEntrySchema = z.object({
+  image: PublicAssetPathSchema
+}).strict();
+
+export const TileOverridesSchema = z.object({
+  schema: z.literal("swagbound.tile-overrides.v1"),
+  comment: z.string().optional(),
+  byTile: z.record(TileOverrideKeySchema, TileOverrideEntrySchema)
+}).strict();
+
 /** Source mapping of overworld roaming-enemy skins by family (build expands to overworldByEnemyId). */
 export const OverworldEnemySkinsSchema = z.object({
   schema: z.literal("swagbound.overworld-enemy-skins.v1"),
@@ -1487,6 +1499,8 @@ export type SpriteAnimations = z.infer<typeof SpriteAnimationsSchema>;
 export type SpriteSheetCollection = z.infer<typeof SpriteSheetCollectionSchema>;
 export type SpriteOverride = z.infer<typeof SpriteOverrideSchema>;
 export type SpriteOverrides = z.infer<typeof SpriteOverridesSchema>;
+export type TileOverrideEntry = z.infer<typeof TileOverrideEntrySchema>;
+export type TileOverrides = z.infer<typeof TileOverridesSchema>;
 export type MusicManifest = z.infer<typeof MusicManifestSchema>;
 export type BackgroundOverrideEntry = z.infer<typeof BackgroundOverrideEntrySchema>;
 export type BackgroundOverrides = z.infer<typeof BackgroundOverridesSchema>;
