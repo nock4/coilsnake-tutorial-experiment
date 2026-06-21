@@ -14,6 +14,8 @@ export type TransitionSfxOptions = {
 
 type AudioContextConstructor = new () => AudioContext;
 
+export const TRANSITION_SFX_MASTER_GAIN = 0.72;
+
 export class NoopTransitionSfx implements TransitionSfx {
   resume(): void {}
   doorOpen(): void {}
@@ -134,7 +136,7 @@ export class WebAudioTransitionSfx implements TransitionSfx {
     try {
       this.context = new Ctor();
       this.masterGain = this.context.createGain();
-      this.masterGain.gain.value = clamp(this.options.volume ?? 0.28, 0, 1);
+      this.masterGain.gain.value = clamp(this.options.volume ?? TRANSITION_SFX_MASTER_GAIN, 0, 1);
       this.masterGain.connect(this.context.destination);
       return this.context;
     } catch {

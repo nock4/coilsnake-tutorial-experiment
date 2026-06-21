@@ -11,6 +11,7 @@ export type MusicOptions = {
   muted?: boolean;
   enabled?: boolean;
   fadeMs?: number;
+  masterGain?: number;
   baseUrl?: string;
   fetch?: typeof fetch;
   logger?: Pick<Console, "warn">;
@@ -26,7 +27,8 @@ export type ResolvedMusicCue = {
 
 export type AudioContextConstructor = new () => AudioContext;
 
-const DEFAULT_GAIN = 0.7;
+export const DEFAULT_MUSIC_CUE_GAIN = 0.45;
+export const DEFAULT_MUSIC_MASTER_GAIN = 0.82;
 const DEFAULT_FADE_MS = 650;
 const MIN_GAIN = 0.0001;
 
@@ -249,7 +251,7 @@ export class WebAudioMusic implements Music {
     try {
       this.context = new Ctor();
       this.masterGain = this.context.createGain();
-      this.masterGain.gain.value = 1;
+      this.masterGain.gain.value = clamp(this.options.masterGain ?? DEFAULT_MUSIC_MASTER_GAIN, 0, 1);
       this.masterGain.connect(this.context.destination);
       return this.context;
     } catch {
@@ -288,7 +290,7 @@ export function resolveMusicCue(manifest: MusicManifest | undefined, cue: string
     cue,
     file: entry.file,
     loop: entry.loop ?? true,
-    gain: clamp(entry.gain ?? DEFAULT_GAIN, 0, 1)
+    gain: clamp(entry.gain ?? DEFAULT_MUSIC_CUE_GAIN, 0, 1)
   };
 }
 

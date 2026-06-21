@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MusicManifestSchema, type MusicManifest } from "@eb/schemas";
 import {
   createMusic,
+  DEFAULT_MUSIC_CUE_GAIN,
   NoopMusic,
   publicMusicUrl,
   resolveMusicCue,
@@ -27,7 +28,7 @@ describe("music manifest resolution", () => {
     expect(parsed.cues.overworld).toMatchObject({
       file: "audio/music/overworld.mp3",
       loop: true,
-      gain: 0.7
+      gain: DEFAULT_MUSIC_CUE_GAIN
     });
     expect(resolveMusicCue(parsed, "battle")).toEqual({
       cue: "battle",
@@ -37,6 +38,29 @@ describe("music manifest resolution", () => {
     });
     expect(resolveMusicCue(parsed, "missing")).toBeUndefined();
     expect(publicMusicUrl("audio/music/overworld.mp3")).toBe("/audio/music/overworld.mp3");
+  });
+
+  it("resolves interior and victory cues from the manifest", () => {
+    const parsed = MusicManifestSchema.parse({
+      schema: "swagbound.music-manifest.v1",
+      cues: {
+        interior: { file: "audio/music/interior.mp3", loop: true, gain: 0.4 },
+        victory: { file: "audio/music/victory.mp3", loop: false, gain: 0.45 }
+      }
+    });
+
+    expect(resolveMusicCue(parsed, "interior")).toEqual({
+      cue: "interior",
+      file: "audio/music/interior.mp3",
+      loop: true,
+      gain: 0.4
+    });
+    expect(resolveMusicCue(parsed, "victory")).toEqual({
+      cue: "victory",
+      file: "audio/music/victory.mp3",
+      loop: false,
+      gain: 0.45
+    });
   });
 });
 

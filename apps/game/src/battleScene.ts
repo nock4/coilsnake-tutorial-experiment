@@ -158,6 +158,7 @@ import {
 } from "./audio/battleSfx";
 import { createMusic, musicDisabledBySearch, type Music } from "./audio/music";
 import { battleStepSfx } from "./battleSfxPlan";
+import { battleMusicCueForOutcome, type BattleMusicCue } from "./battleMusic";
 
 const TAU = Math.PI * 2;
 export const COMMANDS = commandsForCharId(0);
@@ -418,6 +419,7 @@ export class BattleScene extends Phaser.Scene {
   private backgroundDebug: BattleBackgroundDebug = staticBattleBackgroundDebug();
   private battleSfx_: BattleSfx = createBattleSfx();
   private music_: Music = createMusic();
+  private currentBattleMusicCue?: BattleMusicCue;
   private lastSfx_: BattleSfxCue | null = null;
   private sfxCount_ = 0;
   private firedSfx_ = new Set<BattleSfxCue>();
@@ -516,6 +518,7 @@ export class BattleScene extends Phaser.Scene {
     this.music_ = data.music ?? createMusic(data.musicManifest ?? data.returnTo?.gameData.musicManifest, {
       muted: musicDisabledBySearch(globalThis.location?.search)
     });
+    this.currentBattleMusicCue = undefined;
     this.lastSfx_ = null;
     this.sfxCount_ = 0;
     this.firedSfx_.clear();
@@ -552,7 +555,7 @@ export class BattleScene extends Phaser.Scene {
       this.music_.stop();
       this.backgroundAnimation?.destroy();
     });
-    void this.music_.play("battle");
+    this.playBattleMusicCue(battleMusicCueForOutcome(outcome(this.battle_)), true);
     this.drawEnemySprites();
     this.createStatusWindow();
     this.registerBattleSfxResume();
@@ -1425,6 +1428,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private beginVictorySummary(): void {
+    this.playBattleMusicCue("victory");
     if (this.victorySummary_) {
       this.phase_ = "victory-summary";
       this.transitionPhase_ = "summary";
@@ -2761,6 +2765,7 @@ export class BattleScene extends Phaser.Scene {
       lastSfx: this.lastSfx_,
       sfxCount: this.sfxCount_,
       firedSfx: [...this.firedSfx_],
+      musicCue: this.currentBattleMusicCue,
       fx: { ...this.fxCounters_ },
       lastEnemyAction: this.lastEnemyAction_,
       party,
@@ -2785,6 +2790,14 @@ export class BattleScene extends Phaser.Scene {
       outcome: currentOutcome,
       victorySummary: this.victorySummary_ ? debugVictorySummary(this.victorySummary_) : null
     });
+  }
+
+  private playBattleMusicCue(cue: BattleMusicCue, force = false): void {
+    if (!force && this.currentBattleMusicCue === cue) {
+      return;
+    }
+    this.currentBattleMusicCue = cue;
+    void this.music_.play(cue);
   }
 
   private recordEnemyDamageSignals(previous: BattleState, next: BattleState, now: number): void {

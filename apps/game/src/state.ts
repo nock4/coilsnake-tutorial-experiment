@@ -120,6 +120,7 @@ export type BattleDebug = {
   lastSfx: BattleSfxCue | null;
   sfxCount: number;
   firedSfx: BattleSfxCue[];
+  musicCue?: "battle" | "victory" | undefined;
   fx: BattleFxDebug;
   lastEnemyAction: LastEnemyActionDebug | null;
   party: BattleCombatantDebug[];
@@ -240,6 +241,7 @@ export type OverworldDebug = {
   collisionOverlay?: boolean;
   currentChunk?: { cx: number; cy: number };
   currentSectorIndex?: number;
+  musicCue?: "intro" | "overworld" | "interior" | undefined;
   encounterEnabled?: boolean;
   encounterCooldownMs?: number;
   encounterSeed?: number;

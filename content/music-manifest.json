@@ -4,17 +4,27 @@
     "overworld": {
       "file": "audio/music/overworld.mp3",
       "loop": true,
-      "gain": 0.6
+      "gain": 0.4
+    },
+    "interior": {
+      "file": "audio/music/interior.mp3",
+      "loop": true,
+      "gain": 0.4
     },
     "battle": {
       "file": "audio/music/battle.mp3",
       "loop": true,
-      "gain": 0.6
+      "gain": 0.38
+    },
+    "victory": {
+      "file": "audio/music/victory.mp3",
+      "loop": false,
+      "gain": 0.45
     },
     "intro": {
       "file": "audio/music/overworld.mp3",
       "loop": true,
-      "gain": 0.5
+      "gain": 0.3
     }
   }
 }
