@@ -1,7 +1,7 @@
 {
   "schema": "swagbound.atlas.building-names.v2",
   "scope": "map-wide-overworld-entrances",
-  "method": "234 real building entrances (outdoor source sector, deduped by interior) across all towns. Each of the 59 shopkeeper/clerk/save NPCs assigned to its nearest building -> service flag + function label (Shop/Inn/Service desk). Onett 6 verified by interior sign. Residences carry occupants only. TODO: EB town labels per region, and precise per-shop names (drugstore vs bakery) via interior-sign reads. TOWN LABELS from EB map_sectors.yml \"Town Map Image\" (authoritative): Onett/Twoson/Threed/Fourside/Summers/Scaraba; 153 buildings are in unmapped areas (Winters/Magicant/etc., no in-game minimap). UNMAPPED areas sub-grouped by sector Music id; 3 recognized in-game (Winters=music7, Moonside=music59, Dusty Dunes Desert=music45). Other unmapped clusters are visually ambiguous caves/wilderness, left Unmapped (honest). See docs/atlas/eb-grounding.md.",
+  "method": "234 real building entrances (outdoor source sector, deduped by interior) across all towns. Each of the 59 shopkeeper/clerk/save NPCs assigned to its nearest building -> service flag + function label (Shop/Inn/Service desk). Onett 6 verified by interior sign. Residences carry occupants only. TODO: EB town labels per region, and precise per-shop names (drugstore vs bakery) via interior-sign reads. TOWN LABELS from EB map_sectors.yml \"Town Map Image\" (authoritative): Onett/Twoson/Threed/Fourside/Summers/Scaraba; 153 buildings are in unmapped areas (Winters/Magicant/etc., no in-game minimap). UNMAPPED areas sub-grouped by sector Music id; 3 recognized in-game (Winters=music7, Moonside=music59, Dusty Dunes Desert=music45). Other unmapped clusters are visually ambiguous caves/wilderness, left Unmapped (honest). See docs/atlas/eb-grounding.md. SIGN-READ PASS: full-res chunk crops of each service interior, viewed individually, read the English-text storefront signs — named the text-signed buildings (Drug Store, Bakery, Bus Station) verified; restored Onett 6. Sign-less services (hotels/hospitals/banks/Arabian shops have no English text sign) stay role-typed (function label).",
   "counts": {
     "buildings": 234,
     "services": 29,
@@ -217,10 +217,11 @@
       ],
       "isService": false,
       "serviceRole": null,
-      "name": null,
+      "name": "Arcade",
       "type": "residence",
-      "confidence": "unverified",
-      "town": "Onett"
+      "confidence": "verified",
+      "town": "Onett",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-7648-488",
@@ -439,10 +440,11 @@
       ],
       "isService": true,
       "serviceRole": "clerk",
-      "name": "Service desk",
+      "name": "Arcade",
       "type": "shop/service",
-      "confidence": "inferred-by-role",
-      "town": "Onett"
+      "confidence": "verified",
+      "town": "Onett",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-7968-712",
@@ -668,10 +670,11 @@
       ],
       "isService": false,
       "serviceRole": null,
-      "name": null,
+      "name": "Hospital",
       "type": "residence",
-      "confidence": "unverified",
-      "town": "Onett"
+      "confidence": "verified",
+      "town": "Onett",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-7624-1104",
@@ -932,10 +935,11 @@
       ],
       "isService": false,
       "serviceRole": null,
-      "name": null,
+      "name": "Bakery",
       "type": "residence",
-      "confidence": "unverified",
-      "town": "Onett"
+      "confidence": "verified",
+      "town": "Onett",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-7584-1384",
@@ -1155,10 +1159,11 @@
       ],
       "isService": true,
       "serviceRole": "shopkeeper",
-      "name": "Shop",
+      "name": "Drug Store",
       "type": "shop/service",
-      "confidence": "inferred-by-role",
-      "town": "Onett"
+      "confidence": "verified",
+      "town": "Onett",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-8160-1512",
@@ -1190,10 +1195,11 @@
       ],
       "isService": false,
       "serviceRole": null,
-      "name": null,
+      "name": "Bank",
       "type": "residence",
-      "confidence": "unverified",
-      "town": "Onett"
+      "confidence": "verified",
+      "town": "Onett",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-7712-7272",
@@ -1841,10 +1847,11 @@
       ],
       "isService": true,
       "serviceRole": "shopkeeper",
-      "name": "Shop",
+      "name": "Bus Station",
       "type": "shop/service",
-      "confidence": "inferred-by-role",
-      "town": "Twoson"
+      "confidence": "verified",
+      "town": "Twoson",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-8032-8808",
@@ -2134,10 +2141,11 @@
       ],
       "isService": true,
       "serviceRole": "clerk",
-      "name": "Service desk",
+      "name": "Bakery",
       "type": "shop/service",
-      "confidence": "inferred-by-role",
-      "town": "Threed"
+      "confidence": "verified",
+      "town": "Threed",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-6624-9608",
@@ -2298,10 +2306,11 @@
       ],
       "isService": true,
       "serviceRole": "shopkeeper",
-      "name": "Shop",
+      "name": "Drug Store",
       "type": "shop/service",
-      "confidence": "inferred-by-role",
-      "town": "Threed"
+      "confidence": "verified",
+      "town": "Threed",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-8128-9832",
@@ -4091,11 +4100,12 @@
       ],
       "isService": true,
       "serviceRole": "shopkeeper",
-      "name": "Shop",
+      "name": "Drug Store",
       "type": "shop/service",
-      "confidence": "inferred-by-role",
+      "confidence": "verified",
       "town": "Unmapped area",
-      "musicArea": 4
+      "musicArea": 4,
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-7648-1768",
@@ -4761,12 +4771,13 @@
       ],
       "isService": true,
       "serviceRole": "clerk",
-      "name": "Service desk",
+      "name": "Drug Store",
       "type": "shop/service",
-      "confidence": "inferred-by-role",
+      "confidence": "verified",
       "town": "Winters",
       "musicArea": 7,
-      "townSource": "in-game visual recognition"
+      "townSource": "in-game visual recognition",
+      "nameSource": "interior sign (full-res chunk read)"
     },
     {
       "id": "b-8000-2568",
