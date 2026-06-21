@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { TileOverridesSchema } from "../../packages/eb-schemas/src/index";
 import {
   FTS_ARRANGEMENT_COUNT,
   FTS_CELLS_PER_ARRANGEMENT,
@@ -23,6 +24,7 @@ const SCHEMA = "swagbound.atlas.tiles.v1";
 const DEFAULT_PROJECT_RELATIVE = "external/coilsnake-full";
 const DEFAULT_ATLAS_IMAGE_DIR_RELATIVE = "apps/game/public/atlas/tiles";
 const DEFAULT_ATLAS_JSON_RELATIVE = "content/atlas/tiles.json";
+const DEFAULT_TILE_OVERRIDES_RELATIVE = "content/tile-overrides.json";
 const GRID_COLS = 32;
 
 export type TilesetGraphics = {
@@ -47,6 +49,7 @@ export type TileAtlasTile = {
   isForeground: boolean;
   paletteId: number;
   usageCount: number;
+  overridden: boolean;
 };
 
 export type TileAtlasTileset = {
@@ -74,6 +77,7 @@ export type ExtractTileAtlasOptions = {
   projectRelative?: string;
   atlasImageDirRelative?: string;
   atlasJsonRelative?: string;
+  tileOverridesRelative?: string;
   gridCols?: number;
 };
 
@@ -268,6 +272,15 @@ function mostCommonPaletteId(usage: ArrangementUsage | undefined, fallbackPalett
     .sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0] ?? fallbackPaletteId;
 }
 
+async function loadTileOverrideKeys(tileOverridesPath: string): Promise<Set<string>> {
+  if (!existsSync(tileOverridesPath)) {
+    return new Set();
+  }
+  const raw = JSON.parse(await readFile(tileOverridesPath, "utf8"));
+  const overrides = TileOverridesSchema.parse(raw);
+  return new Set(Object.keys(overrides.byTile));
+}
+
 export async function loadTilesetGraphics(tilesetDir: string): Promise<Map<number, TilesetGraphics>> {
   const graphicsByMapTileset = new Map<number, TilesetGraphics>();
   const ftsFiles = (await readdir(tilesetDir)).filter((file) => file.toLowerCase().endsWith(".fts")).sort();
@@ -317,9 +330,10 @@ function drawAtlasSheet(options: {
   graphics: TilesetGraphics;
   mapTileset: number;
   usageByArrangement: Map<number, ArrangementUsage> | undefined;
+  tileOverrideKeys: Set<string>;
   gridCols: number;
 }): TileAtlasTileset & { image: Uint8Array; width: number; height: number } {
-  const { graphics, mapTileset, usageByArrangement, gridCols } = options;
+  const { graphics, mapTileset, usageByArrangement, tileOverrideKeys, gridCols } = options;
   const fallbackPalette = firstPalette(graphics);
   if (!fallbackPalette) {
     throw new Error(`atlas: map tileset ${mapTileset} has no palettes`);
@@ -363,7 +377,8 @@ function drawAtlasSheet(options: {
       solidCells: collision.solidCells,
       isForeground: usage ? usage.foregroundUseCount > 0 : collision.isForeground,
       paletteId: palette.mapPalette,
-      usageCount: usage?.usageCount ?? 0
+      usageCount: usage?.usageCount ?? 0,
+      overridden: tileOverrideKeys.has(`${mapTileset}:${arrangement}`)
     });
   }
 
@@ -384,18 +399,21 @@ export async function extractTileAtlas(options: ExtractTileAtlasOptions = {}): P
   const projectRelative = options.projectRelative ?? DEFAULT_PROJECT_RELATIVE;
   const atlasImageDirRelative = options.atlasImageDirRelative ?? DEFAULT_ATLAS_IMAGE_DIR_RELATIVE;
   const atlasJsonRelative = options.atlasJsonRelative ?? DEFAULT_ATLAS_JSON_RELATIVE;
+  const tileOverridesRelative = options.tileOverridesRelative ?? DEFAULT_TILE_OVERRIDES_RELATIVE;
   const gridCols = options.gridCols ?? GRID_COLS;
   const projectAbs = path.join(rootDir, projectRelative);
   const tilesetDir = path.join(projectAbs, "Tilesets");
   const mapTilesPath = path.join(projectAbs, "map_tiles.map");
   const mapSectorsPath = path.join(projectAbs, "map_sectors.yml");
+  const tileOverridesPath = path.join(rootDir, tileOverridesRelative);
   const outImageDir = path.join(rootDir, atlasImageDirRelative);
   const outJsonPath = path.join(rootDir, atlasJsonRelative);
 
-  const [graphicsByMapTileset, mapRows, sectorEntries] = await Promise.all([
+  const [graphicsByMapTileset, mapRows, sectorEntries, tileOverrideKeys] = await Promise.all([
     loadTilesetGraphics(tilesetDir),
     readFile(mapTilesPath, "utf8").then(parseMapTiles),
-    readFile(mapSectorsPath, "utf8").then(parseIntKeyedYaml)
+    readFile(mapSectorsPath, "utf8").then(parseIntKeyedYaml),
+    loadTileOverrideKeys(tileOverridesPath)
   ]);
   const usage = tallyMapUsage({ mapRows, sectorEntries, graphicsByMapTileset });
   if (usage.mapCellCount !== usage.talliedCellCount) {
@@ -418,6 +436,7 @@ export async function extractTileAtlas(options: ExtractTileAtlasOptions = {}): P
       graphics,
       mapTileset,
       usageByArrangement: usage.usageByTileset.get(mapTileset),
+      tileOverrideKeys,
       gridCols
     });
     const { image, width, height, ...tilesetIndex } = atlas;

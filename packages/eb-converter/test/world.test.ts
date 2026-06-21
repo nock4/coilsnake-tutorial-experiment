@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 import os from "node:os";
@@ -25,8 +25,8 @@ import {
   parseYamlInteger,
   placementToWorldPixel
 } from "../src/coilsnakeYaml";
-import { chooseRegion, encodeCollisionRows, findSpawn, spriteGroupAnimations } from "../src/world";
-import { encodePngRgba, readPngHeader } from "../src/png";
+import { chooseRegion, encodeCollisionRows, findSpawn, spriteGroupAnimations, TILE_SIZE } from "../src/world";
+import { decodePngRgba, encodePngRgba, readPngHeader, type PngRgba } from "../src/png";
 import {
   EB_ROM_SIZE_BYTES,
   NEW_GAME_STARTUP_BANK_FILE_OFFSET,
@@ -71,6 +71,22 @@ function syntheticFts(): string {
     }
   }
   return `${lines.join("\n")}\n`;
+}
+
+function filledRgba(width: number, height: number, color: readonly [number, number, number, number]): Uint8Array {
+  const rgba = new Uint8Array(width * height * 4);
+  for (let index = 0; index < rgba.length; index += 4) {
+    rgba[index] = color[0];
+    rgba[index + 1] = color[1];
+    rgba[index + 2] = color[2];
+    rgba[index + 3] = color[3];
+  }
+  return rgba;
+}
+
+function pixelAt(image: PngRgba, x: number, y: number): number[] {
+  const offset = (y * image.width + x) * 4;
+  return [...image.rgba.slice(offset, offset + 4)];
 }
 
 describe("fts parser", () => {
@@ -615,6 +631,100 @@ describe("world artifact build (synthetic project)", () => {
       expect(validated.worldNpcs).toBe(2);
       expect(validated.spriteSheets).toBe(2);
       expect(validated.worldAssetsChecked).toBe(4);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("renders a byTile override image in place of the EB arrangement", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-world-tile-override-"));
+    try {
+      const project = path.join(temp, "project");
+      const out = path.join(temp, "generated");
+      const publicRoot = path.join(temp, "public");
+      await writeSyntheticProject(project);
+      await mkdir(path.join(publicRoot, "assets", "swagbound", "tiles"), { recursive: true });
+      await writeFile(
+        path.join(publicRoot, "assets", "swagbound", "tiles", "green.png"),
+        encodePngRgba(TILE_SIZE, TILE_SIZE, filledRgba(TILE_SIZE, TILE_SIZE, [0, 255, 0, 255]))
+      );
+
+      const result = await convertProject({
+        project,
+        out,
+        tileOverridePublicRoot: publicRoot,
+        tileOverrides: {
+          schema: "swagbound.tile-overrides.v1",
+          byTile: {
+            "0:1": {
+              image: "assets/swagbound/tiles/green.png"
+            }
+          }
+        }
+      });
+
+      const background = decodePngRgba(await readFile(path.join(out, "assets/world/background.png")));
+      expect(pixelAt(background, 0, 0)).toEqual([0, 255, 0, 255]);
+      expect(result.world.warnings.some((warning) => warning.code.startsWith("world_tile_override"))).toBe(false);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("falls back to the EB arrangement when a tile override image is missing", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-world-tile-override-missing-"));
+    try {
+      const project = path.join(temp, "project");
+      const out = path.join(temp, "generated");
+      const publicRoot = path.join(temp, "public");
+      await writeSyntheticProject(project);
+
+      const result = await convertProject({
+        project,
+        out,
+        tileOverridePublicRoot: publicRoot,
+        tileOverrides: {
+          schema: "swagbound.tile-overrides.v1",
+          byTile: {
+            "0:1": {
+              image: "assets/swagbound/tiles/missing.png"
+            }
+          }
+        }
+      });
+
+      const background = decodePngRgba(await readFile(path.join(out, "assets/world/background.png")));
+      expect(pixelAt(background, 0, 0)).toEqual([255, 0, 0, 255]);
+      expect(result.world.warnings.some((warning) => warning.code === "world_tile_override_image_unavailable")).toBe(true);
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it("renders byte-identical world PNGs when tile overrides are empty", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-world-tile-override-empty-"));
+    try {
+      const project = path.join(temp, "project");
+      const plainOut = path.join(temp, "plain-generated");
+      const emptyOut = path.join(temp, "empty-generated");
+      await writeSyntheticProject(project);
+
+      await convertProject({ project, out: plainOut });
+      await convertProject({
+        project,
+        out: emptyOut,
+        tileOverridePublicRoot: path.join(temp, "public"),
+        tileOverrides: {
+          schema: "swagbound.tile-overrides.v1",
+          byTile: {}
+        }
+      });
+
+      for (const asset of ["assets/world/background.png", "assets/world/foreground.png"]) {
+        const plain = await readFile(path.join(plainOut, asset));
+        const empty = await readFile(path.join(emptyOut, asset));
+        expect(Buffer.compare(plain, empty), `${asset} should be byte-identical`).toBe(0);
+      }
     } finally {
       await rm(temp, { recursive: true, force: true });
     }

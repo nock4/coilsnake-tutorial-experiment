@@ -15,9 +15,11 @@ import {
   PsiOverridesSchema,
   SpriteOverridesSchema,
   StoryTriggersSchema,
+  TileOverridesSchema,
   type BackgroundOverrideEntry,
   type SpriteOverride,
-  type SpriteOverrides
+  type SpriteOverrides,
+  type TileOverrides
 } from "../packages/eb-schemas/src/index";
 import { DEFAULT_GENERATED_OUT } from "../packages/content-builder/src/build";
 import { convertProject } from "../packages/eb-converter/src/index";
@@ -38,6 +40,8 @@ export const NPC_OVERRIDES_OUTPUT = "npc-overrides.json";
 export const OVERWORLD_ENEMY_SKINS_SOURCE = "content/overworld-enemy-skins.json";
 export const BACKGROUND_OVERRIDES_SOURCE = "content/background-overrides.json";
 export const BACKGROUND_OVERRIDES_OUTPUT = "background-overrides.json";
+export const TILE_OVERRIDES_SOURCE = "content/tile-overrides.json";
+export const TILE_OVERRIDES_OUTPUT = "tile-overrides.json";
 export const ITEM_OVERRIDES_SOURCE = "content/item-overrides.json";
 export const ITEM_OVERRIDES_OUTPUT = "item-overrides.json";
 export const CHARACTER_OVERRIDES_SOURCE = "content/character-overrides.json";
@@ -63,6 +67,7 @@ const GAME_PUBLIC_ROOT = "apps/game/public";
  * window, encounter, PSI, and shop data in the shared generated output.
  */
 export async function buildEbFullWorldDefault() {
+  const tileOverrides = await readTileOverrides(TILE_OVERRIDES_SOURCE);
   const result = await convertProject({
     project: EB_FULL_WORLD_PROJECT,
     worldMode: EB_FULL_WORLD_MODE,
@@ -72,7 +77,9 @@ export async function buildEbFullWorldDefault() {
     items: true,
     shops: true,
     font: true,
-    window: true
+    window: true,
+    tileOverrides,
+    tileOverridePublicRoot: resolve(GAME_PUBLIC_ROOT)
   });
   await copyContentOverlaysToGenerated(EB_FULL_WORLD_OUT);
   return result;
@@ -93,6 +100,7 @@ async function copyOptionalJsonToGenerated(source: string, out: string, outputNa
 
 async function copyContentOverlaysToGenerated(out: string): Promise<void> {
   await validateBackgroundOverrideImages(BACKGROUND_OVERRIDES_SOURCE);
+  await validateTileOverrides(TILE_OVERRIDES_SOURCE);
   await validatePsiOverrides(PSI_OVERRIDES_SOURCE);
   await validateBattleRules(BATTLE_RULES_SOURCE);
   await validateStoryTriggers(STORY_TRIGGERS_SOURCE);
@@ -108,6 +116,7 @@ async function copyContentOverlaysToGenerated(out: string): Promise<void> {
     generateSpriteOverridesWithOverworldSkins(out, SPRITE_OVERRIDES_OUTPUT),
     copyJsonToGenerated(NPC_OVERRIDES_SOURCE, out, NPC_OVERRIDES_OUTPUT),
     copyJsonToGenerated(BACKGROUND_OVERRIDES_SOURCE, out, BACKGROUND_OVERRIDES_OUTPUT),
+    copyJsonToGenerated(TILE_OVERRIDES_SOURCE, out, TILE_OVERRIDES_OUTPUT),
     copyJsonToGenerated(ITEM_OVERRIDES_SOURCE, out, ITEM_OVERRIDES_OUTPUT),
     copyJsonToGenerated(CHARACTER_OVERRIDES_SOURCE, out, CHARACTER_OVERRIDES_OUTPUT),
     copyJsonToGenerated(PSI_OVERRIDES_SOURCE, out, PSI_OVERRIDES_OUTPUT),
@@ -188,6 +197,14 @@ async function validateOpeningCutscene(source: string): Promise<void> {
 
 async function validateNpcOverrides(source: string): Promise<void> {
   NpcOverridesSchema.parse(JSON.parse(await readFile(resolve(source), "utf8")));
+}
+
+async function readTileOverrides(source: string): Promise<TileOverrides> {
+  return TileOverridesSchema.parse(JSON.parse(await readFile(resolve(source), "utf8")));
+}
+
+async function validateTileOverrides(source: string): Promise<void> {
+  await readTileOverrides(source);
 }
 
 function spriteOverrideEntries(overrides: SpriteOverrides): SpriteOverride[] {

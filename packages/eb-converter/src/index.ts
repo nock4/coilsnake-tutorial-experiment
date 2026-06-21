@@ -26,6 +26,7 @@ import {
   type ItemCollection,
   type PsiCollection,
   type ShopData,
+  type TileOverrides,
   type ValidationIssue,
   type ValidationReport,
   type TeleportDestinations,
@@ -77,6 +78,8 @@ type CliArgs = {
   spawnWorldPixel?: { x: number; y: number };
   spawnWorldPixelDerivation?: string;
   romPath?: string;
+  tileOverrides?: TileOverrides;
+  tileOverridePublicRoot?: string;
 };
 
 type ConvertResult = {
@@ -993,7 +996,9 @@ export async function convertProject(options: Partial<CliArgs> = {}): Promise<Co
     spawnWorldPixel,
     spawnWorldPixelDerivation,
     newGameStartupRef,
-    newGameStartupDerivation: newGameStartupRef ? ROM_NEW_GAME_STARTUP_DERIVATION : undefined
+    newGameStartupDerivation: newGameStartupRef ? ROM_NEW_GAME_STARTUP_DERIVATION : undefined,
+    tileOverrides: options.tileOverrides,
+    tileOverridePublicRoot: options.tileOverridePublicRoot
   });
   const world = worldBuild.world;
   const sprites = worldBuild.sprites;
