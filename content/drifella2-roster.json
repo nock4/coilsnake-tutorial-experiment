@@ -1349,7 +1349,12 @@
       "overworld": "asset-lab/curation/drifella2-9305-overnight-wave-001/accepted/drifella2-9305-overworld-v1-ow-001-nearest.png",
       "overworldAlt": "asset-lab/curation/drifella2-9305-overnight-wave-001/accepted/drifella2-9305-overworld-v1-ow-002-nearest.png",
       "status": "review-only",
-      "entity": null
+      "entity": {
+        "spriteGroup": 71,
+        "groupUsedByNpcCount": 15,
+        "replacedSkin": "unicornio"
+      },
+      "overworldLocal": "assets/swagbound/overworld-npc/drifella2-9305.png"
     },
     "9461": {
       "id": "drifella2-9461",
@@ -1360,7 +1365,12 @@
       "overworld": "asset-lab/curation/drifella2-9461-overnight-wave-009/accepted/drifella2-9461-overworld-v1-ow-001-nearest.png",
       "overworldAlt": "asset-lab/curation/drifella2-9461-overnight-wave-009/accepted/drifella2-9461-overworld-v1-ow-002-nearest.png",
       "status": "review-only",
-      "entity": null
+      "entity": {
+        "spriteGroup": 152,
+        "groupUsedByNpcCount": 7,
+        "replacedSkin": "unicornio"
+      },
+      "overworldLocal": "assets/swagbound/overworld-npc/drifella2-9461.png"
     },
     "9463": {
       "id": "drifella2-9463",
@@ -1371,7 +1381,12 @@
       "overworld": "asset-lab/curation/drifella2-9463-overnight-wave-019/accepted/drifella2-9463-overworld-v1-ow-001-nearest.png",
       "overworldAlt": "asset-lab/curation/drifella2-9463-overnight-wave-019/accepted/drifella2-9463-overworld-v1-ow-002-nearest.png",
       "status": "review-only",
-      "entity": null
+      "entity": {
+        "spriteGroup": 111,
+        "groupUsedByNpcCount": 1,
+        "replacedSkin": "unicornio"
+      },
+      "overworldLocal": "assets/swagbound/overworld-npc/drifella2-9463.png"
     },
     "9747": {
       "id": "drifella2-9747",
@@ -1382,7 +1397,12 @@
       "overworld": "asset-lab/curation/drifella2-9747-overnight-wave-031/accepted/drifella2-9747-overworld-v1-ow-001-nearest.png",
       "overworldAlt": "asset-lab/curation/drifella2-9747-overnight-wave-031/accepted/drifella2-9747-overworld-v1-ow-002-nearest.png",
       "status": "review-only",
-      "entity": null
+      "entity": {
+        "spriteGroup": 382,
+        "groupUsedByNpcCount": 1,
+        "replacedSkin": "unicornio"
+      },
+      "overworldLocal": "assets/swagbound/overworld-npc/drifella2-9747.png"
     },
     "9780": {
       "id": "drifella2-9780",
@@ -1411,6 +1431,16 @@
     "method": "creatures sorted by token asc -> raw ambient/named NPC groups sorted by usedByNpcCount desc; index-paired. Phones 167/215/216 excluded. 0 unskinned enemies so battle sprites stay in roster (source paths).",
     "assigned": 89,
     "leftover": 6,
-    "date": "2026-06-22"
+    "date": "2026-06-22",
+    "unicornioSwap": {
+      "date": "2026-06-22",
+      "groups": [
+        71,
+        152,
+        111,
+        382
+      ],
+      "note": "replaced the leftover unicornio character skins (vendor-unicorns) with reserve Drifella2 creatures"
+    }
   }
 }
