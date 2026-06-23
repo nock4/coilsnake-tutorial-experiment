@@ -73,7 +73,7 @@ import {
   flashOverlayState,
   flashState,
   hitSparkState,
-  psiElementFlashColor,
+  psiElementFlashProfile,
   screenShakeOffset,
   type EffectDirection,
   wobbleOffset
@@ -250,6 +250,10 @@ const BATTLE_FX_PSI_FLASH_ALPHA = 0.26;
 const BATTLE_FX_VICTORY_FLASH_ALPHA = 0.22;
 const BATTLE_FX_ATTACK_FLASH_COLOR = 0xffffff;
 const BATTLE_FX_VICTORY_FLASH_COLOR = 0xfff0a6;
+const BATTLE_FX_LEVELUP_FLASH_MS = 440;
+const BATTLE_FX_LEVELUP_FLASH_ALPHA = 0.3;
+const BATTLE_FX_LEVELUP_FLASH_COLOR = 0xfff4c4;
+const BATTLE_FX_LEVELUP_DELAY_MS = 520;
 const BATTLE_FX_SPARK_COLOR = 0xfff2a8;
 
 type BattleSubmenu = "command" | "psi" | "goods" | "target";
@@ -1014,11 +1018,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     if (action?.action === "psi" && (firstBattleDamage(events) || battleEventsHaveMiss(events))) {
-      this.startFlashOverlay(
-        psiElementFlashColor(action.psiId ?? 0),
-        BATTLE_FX_PSI_FLASH_ALPHA,
-        BATTLE_FX_PSI_FLASH_MS
-      );
+      this.startPsiElementFlash(action.psiId ?? 0);
     } else if (action?.action === "attack" && !result.skipped) {
       this.startFlashOverlay(
         BATTLE_FX_ATTACK_FLASH_COLOR,
@@ -1086,6 +1086,30 @@ export class BattleScene extends Phaser.Scene {
       color
     };
     this.fxCounters_.flashCount += 1;
+  }
+
+  private startPsiElementFlash(psiId: number): void {
+    const profile = psiElementFlashProfile(psiId);
+    this.startFlashOverlay(profile.color, profile.alpha, profile.durationMs);
+    for (let pulse = 1; pulse < profile.pulses; pulse += 1) {
+      this.time.delayedCall(pulse * profile.durationMs * 1.35, () => {
+        this.startFlashOverlay(profile.color, profile.alpha, profile.durationMs);
+      });
+    }
+  }
+
+  private playLevelUpFlourishIfAny(): void {
+    if ((this.victorySummary_?.levelUps.length ?? 0) <= 0) {
+      return;
+    }
+    this.time.delayedCall(BATTLE_FX_LEVELUP_DELAY_MS, () => {
+      this.playBattleSfxCue("levelUp");
+      this.startFlashOverlay(
+        BATTLE_FX_LEVELUP_FLASH_COLOR,
+        BATTLE_FX_LEVELUP_FLASH_ALPHA,
+        BATTLE_FX_LEVELUP_FLASH_MS
+      );
+    });
   }
 
   private startEnemyLunge(enemyIndex: number): void {
@@ -1459,6 +1483,7 @@ export class BattleScene extends Phaser.Scene {
       this.victorySummaryPageIndex_ = 0;
       this.phase_ = "victory-summary";
       this.transitionPhase_ = "summary";
+      this.playLevelUpFlourishIfAny();
       return;
     }
     this.playBattleSfxCue("victory");
@@ -1477,6 +1502,7 @@ export class BattleScene extends Phaser.Scene {
     this.victorySummaryPageIndex_ = 0;
     this.phase_ = "victory-summary";
     this.transitionPhase_ = "summary";
+    this.playLevelUpFlourishIfAny();
     this.submenu_ = "command";
     this.commandIndex_ = 0;
     this.currentActor_ = null;
@@ -2512,8 +2538,15 @@ export class BattleScene extends Phaser.Scene {
       }
       const selected = this.selectedCommandIndex() === index;
       text.setText(this.fitMeasuredText(view.commandLines[index] ?? "", Math.max(1, cell.width - BATTLE_MENU_CARET_GUTTER_PX)));
-      text.setColor(selected ? CLEAN_UI_PRIMARY : CLEAN_UI_PRIMARY);
-      text.setFontStyle(selected ? "500" : "400");
+      text.setColor(CLEAN_UI_PRIMARY);
+      if (selected) {
+        // The active command breathes so the menu reads as live, not a static list.
+        text.setFontStyle("600");
+        text.setAlpha(0.9 + Math.sin(this.time.now / 150) * 0.1);
+      } else {
+        text.setFontStyle("400");
+        text.setAlpha(1);
+      }
     });
   }
 

@@ -168,6 +168,39 @@ export function psiElementFlashColor(psiId: number): number {
   return PSI_FLASH_COLOR_NEUTRAL;
 }
 
+export type PsiElementFlashProfile = {
+  color: number;
+  alpha: number;
+  durationMs: number;
+  pulses: number;
+};
+
+/**
+ * Per-element PSI flash styling so each element *feels* distinct, not just a
+ * different color: fire is a warm sustained wash, freeze a sharp cold snap,
+ * thunder a fast strobe, flash a bright double-burst, starstorm a long twinkle.
+ */
+export function psiElementFlashProfile(psiId: number): PsiElementFlashProfile {
+  const id = Number.isFinite(psiId) ? Math.floor(psiId) : 0;
+  const color = psiElementFlashColor(id);
+  if (id >= 5 && id <= 8) {
+    return { color, alpha: 0.3, durationMs: 300, pulses: 1 };
+  }
+  if (id >= 9 && id <= 12) {
+    return { color, alpha: 0.24, durationMs: 190, pulses: 1 };
+  }
+  if (id >= 13 && id <= 16) {
+    return { color, alpha: 0.34, durationMs: 80, pulses: 3 };
+  }
+  if (id >= 17 && id <= 20) {
+    return { color, alpha: 0.4, durationMs: 95, pulses: 2 };
+  }
+  if (id >= 21 && id <= 24) {
+    return { color, alpha: 0.22, durationMs: 380, pulses: 1 };
+  }
+  return { color, alpha: 0.26, durationMs: 230, pulses: 1 };
+}
+
 export function attackerLungeOffset(
   now: number,
   startedAt: number | null,
