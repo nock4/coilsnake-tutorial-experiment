@@ -51,7 +51,7 @@
     },
     {
       "id": "first-threshold-malady",
-      "boss": { "x": 1928, "y": 1400, "facing": "down" },
+      "boss": { "x": 1904, "y": 1408, "facing": "down" },
       "once": true,
       "requireFlags": ["signal:route_open"],
       "dialogue": [
