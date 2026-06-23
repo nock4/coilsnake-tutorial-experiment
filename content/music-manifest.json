@@ -26,5 +26,14 @@
       "loop": true,
       "gain": 0.3
     }
-  }
+  },
+  "areas": [
+    {
+      "id": "signal-north-threshold",
+      "file": "audio/music/overworld.mp3",
+      "loop": true,
+      "gain": 0.4,
+      "match": { "sectorIds": [327, 359] }
+    }
+  ]
 }
