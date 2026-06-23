@@ -5,9 +5,35 @@ import {
   flashState,
   hitSparkState,
   psiElementFlashColor,
+  psiElementFlashProfile,
   screenShakeOffset,
   wobbleOffset
 } from "../src/battleEffects";
+
+describe("psiElementFlashProfile", () => {
+  it("strobes thunder, sustains fire, and bursts flash", () => {
+    expect(psiElementFlashProfile(14).pulses).toBe(3); // thunder = strobe
+    expect(psiElementFlashProfile(6).pulses).toBe(1); // fire = single warm wash
+    expect(psiElementFlashProfile(18).pulses).toBe(2); // flash = double burst
+  });
+
+  it("carries the element color and a positive, bounded alpha", () => {
+    const fire = psiElementFlashProfile(6);
+    expect(fire.color).toBe(psiElementFlashColor(6));
+    expect(fire.alpha).toBeGreaterThan(0);
+    expect(fire.alpha).toBeLessThanOrEqual(1);
+    expect(fire.durationMs).toBeGreaterThan(0);
+  });
+
+  it("falls back to a single neutral pulse for non-element ids", () => {
+    expect(psiElementFlashProfile(0)).toEqual({
+      color: psiElementFlashColor(0),
+      alpha: 0.26,
+      durationMs: 230,
+      pulses: 1
+    });
+  });
+});
 
 describe("battleEffects", () => {
   describe("flashState", () => {
