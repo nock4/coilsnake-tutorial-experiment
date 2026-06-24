@@ -11,6 +11,7 @@ import {
 
 export type NpcBehavior =
   | { kind: "static" }
+  | { kind: "lookAround"; periodMs: number; seed: number }
   | { kind: "patrol"; axis: "x" | "y"; rangePx: number; speedPxPerSec: number }
   | { kind: "wander"; radiusPx: number; speedPxPerSec: number; seed: number; stepMs?: number };
 
@@ -77,6 +78,10 @@ export function stepNpc(state: NpcRuntimeState, options: NpcStepOptions): NpcRun
   }
 
   const behavior = state.behavior;
+  if (behavior.kind === "lookAround") {
+    stepLookAround(state, behavior, options, frames);
+    return state;
+  }
   if (behavior.kind === "wander") {
     stepWander(state, behavior, options, frames);
     return state;
@@ -130,7 +135,10 @@ function initialPatrolDirection(behavior: NpcBehavior, facing: Facing): -1 | 1 {
 }
 
 function initialWanderStepIndex(behavior: NpcBehavior): number {
-  return behavior.kind === "wander" ? behavior.seed % 4 : 0;
+  if (behavior.kind === "wander" || behavior.kind === "lookAround") {
+    return behavior.seed % 4;
+  }
+  return 0;
 }
 
 function normalizePatrolDirectionAtEdge(state: NpcRuntimeState): void {
@@ -168,6 +176,29 @@ function stepWander(
     blocked: options.blocked,
     frames
   });
+}
+
+function stepLookAround(
+  state: NpcRuntimeState,
+  behavior: Extract<NpcBehavior, { kind: "lookAround" }>,
+  options: NpcStepOptions,
+  frames: DirectionFrameSequence
+): void {
+  state.wanderElapsedMs += options.deltaMs;
+  if (state.wanderElapsedMs >= behavior.periodMs) {
+    state.wanderStepIndex += Math.floor(state.wanderElapsedMs / behavior.periodMs);
+    state.wanderElapsedMs %= behavior.periodMs;
+  }
+  // EarthBound "watcher" scripts (movement 606/693): turn to face a new direction
+  // every period, but never translate. Visible on EB-native multi-frame sprites;
+  // a no-op for single-frame skinned overrides (still the correct behavior).
+  const facing = wanderFacing(behavior.seed, state.wanderStepIndex);
+  state.player.facing = facing;
+  state.player.velocityX = 0;
+  state.player.velocityY = 0;
+  state.player.moving = false;
+  state.player.animKey = `idle-${facing}`;
+  state.player.animFrame = frames[facing][0];
 }
 
 function patrolInput(axis: "x" | "y", sign: -1 | 1): MoveInput {

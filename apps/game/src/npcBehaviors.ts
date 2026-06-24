@@ -9,12 +9,14 @@ import type { NpcBehavior } from "./npcController";
 
 export const STATIC_NPC_BEHAVIOR: NpcBehavior = { kind: "static" };
 // Decoded from the EarthBound ROM action-script bytecode (movement-value pointer
-// table @ 0xC400D4) against the Herringway/ebsrc disassembly: these movement ids
-// run a zero-velocity / no-move-callback script, or cycle facing in place (606/693
-// = look-around watchers), so the NPC never translates. Everything else falls
-// through to the wander default. The decoded WALKERS are {12,13,16,599,602}; the
-// rare long-tail ids (80/607-609/769/784/…) stay on the wander default for now.
-export const STATIC_HEURISTIC_MOVEMENT_IDS = new Set([0, 7, 8, 9, 10, 597, 598, 600, 605, 606, 693]);
+// table @ 0xC400D4) against the Herringway/ebsrc disassembly. STATIC ids run a
+// zero-velocity / no-move-callback script (the NPC never translates). LOOK_AROUND
+// ids (606/693 "watcher" scripts) stand still but turn to face new directions in
+// place. Decoded WALKERS {12,13,16,599,602} + the rare long-tail (80/607-609/769/
+// 784/…) fall through to the wander default.
+export const STATIC_HEURISTIC_MOVEMENT_IDS = new Set([0, 7, 8, 9, 10, 597, 598, 600, 605]);
+export const LOOK_AROUND_MOVEMENT_IDS = new Set([606, 693]);
+export const LOOK_AROUND_PERIOD_MS = 2000;
 export const HEURISTIC_WANDER_RADIUS_PX = 16;
 export const HEURISTIC_WANDER_SPEED_PX_PER_SEC = 22;
 
@@ -87,6 +89,9 @@ export function interactionEventsHaveServiceEffect(
 export function heuristicBehaviorForMovement(npcId: number, movementId?: number): NpcBehavior {
   if (movementId === undefined || STATIC_HEURISTIC_MOVEMENT_IDS.has(movementId)) {
     return STATIC_NPC_BEHAVIOR;
+  }
+  if (LOOK_AROUND_MOVEMENT_IDS.has(movementId)) {
+    return { kind: "lookAround", periodMs: LOOK_AROUND_PERIOD_MS, seed: npcBehaviorSeed(npcId, movementId) };
   }
   return {
     kind: "wander",
