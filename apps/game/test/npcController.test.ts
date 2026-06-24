@@ -178,6 +178,35 @@ describe("NPC wander controller", () => {
   });
 });
 
+describe("NPC lookAround controller", () => {
+  const LOOK: NpcBehavior = { kind: "lookAround", periodMs: 1000, seed: 0 };
+
+  it("turns to face new directions on the period cadence without ever translating", () => {
+    const state = createNpcState(50, 50, "down", LOOK, FRAMES);
+    const facings = new Set<Facing>();
+
+    for (let i = 0; i < 40; i += 1) {
+      step(state, 100);
+      facings.add(state.player.facing);
+      expect(state.player.x).toBe(50);
+      expect(state.player.y).toBe(50);
+      expect(state.player.moving).toBe(false);
+      expect(state.player.animKey).toBe(`idle-${state.player.facing}`);
+    }
+
+    // seed 0 -> order up,right,down,left; 4s at a 1s period cycles through all four
+    expect(facings).toEqual(new Set<Facing>(["up", "right", "down", "left"]));
+  });
+
+  it("holds its facing between period boundaries", () => {
+    const state = createNpcState(50, 50, "down", LOOK, FRAMES);
+    step(state, 500);
+    const facing = state.player.facing;
+    step(state, 400);
+    expect(state.player.facing).toBe(facing);
+  });
+});
+
 describe("facingToward", () => {
   it("uses the dominant axis and prefers horizontal ties", () => {
     expect(facingToward(0, 0, 10, 4)).toBe("right");

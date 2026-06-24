@@ -8,11 +8,17 @@ describe("NPC behavior selection", () => {
     expect(behaviorForNpc(746, 8)).toEqual({ kind: "patrol", axis: "x", rangePx: 24, speedPxPerSec: 40 });
   });
 
-  it("maps decoded stationary/look-around movement ids to static behavior", () => {
+  it("maps decoded stationary movement ids to static behavior", () => {
     // Decoded from the EB action-script bytecode (see npcBehaviors.ts): zero-velocity
-    // / no-move-callback scripts and the 606/693 look-around watchers never translate.
-    for (const movementId of [undefined, 0, 7, 8, 9, 10, 597, 598, 600, 605, 606, 693]) {
+    // / no-move-callback scripts never translate.
+    for (const movementId of [undefined, 0, 7, 8, 9, 10, 597, 598, 600, 605]) {
       expect(heuristicBehaviorForMovement(100, movementId).kind, `movement ${movementId}`).toBe("static");
+    }
+  });
+
+  it("maps the 606/693 watcher ids to turn-in-place lookAround", () => {
+    for (const movementId of [606, 693]) {
+      expect(heuristicBehaviorForMovement(100, movementId)).toMatchObject({ kind: "lookAround", periodMs: 2000 });
     }
   });
 
