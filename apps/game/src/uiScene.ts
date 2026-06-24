@@ -53,6 +53,43 @@ type MenuCursorSlot = {
   rowHeight: number;
 };
 
+const DEBUG_COPY_LABEL = "[ Copy ]";
+const DEBUG_COPIED_LABEL = "[ Copied! ]";
+
+/** Copy debug-panel text to the clipboard so it can be pasted into a bug report. */
+function copyTextToClipboard(text: string): void {
+  const clip = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+  if (clip?.writeText) {
+    clip.writeText(text).catch(() => fallbackCopyText(text));
+  } else {
+    fallbackCopyText(text);
+  }
+  // Console mirror: a no-clipboard fallback path the user can still select from.
+  if (typeof console !== "undefined") {
+    console.info("[debug] panel copied:\n" + text);
+  }
+}
+
+function fallbackCopyText(text: string): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-1000px";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  try {
+    document.execCommand("copy");
+  } catch {
+    // best-effort; clipboard may be unavailable in this context
+  }
+  document.body.removeChild(textarea);
+}
+
 /**
  * Camera-independent overlay: dialogue window, interaction prompt, and the
  * F1 debug panel. Runs at native canvas resolution above the zoomed world.
@@ -75,6 +112,9 @@ export class UiScene extends Phaser.Scene {
   private menuTexts: Phaser.GameObjects.Text[] = [];
   private menuCursorSlots: MenuCursorSlot[] = [];
   private lastSignature = "";
+  private copyButton?: Phaser.GameObjects.Text;
+  private panelDebugText = "";
+  private copyResetEvent?: Phaser.Time.TimerEvent;
 
   constructor() {
     super("ui");
@@ -113,8 +153,33 @@ export class UiScene extends Phaser.Scene {
       color: CLEAN_UI_PRIMARY,
       lineSpacing: 3
     }).setDepth(13);
+    this.createCopyButton();
     this.menuGraphics = this.add.graphics().setDepth(14);
     this.menuCursorGraphics = this.add.graphics().setDepth(16);
+  }
+
+  /** A clickable [ Copy ] chip (top bar) that copies the live debug panel text. */
+  private createCopyButton(): void {
+    const badgeWidth = this.badgeText?.width ?? 90;
+    const button = createCleanText(this, this.scale.width - 12 - badgeWidth - 14, 10, DEBUG_COPY_LABEL, {
+      fontSize: 11,
+      color: CLEAN_UI_SECONDARY
+    }).setOrigin(1, 0).setDepth(13).setVisible(false);
+    button.setInteractive({ useHandCursor: true });
+    button.on("pointerover", () => {
+      if (button.text === DEBUG_COPY_LABEL) {
+        button.setColor(CLEAN_UI_PRIMARY);
+      }
+    });
+    button.on("pointerout", () => {
+      if (button.text === DEBUG_COPY_LABEL) {
+        button.setColor(CLEAN_UI_SECONDARY);
+      }
+    });
+    button.on("pointerdown", () => this.copyDebugText());
+    // Keyboard alias: C copies while the panel is open (no-op when it's empty).
+    this.input.keyboard?.on("keydown-C", () => this.copyDebugText());
+    this.copyButton = button;
   }
 
   update(): void {
@@ -225,6 +290,8 @@ export class UiScene extends Phaser.Scene {
     graphics.clear();
     if (lines.length === 0) {
       this.panelText.setText("");
+      this.panelDebugText = "";
+      this.copyButton?.setVisible(false);
       return;
     }
     const width = Math.min(this.scale.width - 24, 470);
@@ -234,6 +301,20 @@ export class UiScene extends Phaser.Scene {
     const inner = cleanPanelInnerRect(rect, { x: 12, y: 10 });
     this.panelText.setPosition(inner.x, inner.y);
     this.panelText.setText(lines.join("\n"));
+    this.panelDebugText = lines.join("\n");
+    this.copyButton?.setVisible(true);
+  }
+
+  private copyDebugText(): void {
+    if (!this.panelDebugText || !this.copyButton) {
+      return;
+    }
+    copyTextToClipboard(this.panelDebugText);
+    this.copyResetEvent?.remove();
+    this.copyButton.setText(DEBUG_COPIED_LABEL).setColor(CLEAN_UI_PRIMARY);
+    this.copyResetEvent = this.time.delayedCall(1200, () => {
+      this.copyButton?.setText(DEBUG_COPY_LABEL).setColor(CLEAN_UI_SECONDARY);
+    });
   }
 
   private drawMenu(screens: MenuRenderScreen[]): void {
