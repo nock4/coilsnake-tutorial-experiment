@@ -1,0 +1,5 @@
+{
+  "schema": "swagbound.cutscenes.v1",
+  "comment": "Authored cutscenes that re-create EarthBound scripted scenes the converter drops (NPC choreography: walk out a door, line up, appear/vanish). Run scripts/scan-broken-scenes.mjs for the inventory; use --scene <ccsRef> for a scene's NPC ids + door coords.",
+  "cutscenes": []
+}
