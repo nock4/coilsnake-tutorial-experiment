@@ -1,66 +1,81 @@
-# Morning hand-off — battle effects workstream
+# Morning hand-off — autonomous Act-1 autorun
 
-Overnight run finished the battle-effects workstream. Everything automated is green; the only
-things left are the bits that genuinely need you (a human at a browser, and a merge).
+Overnight goal was "push for full Act 1": an unattended harness that discovers the Act-1
+objectives and plays through them in a real browser. **It now drives the whole chain and beats
+2 of the 3 bosses cleanly; the 3rd (the climax) is a genuine difficulty wall, not a harness bug.**
+Every *progression link* in Act 1 is verified end-to-end.
 
 ## TL;DR
-- **PR [#134](https://github.com/nock4/coilsnake-tutorial-experiment/pull/134)** has the whole
-  workstream. **802 tests green, tsc clean, `build:eb-fullworld` errors:0.**
-- The PSI-effect subsystem now exists and the assist PSI work; every effect kind is implemented;
-  66 items + 20 PSI carry faithful (ROM-RE'd) effects.
-- Battle-action matrix: **items 72/95 applied, PSI 50/54 applied** — the rest are genuinely
-  out-of-scope (permanent stat capsules, novelty items, field-only Teleport).
+- `node scripts/act1.mjs` drives a fresh game through the authored Act-1 boss chain:
+  **card-clique → returnless-king → malady → leave**, reading the live story flags to pick the
+  next objective, A*-routing to each boss, and fighting with an HP-aware AI.
+- **card-clique → VICTORY** (sets `signal:clique_cleared`), **returnless-king → VICTORY**
+  (sets `signal:route_open`, opens the north barrier). Both legit, no assists.
+- **malady → DEFEAT.** It's a **235-HP boss + a 34-HP minion**; solo Bosch at the level you reach
+  by beating bosses 1–2 (max HP ~105, ~14 dmg/turn) can't out-DPS it. With the new focus-fire it
+  got malady down to **152** before falling — closer, but the math doesn't close without leveling.
+- **The final leg is verified**: `node scripts/verify-leg.mjs` injects the boss flags and walks
+  into the leave area → **`act1:complete` fires.** So malady's win is the *only* unproven step, and
+  it's a balance problem, not a machinery one.
+- Quality gates: **803 tests green, tsc clean, `build:eb-fullworld` errors:0.**
 
-## What needs you (~15 min)
+## The Act-1 objective graph (from `content/triggers.json`)
+| # | boss id | world pos | enemy group | needs flag | sets flag |
+|---|---------|-----------|-------------|------------|-----------|
+| 1 | signal-town-card-clique | (1512,1744) | 448 | — | `signal:clique_cleared` |
+| 2 | relay-gate-returnless-king | (1928,1560) | 36 | `clique_cleared` | `signal:route_open` |
+| 3 | first-threshold-malady | (1904,1408) | 450 | `route_open` | `signal:threshold_cleared` |
+| ✦ | leave-signal-town (area) | (1888,1280,80×40) | — | `threshold_cleared` | `act1:complete` |
 
-### 1. Native battle verification — UPDATE: I can drive the browser myself now
-Turns out the "can't run a browser" limit was the Codex subagent sandbox, not my Bash here.
-I verified the loop end-to-end and confirmed the **Spark Tube (#144) damage item** kills the
-boss in the real game (`?battle=448&items=144` → enemy 63hp → 0). I can finish the rest of this
-checklist on request the same way — `node scripts/native-probe.mjs --base http://127.0.0.1:5174/
---url-params "battle=<group>&items=<ids>" --press ArrowRight --press z ... --out shot.png`, reading
-`__battleDebug` (hp/pp/selection/executionMessage) to assert. So treat this list as optional
-spot-checks, not a blocker. Original eyeball checklist (still useful at native 512×448):
-- [ ] Cast **Shield**/**PSI Shield** → take an enemy hit → damage roughly halved, narration matches HP lost.
-- [ ] Cast **Offense up** → your BASH hits harder next round.
-- [ ] Cast **Hypnosis** on the enemy → it falls asleep and skips turns.
-- [ ] Cast **Paralysis** → enemy can't move (~3 turns).
-- [ ] Cast **Brainshock** → enemy attacks a random side (may hit itself).
-- [ ] Cast **PSI Magnet** on the enemy → your PP rises, the enemy's drops.
-- [ ] Use a damage item (**Spark Tube** #144 = 120, **Bomb** #147 = 90) → enemy takes it.
-- [ ] Use a cure item on a poisoned ally → cured; **Red Tape** (#142) on an enemy → paralyzed.
-- [ ] Use a revive item (**Life Signal Horn** #130) on a fainted ally → back to full HP.
-- [ ] Menu: picking an assist PSI opens the **enemy** target list for inflicts, **ally** for shield/buff.
+`north-route-barrier` (1880,1496) blocks the north route until `route_open` (i.e. after boss 2),
+which the autorun handles automatically by following the flag order.
 
-### 2. Review the 8 item names I invented (you picked "invent + apply")
-On-theme with the existing civic/signal-tech renames; change any you dislike in
-`content/item-overrides.json` (or `scripts/author-item-effects.mjs` → re-run):
-`95 Ward Pie · 97 District Pie · 98 Static Caramel · 99 Relay Truffle · 142 Red Tape ·
-152 Foul Socks · 188 Relief Patch · 189 Ledger Yogurt`
+## What the autorun does (and what was hard)
+- **Discovery is flag-driven**, not hard-coded: each loop reads `__firstSceneDebug.flags`, finds the
+  boss whose `requireFlags` are met and `setFlags` aren't, routes there, fights, then advances the
+  **post-battle dialogue** (that's what actually applies `setFlags` — a settle loop after each win).
+- **Router** (`routeTo`): plan A* over the game's own collision (`__solidAt`) → follow → on a stuck
+  stretch, nudge free and **re-plan from where it actually is**. The naive "sparse waypoints + walk
+  straight between them" version corner-cut into walls and never reached boss 2; the re-planning
+  version reaches all three.
+- **Combat AI** (`fight`): BASH; DEFEND when low unless the enemy is finishable; **focus-fire** —
+  cycles the BASH target to the weakest living enemy so minions die first (decoded the
+  `target:BASH:N` selection UI to do this).
+- **Healing**: `__debugHeal` (new debug global, see below) full-heals between fights — a stand-in
+  for the not-yet-wired hotel/inn. In-battle, PRAY is random so it's not relied on.
 
-### 3. Merge PR #134.
+## The malady wall — what it'd take (your call)
+malady is the Act-1 climax and is tuned like one. To beat it legitimately Bosch needs roughly 2×
+the staying power, i.e. several levels. The autorun has a **grind phase** (`grind()` — fight roaming
+`__overworldEnemies` until max HP hits a target) but it found **no roaming enemies near the boss**:
+spawns are **sector-gated** (`sectorSpawnBudget`/`selectSectorEnemyGroup` return 0/null for the
+north-route sectors), and even at the south spawn they appear sparsely. So grinding isn't a
+readily-reachable path in the current build. Options, all design decisions for you:
+1. **Tune malady down** (HP and/or the minion) so it's a fair fight at the level you arrive with.
+2. **Make leveling reachable** — denser/sector-correct overworld encounters near the route, and/or
+   wire the **hotel** so healing is real instead of `__debugHeal`.
+3. **Give Bosch help** — a party member or stronger starting kit for the climax.
 
-## Notes / deliberate approximations (all faithful where the ROM gave a clean number)
-- **Heals/PP/damage/revive amounts are ROM-exact** (heal = EB arg×6; rockets 120/600/2400,
-  bombs 90/270; Horn of life/Lifenoodles = full-HP revive). Evidence in `.codex/rom-output/`.
-- **Shields**: EB α/σ halve, β/Ω reflect, 3-hit counter → modeled uniformly as 50% reduction for
-  ~3 turns (no reflect mechanic; my shield reduces all damage, not just physical/psychic).
-- **Offense up / Defense down**: EB is ±stat/16 per cast (relative); modeled as flat ±8.
-- **Status inflicts always land** — EB gates landing on per-enemy *vulnerability %* (no vulnerability
-  model yet), so Hypnosis/Paralysis/Brainshock and the immobilize items are 100% + a `remaining:3`
-  duration as a balance proxy. This is the main place to revisit for difficulty tuning.
-- **"All"-tier PSI** (σ/Ω) hit every target in EB; modeled single-target.
-- **PSI Magnet** drains a fixed 5 PP (EB rolls 2-8).
-- **Quirk:** a self-cast buff (e.g. Shield) ticks once at the end of the casting turn, so a
-  `remaining:3` shield reads `2` immediately after — it's still active for ~3 turns, just counted
-  from cast. Consistent rule: statuses tick at the end of the *owner's* turn.
+## Debug hook added this run
+- **`window.__debugHeal()`** (apps/game/src/chunkedWorldScene.ts, `registerCollisionDebugGlobals`):
+  full-heals the party (calls the existing `healParty("full")`). Debug-only; nothing in normal play
+  calls it. It's the autorun's between-fights heal until a hotel exists. (You allowed small hooks.)
 
-## Deferred (out of scope, not bugs)
-- Items still without an effect (matrix "blocked"): permanent stat capsules (101/113-117),
-  novelty items (168 Chick / 169 Chicken / 204 Suporma), type-specific weapons (149 Insecticide,
-  150/151 Rust promoter, 155/156, 199/200 Snake/Viper), randomized Lucky-sandwich family,
-  Kraken soup (109, arg=0), Sudden guts pill (159, EB Guts×2 — buffStat guts exists but unmapped).
-- Per-enemy status **vulnerability %** (would make inflicts faithful + balanced).
-- Reflect shields and all-target PSI as true AoE.
+## Scripts (all in `scripts/`, need a dev server: `pnpm --filter @eb/game dev`)
+- `node scripts/act1.mjs [url]` — the full Act-1 autorun (the headline).
+- `node scripts/verify-leg.mjs [url]` — verifies malady→leave→`act1:complete` via `?flags=` injection.
+- `route.mjs` (A*), `native-probe.mjs`, `battle-verify.mjs`, `play.mjs`, `autoplay.mjs` — the
+  browser-driving stack this builds on (already on this branch).
+- Debug params: `?nointro=1`, `?spawn=x,y`, `?flags=a,b,c`, `?battle=<group>&items=&psi=&party=`.
 
-You can delete this file once you've read it.
+## What needs you
+1. **Merge PR [#134](https://github.com/nock4/coilsnake-tutorial-experiment/pull/134)** — the battle
+   status/effects + browser-driving workstream (still open from the prior run; 803 tests green).
+   This Act-1 autorun work is committed on the same branch on top of it.
+2. **Decide the malady balance** (the three options above). Once leveling or tuning lands, `act1.mjs`
+   should run start-to-`act1:complete` unattended — the rest of the chain already does.
+
+## Screenshots (`.codex/screenshots/`)
+- `act1-1-signal-town-card-clique-victory.png`, `act1-2-relay-gate-returnless-king-victory.png` — the two clean wins.
+- `act1-3-first-threshold-malady-defeat.png` — the climax wall ("The party fell," Bosch 0/105).
+- `act1-leg.png` — the verified leave→`act1:complete` leg.
