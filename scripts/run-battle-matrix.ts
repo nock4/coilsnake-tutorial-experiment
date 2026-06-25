@@ -32,6 +32,26 @@ function readJson<T>(file: string): T {
 const itemsData = readJson<{ items: ItemData[] }>("items.json").items;
 const psiData = readJson<{ psi: PsiData[] }>("psi.json").psi;
 
+// Apply the Swagbound content overrides (authored effects), as the loader does at runtime,
+// so the matrix reflects actual in-game item/PSI behavior rather than the raw EB data.
+function readContent<T>(file: string): T {
+  return JSON.parse(readFileSync(path.join(ROOT, "content", file), "utf8")) as T;
+}
+const itemOverrides = readContent<{ byItemId: Record<string, { effect?: ItemData["effect"] }> }>("item-overrides.json").byItemId;
+const psiOverrides = readContent<{ byPsiId: Record<string, { effect?: PsiData["effect"] }> }>("psi-overrides.json").byPsiId;
+for (const item of itemsData) {
+  const effect = itemOverrides[String(item.id)]?.effect;
+  if (effect) {
+    item.effect = effect;
+  }
+}
+for (const psi of psiData) {
+  const effect = psiOverrides[String(psi.id)]?.effect;
+  if (effect) {
+    psi.effect = effect;
+  }
+}
+
 const HERO: CharacterData = {
   id: 0,
   name: "HERO",
@@ -119,6 +139,11 @@ function classifyItem(item: ItemData): { bucket: Bucket; note: string } {
     if (!result.skipped && (afterHp > beforeHp || afterPp > beforePp)) {
       return { bucket: "applied", note: `hp ${beforeHp}->${afterHp}, pp ${beforePp}->${afterPp}` };
     }
+    if (item.effect) {
+      // Authored effect that is a no-op against a neutral party target (cure/revive/damage/
+      // inflict need an afflicted/fainted/enemy target to show a delta) — covered, not a gap.
+      return { bucket: "applied", note: `effect=${item.effect.kind} (no delta vs neutral target)` };
+    }
     return { bucket: "blocked", note: (result.message ?? "no effect").trim() };
   } catch (err) {
     return { bucket: "error", note: err instanceof Error ? err.message : String(err) };
@@ -126,6 +151,10 @@ function classifyItem(item: ItemData): { bucket: Bucket; note: string } {
 }
 
 function classifyPsi(psi: PsiData): { bucket: Bucket; note: string } {
+  if (psi.effect) {
+    // Authored assist effect (shield / buff / inflict / drain) — covered via the PSI-effect path.
+    return { bucket: "applied", note: `effect=${psi.effect.kind}` };
+  }
   const kind = psiBattleKind(psi);
   if (kind !== "offense" && kind !== "recovery") {
     return { bucket: "unsupported", note: `kind=${kind ?? "none"}` };

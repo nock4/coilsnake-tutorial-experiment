@@ -204,7 +204,8 @@
       "effect": {
         "kind": "healHp",
         "amount": 120
-      }
+      },
+      "name": "Ward Pie"
     },
     "96": {
       "name": "Crew Special",
@@ -217,19 +218,22 @@
       "effect": {
         "kind": "healHp",
         "amount": 240
-      }
+      },
+      "name": "District Pie"
     },
     "98": {
       "effect": {
         "kind": "recoverPp",
         "amount": 120
-      }
+      },
+      "name": "Static Caramel"
     },
     "99": {
       "effect": {
         "kind": "recoverPp",
         "amount": 480
-      }
+      },
+      "name": "Relay Truffle"
     },
     "100": {
       "name": "Focus Lunch",
@@ -392,7 +396,8 @@
         "kind": "inflictStatus",
         "ailment": "paralyzed",
         "remaining": 3
-      }
+      },
+      "name": "Red Tape"
     },
     "143": {
       "name": "Angle Slip"
@@ -446,7 +451,8 @@
         "kind": "inflictStatus",
         "ailment": "paralyzed",
         "remaining": 3
-      }
+      },
+      "name": "Foul Socks"
     },
     "153": {
       "name": "Pocket Beetle"
@@ -481,13 +487,15 @@
       "effect": {
         "kind": "cureStatus",
         "ailment": "poisoned"
-      }
+      },
+      "name": "Relief Patch"
     },
     "189": {
       "effect": {
         "kind": "healHp",
         "amount": 30
-      }
+      },
+      "name": "Ledger Yogurt"
     },
     "190": {
       "name": "Pocket Fruit",

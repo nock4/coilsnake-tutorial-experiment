@@ -44,6 +44,12 @@ const BUFF = { 161: { stat: "defense", amount: 5 } };
 // remaining is an estimated duration (the exact EB wear-off wasn't decoded). 142 also deals
 // damage in EB; only the signature immobilize is modeled.
 const INFLICT = { 142: { ailment: "paralyzed", remaining: 3 }, 152: { ailment: "paralyzed", remaining: 3 } };
+// Swagbound names for the consumables that had no existing override (civic / signal-tech theme,
+// matching the established rename scheme). Red Tape = the bureaucratic immobilizer.
+const NAMES = {
+  95: "Ward Pie", 97: "District Pie", 98: "Static Caramel", 99: "Relay Truffle",
+  142: "Red Tape", 152: "Foul Socks", 188: "Relief Patch", 189: "Ledger Yogurt"
+};
 
 const data = JSON.parse(readFileSync(PATH, "utf8"));
 // Existing entries keep their Swagbound name; items with no override become effect-only
@@ -59,6 +65,7 @@ for (const [id, b] of Object.entries(BUFF)) entry(id).effect = { kind: "buffStat
 for (const [id, inf] of Object.entries(INFLICT)) {
   entry(id).effect = { kind: "inflictStatus", ailment: inf.ailment, ...(inf.remaining ? { remaining: inf.remaining } : {}) };
 }
+for (const [id, name] of Object.entries(NAMES)) entry(id).name = name;
 
 writeFileSync(PATH, `${JSON.stringify(data, null, 2)}\n`);
 const counts = [HEAL, PP, CURE, DAMAGE, REVIVE, BUFF, INFLICT].map((m) => Object.keys(m).length);
