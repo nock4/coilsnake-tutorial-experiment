@@ -51,10 +51,11 @@ member** — works cleanly: Paula's **PSI Freeze** bypasses defense (~29/cast) a
 keeps him alive while the Ant focuses him. The Ant dies in ~8 casts and both survive. Act 1 is now a
 **Bosch + Paula duo** (`ensureIntroParty` seeds both).
 
-Still open, but a creative call (not blocking): **Paula's Swagbound identity.** She uses the
-canonical name "Paula" + EB sprite for now — give me a Swagbound name and I'll skin her battle sprite
-via `content/sprite-overrides.json`. She also joins from the start of Act 1; if you want a proper
-join scene, that's a `content/cutscenes.json` + flag-gate follow-up.
+Paula is now named **Cloak** (`content/character-overrides.json` charId 1, same mechanism as
+Ness→Bosch) — the battle status card reads "Cloak". The battle is EB-style (party = status cards,
+only the lead sprite in the scene), so there's no second-member *sprite* to skin yet; rendering Cloak
+beside Bosch would be a battle-scene feature if you want her visible. She also joins from the start of
+Act 1; a proper join scene is a `content/cutscenes.json` + flag-gate follow-up.
 
 ## Debug hook added this run
 - **`window.__debugHeal()`** (apps/game/src/chunkedWorldScene.ts, `registerCollisionDebugGlobals`):
