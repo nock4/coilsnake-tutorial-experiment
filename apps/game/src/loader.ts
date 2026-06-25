@@ -366,7 +366,9 @@ function applyItemOverrides(items: ItemCollection | undefined, overrides: ItemOv
   for (const item of items.items) {
     const override = overrides.byItemId[String(item.id)];
     if (override) {
-      item.name = override.name;
+      if (override.name) {
+        item.name = override.name;
+      }
       if (override.effect) {
         item.effect = override.effect;
       }

@@ -472,10 +472,13 @@ export const ItemUseEffectSchema = z.union([
 ]);
 
 const ItemOverrideEntrySchema = z.object({
-  name: ItemOverrideNameSchema,
+  /** Optional Swagbound rename; when absent the item keeps its extracted name. */
+  name: ItemOverrideNameSchema.optional(),
   /** Optional authored effect, applied over the extracted item.effect at load. */
   effect: ItemUseEffectSchema.optional()
-}).strict();
+}).strict().refine((e) => e.name !== undefined || e.effect !== undefined, {
+  message: "item override entry must set a name and/or an effect"
+});
 
 export const ItemOverridesSchema = z.object({
   schema: z.literal("swagbound.item-overrides.v1"),
