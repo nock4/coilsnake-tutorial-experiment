@@ -952,7 +952,7 @@ export function resolvePsiTurn(
   }
 
   const kind = psiBattleKind(psi);
-  if (kind !== "offense" && kind !== "recovery") {
+  if (kind !== "offense" && kind !== "recovery" && !psi.effect) {
     return blockedAction(state, actor, currentOutcome, "unsupportedPsi");
   }
 
@@ -964,6 +964,44 @@ export function resolvePsiTurn(
     };
   }
 
+  // Authored-effect PSI (assist: shield / stat buff / status inflict) reuse the item-effect
+  // machinery, with the target side decided by the effect (itemEffectTargetSide).
+  if (psi.effect) {
+    const effectTarget = psi.effect.kind === "revive"
+      ? resolveFaintedPartyTarget(state, options)
+      : resolveTargetActor(state, itemEffectTargetSide(psi.effect), options);
+    if (!effectTarget) {
+      return { ...blockedAction(state, actor, currentOutcome, "noTarget"), ppCost };
+    }
+    const effectCombatant = combatantFor(state, effectTarget);
+    if (!effectCombatant) {
+      return { ...blockedAction(state, actor, currentOutcome, "noTarget"), ppCost };
+    }
+    const applied = applyItemEffectToCombatant(effectCombatant, psi.effect);
+    let withEffect = withCombatant(state, effectTarget, applied.combatant);
+    if (psi.effect.kind === "drainPp") {
+      // Credit the drained PP back to the caster (PSI Magnet).
+      const casterNow = combatantFor(withEffect, actor);
+      if (casterNow) {
+        withEffect = withCombatant(withEffect, actor, applyPpRestore(casterNow, applied.amount));
+      }
+    }
+    const nextState = spendPp(withEffect, actor, ppCost);
+    return {
+      state: nextState,
+      actor,
+      target: effectTarget,
+      amount: applied.amount,
+      outcome: outcome(nextState),
+      skipped: false,
+      ppCost
+    };
+  }
+
+  // Past the effect path, only kind-based (offense/recovery) PSI remain; re-narrow for the type.
+  if (kind !== "offense" && kind !== "recovery") {
+    return blockedAction(state, actor, currentOutcome, "unsupportedPsi");
+  }
   const target = kind === "offense"
     ? resolveTargetActor(state, "enemy", options)
     : resolveTargetActor(state, "party", options);
@@ -1757,12 +1795,19 @@ function applyItemEffectToCombatant(combatant: Combatant, effect: ItemUseEffect)
     const damaged = applyDamage(combatant, effect.amount);
     return { combatant: damaged, amount: before - damaged.hp.target };
   }
+  if (effect.kind === "drainPp") {
+    // Drain the target's PP; the caller credits the drained amount to the caster.
+    const drained = Math.min(combatant.pp, effect.amount);
+    return { combatant: { ...combatant, pp: combatant.pp - drained }, amount: drained };
+  }
   if (effect.kind === "buffStat") {
-    // Battle-scoped stat boost (combatants live only for the fight).
-    return {
-      combatant: { ...combatant, [effect.stat]: combatant[effect.stat] + effect.amount },
-      amount: effect.amount
-    };
+    // Battle-scoped stat change (combatants live only for the fight). Negative = debuff; clamp at 0.
+    if (effect.stat === "guts") {
+      const guts = Math.max(0, combatant.stats.guts + effect.amount);
+      return { combatant: { ...combatant, stats: { ...combatant.stats, guts } }, amount: effect.amount };
+    }
+    const next = Math.max(0, combatant[effect.stat] + effect.amount);
+    return { combatant: { ...combatant, [effect.stat]: next }, amount: effect.amount };
   }
   if (effect.kind === "revive") {
     if (isCombatantAlive(combatant)) {

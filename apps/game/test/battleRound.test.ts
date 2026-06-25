@@ -732,6 +732,17 @@ describe("nextInputState", () => {
     expect(healing.input).toMatchObject({ submenu: "target-ally", pending: { command: "GOODS", itemId: 220 } });
   });
 
+  it("routes an effect PSI to the target submenu the effect dictates", () => {
+    const battle = createBattleState([opponentA, opponentB], { characters: characters([partyA]) });
+    const inflictPsi: PsiData = { ...syntheticPsi(100, "assist", "alpha", [{ charId: 0, level: 1 }]), effect: { kind: "inflictStatus", ailment: "paralyzed" } };
+    const shieldPsi: PsiData = { ...syntheticPsi(101, "assist", "alpha", [{ charId: 0, level: 1 }]), effect: { kind: "inflictStatus", ailment: "shielded", magnitude: 50 } };
+    const context = { state: battle, psi: [inflictPsi, shieldPsi] };
+    const inflict = nextInputState(inputState({ submenu: "psi", selectionIndex: 0 }), { kind: "confirm" }, context);
+    expect(inflict.input).toMatchObject({ submenu: "target-enemy", pending: { command: "PSI", psiId: 100 } });
+    const shield = nextInputState(inputState({ submenu: "psi", selectionIndex: 1 }), { kind: "confirm" }, context);
+    expect(shield.input).toMatchObject({ submenu: "target-ally", pending: { command: "PSI", psiId: 101 } });
+  });
+
   it("uses enemy target gating for BASH, confirms selected targets, and cancels back to command", () => {
     const battle = createBattleState([opponentA, opponentB], {
       characters: characters([partyA])
@@ -1002,6 +1013,59 @@ describe("resolveRoundStep status effects", () => {
     expect(result.skipped).toBe(false);
     expect(result.state.party[1].hp.target).toBe(30);
     expect(result.details).toMatchObject({ kind: "item", message: expect.stringContaining("came back to life") });
+  });
+});
+
+describe("resolveRoundStep PSI effects", () => {
+  const psiWith = (id: number, effect: PsiData["effect"]): PsiData => ({
+    ...syntheticPsi(id, "assist", "alpha", [{ charId: 0, level: 1 }]),
+    effect
+  });
+  const ready = (battle: BattleState): BattleState =>
+    withCombatant(battle, actor("party", 0), { ...battle.party[0], pp: 90, maxPp: 90 });
+
+  it("inflicts a status on the enemy via an assist PSI", () => {
+    const battle = ready(createBattleState(opponentA, { characters: characters([partyA]) }));
+    const result = resolveRoundStep(
+      battle,
+      actor("party", 0),
+      { partySlot: 0, command: "PSI", psiId: 100, target: { side: "enemy", index: 0 } },
+      () => 0.5,
+      { psi: [psiWith(100, { kind: "inflictStatus", ailment: "paralyzed", remaining: 3 })] }
+    );
+    expect(result.skipped).toBe(false);
+    expect(result.state.enemies[0].statuses).toEqual([{ ailment: "paralyzed", remaining: 3 }]);
+    expect(result.details).toMatchObject({ kind: "psi", message: expect.stringContaining("paralyzed") });
+  });
+
+  it("shields the caster via an assist PSI (party side)", () => {
+    const battle = ready(createBattleState(opponentA, { characters: characters([partyA]) }));
+    const result = resolveRoundStep(
+      battle,
+      actor("party", 0),
+      { partySlot: 0, command: "PSI", psiId: 101, target: { side: "party", index: 0 } },
+      () => 0.5,
+      { psi: [psiWith(101, { kind: "inflictStatus", ailment: "shielded", magnitude: 50, remaining: 3 })] }
+    );
+    // Applied to the caster, then decremented by the caster's own end-of-turn tick (3 -> 2).
+    expect(result.state.party[0].statuses).toEqual([{ ailment: "shielded", magnitude: 50, remaining: 2 }]);
+    expect(result.details).toMatchObject({ kind: "psi", message: expect.stringContaining("shielded") });
+  });
+
+  it("drains enemy PP via a drainPp PSI", () => {
+    let battle = createBattleState(opponentA, { characters: characters([partyA]) });
+    battle = withCombatant(battle, actor("party", 0), { ...battle.party[0], pp: 30, maxPp: 90 });
+    battle = withCombatant(battle, actor("enemy", 0), { ...battle.enemies[0], pp: 20 });
+    const result = resolveRoundStep(
+      battle,
+      actor("party", 0),
+      { partySlot: 0, command: "PSI", psiId: 102, target: { side: "enemy", index: 0 } },
+      () => 0.5,
+      { psi: [psiWith(102, { kind: "drainPp", amount: 5 })] }
+    );
+    expect(result.skipped).toBe(false);
+    expect(result.state.enemies[0].pp).toBe(15);
+    expect(result.details).toMatchObject({ kind: "psi", message: expect.stringContaining("PP") });
   });
 });
 

@@ -85,7 +85,8 @@ export type ItemUseEffect =
   | { kind: "recoverPp"; amount: number }
   | { kind: "recoverPpPercent"; percent: number }
   | { kind: "damage"; amount: number }
-  | { kind: "buffStat"; stat: "offense" | "defense" | "speed"; amount: number }
+  | { kind: "drainPp"; amount: number }
+  | { kind: "buffStat"; stat: "offense" | "defense" | "speed" | "guts"; amount: number }
   | { kind: "revive"; amount: number }
   | { kind: "cureStatus"; ailment: StatusAilment | "all" }
   | { kind: "inflictStatus"; ailment: StatusAilment; remaining?: number; magnitude?: number };
@@ -97,11 +98,15 @@ export type ItemUseEffect =
  * command menu, and resolveItemTurn so all three agree on the side.
  */
 export function itemEffectTargetSide(effect: ItemUseEffect | undefined): "party" | "enemy" {
-  if (effect?.kind === "damage") {
+  if (effect?.kind === "damage" || effect?.kind === "drainPp") {
     return "enemy";
   }
   if (effect?.kind === "inflictStatus") {
     return effect.ailment === "shielded" ? "party" : "enemy";
+  }
+  if (effect?.kind === "buffStat") {
+    // A negative buff is a debuff aimed at the enemy (e.g. Defense down).
+    return effect.amount < 0 ? "enemy" : "party";
   }
   return "party";
 }
@@ -717,8 +722,10 @@ function normalizeGeneratedItemEffect(effect: ItemData["effect"]): ItemUseEffect
       return effect.percent > 0 ? { kind: "recoverPpPercent", percent: stat(effect.percent) } : undefined;
     case "damage":
       return effect.amount > 0 ? { kind: "damage", amount: stat(effect.amount) } : undefined;
+    case "drainPp":
+      return effect.amount > 0 ? { kind: "drainPp", amount: stat(effect.amount) } : undefined;
     case "buffStat":
-      return effect.amount > 0 ? { kind: "buffStat", stat: effect.stat, amount: stat(effect.amount) } : undefined;
+      return effect.amount !== 0 ? { kind: "buffStat", stat: effect.stat, amount: Math.trunc(effect.amount) } : undefined;
     case "revive":
       return effect.amount > 0 ? { kind: "revive", amount: stat(effect.amount) } : undefined;
     case "cureStatus":
@@ -804,6 +811,7 @@ export function applyUseEffectToVitals(vitals: PartyVitals, effect: ItemUseEffec
       };
     }
     case "damage":
+    case "drainPp":
     case "buffStat":
     case "revive":
     case "cureStatus":

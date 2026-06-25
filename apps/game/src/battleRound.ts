@@ -405,7 +405,8 @@ function resolveActorAction(
         command: queued.command,
         moveName: psi.name,
         psiId: psi.id,
-        psiKind
+        psiKind,
+        ...(psi.effect ? { psiEffect: psi.effect } : {})
       });
     }
     case "GOODS": {
@@ -573,14 +574,16 @@ function confirmPsi(
     return { input, complete: false };
   }
   const kind = psiBattleKind(psi);
-  if (kind !== "offense" && kind !== "recovery") {
+  if (kind !== "offense" && kind !== "recovery" && !psi.effect) {
     return { input, complete: false };
   }
   if (combatant.pp < psiPpCost(psi)) {
     return { input, complete: false };
   }
 
-  const targetSide = kind === "offense" ? "enemy" : "party";
+  const targetSide = psi.effect
+    ? itemEffectTargetSide(psi.effect)
+    : kind === "offense" ? "enemy" : "party";
   return {
     input: {
       ...input,
@@ -787,6 +790,7 @@ function fromResolution(
     moveName?: string;
     psiId?: number;
     psiKind?: ReturnType<typeof psiBattleKind>;
+    psiEffect?: ItemUseEffect;
     item?: BattleRoundItemData;
   }
 ): BattleRoundStepResult {
@@ -812,6 +816,7 @@ function narrationDetailsForResolution(
     moveName?: string;
     psiId?: number;
     psiKind?: ReturnType<typeof psiBattleKind>;
+    psiEffect?: ItemUseEffect;
     item?: BattleRoundItemData;
   }
 ): BattleRoundStepNarrationDetails {
@@ -910,6 +915,19 @@ function narrationDetailsForResolution(
     const target = "target" in resolution ? resolution.target : null;
     const amount = "amount" in resolution ? resolution.amount : 0;
     const targetName = target ? combatantName(previousState, target) : undefined;
+    const effect = context.psiEffect;
+    if (effect && (effect.kind === "cureStatus" || effect.kind === "inflictStatus" || effect.kind === "buffStat" || effect.kind === "revive" || effect.kind === "drainPp")) {
+      return {
+        kind: "psi",
+        attackerName,
+        targetName,
+        moveName: context.moveName,
+        psiId: context.psiId,
+        message: itemEffectMessage(targetName ?? attackerName, effect),
+        missed: false,
+        targetDied: effect.kind === "inflictStatus" ? enemyTargetsDied(previousState, resolution.state, [target]) : false
+      };
+    }
     return {
       kind: "psi",
       attackerName,
@@ -929,7 +947,7 @@ function narrationDetailsForResolution(
     const targetName = target ? combatantName(previousState, target) : undefined;
     const effect = context.item ? decodeItemUseEffect(context.item) : undefined;
     const amount = "amount" in resolution ? resolution.amount : 0;
-    if (effect && (effect.kind === "cureStatus" || effect.kind === "inflictStatus" || effect.kind === "buffStat" || effect.kind === "revive")) {
+    if (effect && (effect.kind === "cureStatus" || effect.kind === "inflictStatus" || effect.kind === "buffStat" || effect.kind === "revive" || effect.kind === "drainPp")) {
       return {
         kind: "item",
         attackerName,
@@ -959,13 +977,16 @@ function narrationDetailsForResolution(
 
 function itemEffectMessage(
   name: string,
-  effect: Extract<ItemUseEffect, { kind: "cureStatus" | "inflictStatus" | "buffStat" | "revive" }>
+  effect: Extract<ItemUseEffect, { kind: "cureStatus" | "inflictStatus" | "buffStat" | "revive" | "drainPp" }>
 ): string {
+  if (effect.kind === "drainPp") {
+    return `${name} lost some PP!`;
+  }
   if (effect.kind === "revive") {
     return `${name} came back to life!`;
   }
   if (effect.kind === "buffStat") {
-    return `${name}'s ${effect.stat} went up!`;
+    return `${name}'s ${effect.stat} went ${effect.amount < 0 ? "down" : "up"}!`;
   }
   if (effect.kind === "cureStatus") {
     return effect.ailment === "all"

@@ -460,7 +460,8 @@ export const ItemUseEffectSchema = z.union([
   z.object({ kind: z.literal("recoverPp"), amount: z.number().int().positive() }),
   z.object({ kind: z.literal("recoverPpPercent"), percent: z.number().int().positive() }),
   z.object({ kind: z.literal("damage"), amount: z.number().int().positive() }),
-  z.object({ kind: z.literal("buffStat"), stat: z.enum(["offense", "defense", "speed"]), amount: z.number().int().positive() }),
+  z.object({ kind: z.literal("drainPp"), amount: z.number().int().positive() }),
+  z.object({ kind: z.literal("buffStat"), stat: z.enum(["offense", "defense", "speed", "guts"]), amount: z.number().int() }),
   z.object({ kind: z.literal("revive"), amount: z.number().int().positive() }),
   z.object({ kind: z.literal("cureStatus"), ailment: z.enum(["poisoned", "paralyzed", "asleep", "confused", "shielded", "all"]) }),
   z.object({
@@ -511,8 +512,12 @@ const PsiOverrideNameSchema = z.string()
   .refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "psi override names must not include control codes");
 
 const PsiOverrideEntrySchema = z.object({
-  name: PsiOverrideNameSchema
-}).strict();
+  name: PsiOverrideNameSchema.optional(),
+  /** Optional authored battle effect, applied over the PSI's kind-based behavior at load. */
+  effect: ItemUseEffectSchema.optional()
+}).strict().refine((e) => e.name !== undefined || e.effect !== undefined, {
+  message: "psi override entry must set a name and/or an effect"
+});
 
 export const PsiOverridesSchema = z.object({
   schema: z.literal("swagbound.psi-overrides.v1"),
@@ -1430,7 +1435,9 @@ export const PsiDataSchema = z.object({
   type: z.string(),
   strength: z.string(),
   usableOutsideBattle: z.boolean(),
-  learnedBy: z.array(PsiLearnedBySchema)
+  learnedBy: z.array(PsiLearnedBySchema),
+  /** Optional authored battle effect (assist PSI: shield/buff/inflict), applied at load. */
+  effect: ItemUseEffectSchema.optional()
 });
 
 export const PsiCollectionSchema = z.object({

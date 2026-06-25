@@ -403,7 +403,12 @@ function applyPsiOverrides(psi: PsiCollection | undefined, overrides: PsiOverrid
   for (const entry of psi.psi) {
     const override = overrides.byPsiId[String(entry.id)];
     if (override) {
-      entry.name = override.name;
+      if (override.name) {
+        entry.name = override.name;
+      }
+      if (override.effect) {
+        entry.effect = override.effect;
+      }
     }
   }
   return psi;
