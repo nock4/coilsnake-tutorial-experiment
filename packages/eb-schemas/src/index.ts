@@ -460,6 +460,8 @@ export const ItemUseEffectSchema = z.union([
   z.object({ kind: z.literal("recoverPp"), amount: z.number().int().positive() }),
   z.object({ kind: z.literal("recoverPpPercent"), percent: z.number().int().positive() }),
   z.object({ kind: z.literal("damage"), amount: z.number().int().positive() }),
+  z.object({ kind: z.literal("buffStat"), stat: z.enum(["offense", "defense", "speed"]), amount: z.number().int().positive() }),
+  z.object({ kind: z.literal("revive"), amount: z.number().int().positive() }),
   z.object({ kind: z.literal("cureStatus"), ailment: z.enum(["poisoned", "paralyzed", "asleep", "confused", "shielded", "all"]) }),
   z.object({
     kind: z.literal("inflictStatus"),

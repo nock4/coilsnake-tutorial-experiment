@@ -6,6 +6,7 @@ import {
   combatantIdForActor,
   commandsForCharId,
   defaultTargetIndexForActor,
+  confusedTargetOptions,
   isCombatantAlive,
   learnedPsiForCombatant,
   psiBattleKind,
@@ -367,7 +368,8 @@ function resolveActorAction(
 
   switch (queued.command) {
     case "BASH": {
-      const target = resolvedTargetOptions(turnState, queued, "enemy");
+      // A confused attacker strikes a random side (may hit an ally or itself).
+      const target = confusedTargetOptions(turnState, actor, rng) ?? resolvedTargetOptions(turnState, queued, "enemy");
       if (!target) {
         return noTargetRoundStep(turnState, actor);
       }
@@ -927,13 +929,13 @@ function narrationDetailsForResolution(
     const targetName = target ? combatantName(previousState, target) : undefined;
     const effect = context.item ? decodeItemUseEffect(context.item) : undefined;
     const amount = "amount" in resolution ? resolution.amount : 0;
-    if (effect && (effect.kind === "cureStatus" || effect.kind === "inflictStatus")) {
+    if (effect && (effect.kind === "cureStatus" || effect.kind === "inflictStatus" || effect.kind === "buffStat" || effect.kind === "revive")) {
       return {
         kind: "item",
         attackerName,
         targetName,
         itemName: context.item?.name,
-        message: statusItemMessage(targetName ?? attackerName, effect),
+        message: itemEffectMessage(targetName ?? attackerName, effect),
         missed: false,
         targetDied: false
       };
@@ -955,10 +957,16 @@ function narrationDetailsForResolution(
   return { kind: "skip", attackerName, message };
 }
 
-function statusItemMessage(
+function itemEffectMessage(
   name: string,
-  effect: Extract<ItemUseEffect, { kind: "cureStatus" | "inflictStatus" }>
+  effect: Extract<ItemUseEffect, { kind: "cureStatus" | "inflictStatus" | "buffStat" | "revive" }>
 ): string {
+  if (effect.kind === "revive") {
+    return `${name} came back to life!`;
+  }
+  if (effect.kind === "buffStat") {
+    return `${name}'s ${effect.stat} went up!`;
+  }
   if (effect.kind === "cureStatus") {
     return effect.ailment === "all"
       ? `${name} is cured of all ailments!`

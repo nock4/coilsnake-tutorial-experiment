@@ -108,6 +108,8 @@ export type BattleStateOptions = PlayerCombatantOptions & {
 export type BattleTargetOptions = {
   targetIndex?: number;
   targetCombatantId?: string;
+  /** Force the target side (e.g. a confused attacker striking its own side). */
+  targetSide?: BattleSide;
 };
 
 export type TurnResolution = {
@@ -608,7 +610,7 @@ export function resolveTurn(
     state: nextState,
     actor,
     defender,
-    damage: attack.damage,
+    damage: attack.missed ? attack.damage : shieldedDamage(defenderCombatant, attack.damage),
     outcome: outcome(nextState),
     skipped: false,
     missed: attack.missed,
@@ -860,7 +862,14 @@ export function resolveEnemyActionTurn(
     ...attacker,
     nextActionIndex: nextEnemyActionIndex(attacker.actions, selection.actionIndex)
   });
-  const targets = targetActorsForEnemyAction(nextState, selection.target, rng);
+  // A confused enemy strikes a random side (may hit its own kind) instead of its scripted target.
+  let targets: BattleActor[];
+  if (hasStatus(attacker.statuses, "confused")) {
+    const confusedPick = randomLivingActor(nextState, rng);
+    targets = confusedPick ? [confusedPick] : [];
+  } else {
+    targets = targetActorsForEnemyAction(nextState, selection.target, rng);
+  }
   const effectKind = enemyActionEffectKind(selection.actionType);
   if (targets.length === 0 || effectKind === "none" || effectKind === "assist" || effectKind === "unknown") {
     return {
@@ -891,7 +900,7 @@ export function resolveEnemyActionTurn(
       physicalMisses += attack.missed ? 1 : 0;
       anySmash = anySmash || attack.smash;
       anyGutsSurvived = anyGutsSurvived || attack.gutsSurvived;
-      totalAmount += attack.damage;
+      totalAmount += attack.missed ? attack.damage : shieldedDamage(targetCombatant, attack.damage);
       if (!attack.missed) {
         nextState = withCombatant(nextState, target, applyDamage(targetCombatant, attack.damage));
       }
@@ -1022,7 +1031,10 @@ export function resolveItemTurn(
     return blockedAction(state, actor, currentOutcome, maybeConsumable ? "unknownEffect" : "notConsumable");
   }
 
-  const target = resolveTargetActor(state, itemEffectTargetSide(effect), options);
+  // Revive acts on a FAINTED ally; every other item targets a living combatant.
+  const target = effect.kind === "revive"
+    ? resolveFaintedPartyTarget(state, options)
+    : resolveTargetActor(state, itemEffectTargetSide(effect), options);
   if (!target) {
     return blockedAction(state, actor, currentOutcome, "noTarget");
   }
@@ -1253,6 +1265,16 @@ export function resolveTargetActor(
   return livingTarget(combatants, side, options.targetIndex, options.targetCombatantId);
 }
 
+/** Resolve a FAINTED party member (the specified index if fainted, else the first fainted). Used by revive. */
+function resolveFaintedPartyTarget(state: BattleState, options: BattleTargetOptions): BattleActor | null {
+  const { targetIndex } = options;
+  if (targetIndex !== undefined && state.party[targetIndex] && !isCombatantAlive(state.party[targetIndex])) {
+    return { side: "party", index: targetIndex };
+  }
+  const firstFainted = state.party.findIndex((combatant) => !isCombatantAlive(combatant));
+  return firstFainted >= 0 ? { side: "party", index: firstFainted } : null;
+}
+
 export function isCombatantAlive(combatant: Pick<Combatant, "hp">): boolean {
   return !isDepleted(combatant.hp);
 }
@@ -1269,6 +1291,15 @@ export function normalizeActor(actor: BattleActor | "player" | "enemy"): BattleA
     return { side: "enemy", index: 0 };
   }
   return actor;
+}
+
+/**
+ * The damage number to NARRATE for an attack on `defender`: the rolled damage reduced by the
+ * defender's shield, so the displayed number matches the HP actually lost in applyDamage.
+ * (For unshielded defenders this is the rolled damage unchanged.)
+ */
+function shieldedDamage(defender: Combatant, rolledDamage: number): number {
+  return Math.floor(Math.max(0, rolledDamage) * incomingDamageScale(defender.statuses));
 }
 
 function applyDamage(combatant: Combatant, amount: number, options: { ignoreShield?: boolean } = {}): Combatant {
@@ -1359,6 +1390,9 @@ function combatantFor(state: BattleState, actor: BattleActor): Combatant | undef
 }
 
 function targetForActor(state: BattleState, actor: BattleActor, options: BattleTargetOptions): BattleActor | null {
+  if (options.targetSide) {
+    return resolveTargetActor(state, options.targetSide, options);
+  }
   if (actor.side === "party") {
     return resolveTargetActor(state, "enemy", options);
   }
@@ -1366,6 +1400,40 @@ function targetForActor(state: BattleState, actor: BattleActor, options: BattleT
   // Legacy fallback for direct resolveTurn callers; BattleScene uses
   // resolveEnemyActionTurn for table-driven enemy AI.
   return resolveTargetActor(state, "party", options);
+}
+
+/**
+ * If `actor` is confused, returns target options pointing at a uniformly-random LIVING
+ * combatant on either side (the attacker may strike an ally or itself). Returns null when
+ * the actor is not confused — and in that case NO rng roll is consumed, so the sequence is
+ * undisturbed for unconfused attackers.
+ */
+/** A uniformly-random LIVING combatant on either side (used by confusion targeting). */
+function randomLivingActor(state: BattleState, rng: Rng): BattleActor | null {
+  const candidates: BattleActor[] = [];
+  state.party.forEach((c, index) => {
+    if (isCombatantAlive(c)) {
+      candidates.push({ side: "party", index });
+    }
+  });
+  state.enemies.forEach((c, index) => {
+    if (isCombatantAlive(c)) {
+      candidates.push({ side: "enemy", index });
+    }
+  });
+  if (candidates.length === 0) {
+    return null;
+  }
+  return candidates[Math.min(candidates.length - 1, Math.floor(normalizedRoll(rng()) * candidates.length))];
+}
+
+export function confusedTargetOptions(state: BattleState, actor: BattleActor, rng: Rng): BattleTargetOptions | null {
+  const combatant = combatantFor(state, actor);
+  if (!combatant || !hasStatus(combatant.statuses, "confused")) {
+    return null;
+  }
+  const pick = randomLivingActor(state, rng);
+  return pick ? { targetSide: pick.side, targetIndex: pick.index } : null;
 }
 
 function nextEnemyActionIndex(actions: BattleEnemy["actions"] | undefined, currentActionIndex: number): number {
@@ -1688,6 +1756,19 @@ function applyItemEffectToCombatant(combatant: Combatant, effect: ItemUseEffect)
     const before = combatant.hp.target;
     const damaged = applyDamage(combatant, effect.amount);
     return { combatant: damaged, amount: before - damaged.hp.target };
+  }
+  if (effect.kind === "buffStat") {
+    // Battle-scoped stat boost (combatants live only for the fight).
+    return {
+      combatant: { ...combatant, [effect.stat]: combatant[effect.stat] + effect.amount },
+      amount: effect.amount
+    };
+  }
+  if (effect.kind === "revive") {
+    if (isCombatantAlive(combatant)) {
+      return { combatant, amount: 0 };
+    }
+    return { combatant: applyHeal(combatant, effect.amount), amount: effect.amount };
   }
   const applied = applyUseEffectToVitals(combatantVitals(combatant), effect);
   return {

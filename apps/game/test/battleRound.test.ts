@@ -903,6 +903,9 @@ describe("resolveRoundStep status effects", () => {
 
     expect(plainLoss).toBeGreaterThan(0);
     expect(guardedLoss).toBe(Math.floor(plainLoss / 2));
+    // The narrated number matches the post-shield HP actually lost (not the pre-shield roll).
+    expect(guarded.details).toMatchObject({ damage: guardedLoss });
+    expect(plain.details).toMatchObject({ damage: plainLoss });
   });
 
   it("routes a damage GOODS item to the enemy and deals its damage", () => {
@@ -938,6 +941,67 @@ describe("resolveRoundStep status effects", () => {
     expect(result.resolution).toMatchObject({ target: actor("enemy", 0) });
     expect(result.state.enemies[0].statuses).toEqual([{ ailment: "poisoned" }]);
     expect(result.details).toMatchObject({ kind: "item", message: expect.stringContaining("now poisoned") });
+  });
+
+  it("a confused attacker's BASH strikes a random side (self or enemy)", () => {
+    let battle = createBattleState(opponentA, { characters: characters([partyA]) });
+    battle = withStatus(battle, 0, { ailment: "confused" });
+    // First roll picks the confused target (low -> party/self, high -> enemy), then the
+    // physical-attack rolls follow.
+    const hitSelf = resolveRoundStep(battle, actor("party", 0), bash(), sequenceRng([0, 1, 1, 0.5, 0]));
+    expect(hitSelf.resolution).toMatchObject({ defender: actor("party", 0) });
+    const hitEnemy = resolveRoundStep(battle, actor("party", 0), bash(), sequenceRng([0.99, 1, 1, 0.5, 0]));
+    expect(hitEnemy.resolution).toMatchObject({ defender: actor("enemy", 0) });
+  });
+
+  it("a confused enemy strikes a random side (its own kind is possible)", () => {
+    let battle = createBattleState(
+      enemy(32, "ATTACKER", { offense: 50, actions: actionSet(enemyAction(320, 1, 1)) }),
+      { characters: characters([partyA]) }
+    );
+    battle = withCombatant(battle, actor("enemy", 0), { ...battle.enemies[0], statuses: [{ ailment: "confused" }] });
+    const selfHit = resolveRoundStep(battle, actor("enemy", 0), undefined, sequenceRng([0.99, 1, 1, 0.5, 0]));
+    expect(selfHit.resolution).toMatchObject({ targets: [actor("enemy", 0)] });
+    const partyHit = resolveRoundStep(battle, actor("enemy", 0), undefined, sequenceRng([0, 1, 1, 0.5, 0]));
+    expect(partyHit.resolution).toMatchObject({ targets: [actor("party", 0)] });
+  });
+
+  it("raises a battle stat with a buffStat GOODS item", () => {
+    let battle = createBattleState(opponentA, { characters: characters([partyA]) });
+    battle = withCombatant(battle, actor("party", 0), { ...battle.party[0], inventory: [214] });
+    const sprayItem: ItemData = { ...syntheticItem(214, 0, 0), effect: { kind: "buffStat", stat: "defense", amount: 10 } };
+    const beforeDef = battle.party[0].defense;
+    const result = resolveRoundStep(
+      battle,
+      actor("party", 0),
+      { partySlot: 0, command: "GOODS", itemId: 214, target: { side: "party", index: 0 } },
+      () => 0.5,
+      { items: [sprayItem] }
+    );
+    expect(result.skipped).toBe(false);
+    expect(result.state.party[0].defense).toBe(beforeDef + 10);
+    expect(result.details).toMatchObject({ kind: "item", message: expect.stringContaining("defense went up") });
+  });
+
+  it("revives a fainted ally with a revive GOODS item", () => {
+    let battle = createBattleState(opponentA, { characters: characters([partyA, partyB]) });
+    battle = withCombatant(battle, actor("party", 1), {
+      ...battle.party[1],
+      hp: setTarget({ ...battle.party[1].hp, displayed: 0, target: 0, isRolling: false }, 0)
+    });
+    battle = withCombatant(battle, actor("party", 0), { ...battle.party[0], inventory: [215] });
+    const reviveItem: ItemData = { ...syntheticItem(215, 0, 0), effect: { kind: "revive", amount: 30 } };
+    expect(battle.party[1].hp.target).toBe(0);
+    const result = resolveRoundStep(
+      battle,
+      actor("party", 0),
+      { partySlot: 0, command: "GOODS", itemId: 215, target: { side: "party", index: 1 } },
+      () => 0.5,
+      { items: [reviveItem] }
+    );
+    expect(result.skipped).toBe(false);
+    expect(result.state.party[1].hp.target).toBe(30);
+    expect(result.details).toMatchObject({ kind: "item", message: expect.stringContaining("came back to life") });
   });
 });
 

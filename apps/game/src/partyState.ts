@@ -85,6 +85,8 @@ export type ItemUseEffect =
   | { kind: "recoverPp"; amount: number }
   | { kind: "recoverPpPercent"; percent: number }
   | { kind: "damage"; amount: number }
+  | { kind: "buffStat"; stat: "offense" | "defense" | "speed"; amount: number }
+  | { kind: "revive"; amount: number }
   | { kind: "cureStatus"; ailment: StatusAilment | "all" }
   | { kind: "inflictStatus"; ailment: StatusAilment; remaining?: number; magnitude?: number };
 
@@ -715,6 +717,10 @@ function normalizeGeneratedItemEffect(effect: ItemData["effect"]): ItemUseEffect
       return effect.percent > 0 ? { kind: "recoverPpPercent", percent: stat(effect.percent) } : undefined;
     case "damage":
       return effect.amount > 0 ? { kind: "damage", amount: stat(effect.amount) } : undefined;
+    case "buffStat":
+      return effect.amount > 0 ? { kind: "buffStat", stat: effect.stat, amount: stat(effect.amount) } : undefined;
+    case "revive":
+      return effect.amount > 0 ? { kind: "revive", amount: stat(effect.amount) } : undefined;
     case "cureStatus":
       return { kind: "cureStatus", ailment: effect.ailment };
     case "inflictStatus":
@@ -798,6 +804,8 @@ export function applyUseEffectToVitals(vitals: PartyVitals, effect: ItemUseEffec
       };
     }
     case "damage":
+    case "buffStat":
+    case "revive":
     case "cureStatus":
     case "inflictStatus":
       // Battle-only effects; no overworld vitals change.
