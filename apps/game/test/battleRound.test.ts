@@ -798,6 +798,43 @@ function inputState(overrides: Partial<BattleRoundInputState> = {}): BattleRound
   };
 }
 
+describe("resolveRoundStep status effects", () => {
+  function withStatus(
+    battle: BattleState,
+    slot: number,
+    status: { ailment: "poisoned" | "paralyzed" | "asleep" | "confused" | "shielded"; remaining?: number; magnitude?: number }
+  ): BattleState {
+    return withCombatant(battle, actor("party", slot), { ...battle.party[slot], statuses: [status] });
+  }
+  const bash = (): QueuedCommand => ({ partySlot: 0, command: "BASH", target: { side: "enemy", index: 0 } });
+
+  it("skips a paralyzed combatant's turn and leaves the enemy unharmed", () => {
+    let battle = createBattleState(opponentA, { characters: characters([partyA]) });
+    battle = withStatus(battle, 0, { ailment: "paralyzed" });
+    const enemyHp = battle.enemies[0].hp.target;
+    const result = resolveRoundStep(battle, actor("party", 0), bash(), () => 0.5);
+    expect(result.skipped).toBe(true);
+    expect(result.message).toContain("can't move");
+    expect(result.state.enemies[0].hp.target).toBe(enemyHp);
+  });
+
+  it("skips an asleep combatant's turn (wakes or stays asleep, either way no action)", () => {
+    let battle = createBattleState(opponentA, { characters: characters([partyA]) });
+    battle = withStatus(battle, 0, { ailment: "asleep" });
+    const result = resolveRoundStep(battle, actor("party", 0), bash(), sequenceRng([0.9]));
+    expect(result.skipped).toBe(true);
+  });
+
+  it("ticks poison HP loss at the end of the acting combatant's turn", () => {
+    let battle = createBattleState(opponentA, { characters: characters([partyA]) });
+    battle = withStatus(battle, 0, { ailment: "poisoned" });
+    const before = battle.party[0].hp.target;
+    const result = resolveRoundStep(battle, actor("party", 0), bash(), () => 0.5);
+    expect(result.state.party[0].hp.target).toBe(before - Math.floor(battle.party[0].maxHp / 16));
+    expect(result.message).toContain("poison");
+  });
+});
+
 function sequenceRng(values: number[]): () => number {
   let index = 0;
   return () => values[index++] ?? values[values.length - 1] ?? 0.5;

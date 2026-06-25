@@ -20,6 +20,8 @@ import {
   resolveSpyTurn,
   resolveTurn,
   withCombatant,
+  applyEndOfTurnStatusTick,
+  resolveCombatantTurnGate,
   type BattleActionResolution,
   type BattleActor,
   type BattleCommand,
@@ -335,6 +337,24 @@ export function resolveRoundStep(
   }
 
   const turnState = beginCombatantTurn(state, actor);
+  const gate = resolveCombatantTurnGate(turnState, actor, rng);
+  if (!gate.canAct) {
+    return statusGatedRoundStep(gate.state, actor, combatant.name, gate.reason);
+  }
+  return withEndOfTurnPoisonTick(
+    resolveActorAction(gate.state, actor, queued, rng, resources, combatant.name),
+    actor
+  );
+}
+
+function resolveActorAction(
+  turnState: BattleState,
+  actor: BattleActor,
+  queued: QueuedCommand | undefined,
+  rng: Rng,
+  resources: BattleRoundResources,
+  combatantName: string
+): BattleRoundStepResult {
   if (actor.side === "enemy") {
     return fromResolution(turnState, resolveEnemyActionTurn(turnState, actor, rng), {
       command: "BASH"
@@ -401,7 +421,7 @@ export function resolveRoundStep(
       });
     }
     case "DEFEND":
-      return defendAnnouncementRoundStep(turnState, actor, combatant.name);
+      return defendAnnouncementRoundStep(turnState, actor, combatantName);
     case "PRAY":
       return fromResolution(turnState, resolvePrayTurn(turnState, actor, rng), {
         command: queued.command
@@ -418,6 +438,35 @@ export function resolveRoundStep(
     case "RUN":
       return skippedRoundStep(turnState, actor, "Run is resolved at round start.");
   }
+  return skippedRoundStep(turnState, actor, "No action.");
+}
+
+function statusGatedRoundStep(
+  state: BattleState,
+  actor: BattleActor,
+  name: string,
+  reason: "paralyzed" | "asleep" | "woke" | undefined
+): BattleRoundStepResult {
+  const ticked = applyEndOfTurnStatusTick(state, actor);
+  const base = reason === "woke"
+    ? `${name} woke up!`
+    : reason === "asleep"
+      ? `${name} is fast asleep.`
+      : `${name} can't move.`;
+  const message = ticked.hpLoss > 0 ? `${base} (${ticked.hpLoss} poison)` : base;
+  return skippedRoundStep(ticked.state, actor, message);
+}
+
+function withEndOfTurnPoisonTick(result: BattleRoundStepResult, actor: BattleActor): BattleRoundStepResult {
+  const ticked = applyEndOfTurnStatusTick(result.state, actor);
+  if (ticked.hpLoss <= 0) {
+    return result.state === ticked.state ? result : { ...result, state: ticked.state };
+  }
+  return {
+    ...result,
+    state: ticked.state,
+    message: `${result.message} ${ticked.name ?? ""} takes ${ticked.hpLoss} poison damage.`
+  };
 }
 
 export function nextInputState(

@@ -23,6 +23,12 @@ import {
   type ItemUseEffect,
   type PartyVitals
 } from "./partyState";
+import {
+  hasStatus,
+  resolveTurnGate,
+  tickStatuses,
+  type StatusState
+} from "./statusEffects";
 
 export type Rng = () => number;
 export type BattleSide = "party" | "enemy";
@@ -61,6 +67,8 @@ export type Combatant = {
   itemRarity: BattleEnemy["itemRarity"];
   isEnemy: boolean;
   defending?: boolean;
+  /** Battle-scoped status ailments (poisoned/paralyzed/asleep/...); see statusEffects.ts. */
+  statuses?: StatusState;
   actions?: BattleEnemy["actions"];
   nextActionIndex?: number;
 };
@@ -1292,6 +1300,52 @@ function applyPpRestore(combatant: Combatant, amount: number): Combatant {
     ...combatant,
     pp: Math.min(combatant.maxPp, combatant.pp + Math.max(0, Math.floor(amount)))
   };
+}
+
+/**
+ * Battle status turn-gate for a combatant: paralyzed/asleep skip the action. Only
+ * consumes an rng roll when an asleep combatant might wake, so combatants without
+ * statuses never perturb the rng sequence. Returns the (possibly woke-updated) state.
+ */
+export function resolveCombatantTurnGate(
+  state: BattleState,
+  actor: BattleActor,
+  rng: Rng
+): { state: BattleState; canAct: boolean; reason?: "paralyzed" | "asleep" | "woke" } {
+  const combatant = combatantFor(state, actor);
+  if (!combatant?.statuses?.length) {
+    return { state, canAct: true };
+  }
+  const needsWakeRoll = !hasStatus(combatant.statuses, "paralyzed") && hasStatus(combatant.statuses, "asleep");
+  const gate = resolveTurnGate(combatant.statuses, needsWakeRoll ? normalizedRoll(rng()) : 0);
+  const nextState = gate.statuses === combatant.statuses
+    ? state
+    : withCombatant(state, actor, withStatuses(combatant, gate.statuses));
+  return { state: nextState, canAct: gate.canAct, ...(gate.reason ? { reason: gate.reason } : {}) };
+}
+
+/**
+ * End-of-turn status tick for the acting combatant: poison HP loss + duration decay.
+ * No-op for combatants without statuses.
+ */
+export function applyEndOfTurnStatusTick(
+  state: BattleState,
+  actor: BattleActor
+): { state: BattleState; hpLoss: number; name?: string } {
+  const combatant = combatantFor(state, actor);
+  if (!combatant || !isCombatantAlive(combatant) || !combatant.statuses?.length) {
+    return { state, hpLoss: 0, ...(combatant ? { name: combatant.name } : {}) };
+  }
+  const result = tickStatuses(combatant.statuses, combatant.maxHp);
+  let next = withStatuses(combatant, result.statuses);
+  if (result.hpLoss > 0) {
+    next = applyDamage(next, result.hpLoss);
+  }
+  return { state: withCombatant(state, actor, next), hpLoss: result.hpLoss, name: combatant.name };
+}
+
+function withStatuses(combatant: Combatant, statuses: StatusState): Combatant {
+  return { ...combatant, statuses: statuses.length > 0 ? statuses : undefined };
 }
 
 function combatantFor(state: BattleState, actor: BattleActor): Combatant | undefined {
