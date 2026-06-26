@@ -513,6 +513,13 @@
         "amount": 250
       }
     },
+    "156": {
+      "effect": {
+        "kind": "inflictStatus",
+        "ailment": "paralyzed",
+        "remaining": 3
+      }
+    },
     "159": {
       "name": "Focus Fizz"
     },
@@ -586,7 +593,12 @@
       }
     },
     "200": {
-      "name": "Sharp Decoy"
+      "name": "Sharp Decoy",
+      "effect": {
+        "kind": "inflictStatus",
+        "ailment": "poisoned",
+        "remaining": 3
+      }
     },
     "207": {
       "name": "Signal Tart",

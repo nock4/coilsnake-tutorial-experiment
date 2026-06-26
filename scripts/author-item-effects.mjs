@@ -63,7 +63,18 @@ const PERMSTAT = {
 // Immobilize items (EB status group $1f=4, "can't act this turn") -> mapped to paralyzed.
 // remaining is an estimated duration (the exact EB wear-off wasn't decoded). 142 also deals
 // damage in EB; only the signature immobilize is modeled.
-const INFLICT = { 142: { ailment: "paralyzed", remaining: 3 }, 152: { ailment: "paralyzed", remaining: 3 } };
+// 156 Pharaoh's curse / 200 Viper: SWAGBOUND-AUTHORED (not ROM-faithful). Their EB effect is a
+// battle-action-VM script (item routine -> $C1DC1C -> $C186B1 -> 24-bit VM scripts $C4550E/$D59589
+// via per-item descriptor sub-scripts $6B18/$766E); decoding the exact ailment needs RE'ing the whole
+// battle-action VM, disproportionate for these obscure non-Act-1 items. Flavor-derived: Viper "is
+// biting" (venom) -> poisoned; Pharaoh's curse "something unknown burst from the box" (a curse) ->
+// paralyzed. (Stag beetle 153 + Toothbrush 154 left unmapped: effect KIND itself is ambiguous / gag.)
+const INFLICT = {
+  142: { ailment: "paralyzed", remaining: 3 },
+  152: { ailment: "paralyzed", remaining: 3 },
+  156: { ailment: "paralyzed", remaining: 3 },
+  200: { ailment: "poisoned", remaining: 3 }
+};
 // Swagbound names for the consumables that had no existing override (civic / signal-tech theme,
 // matching the established rename scheme). Red Tape = the bureaucratic immobilizer.
 const NAMES = {
