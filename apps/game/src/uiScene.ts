@@ -107,6 +107,7 @@ export class UiScene extends Phaser.Scene {
   private panelGraphics?: Phaser.GameObjects.Graphics;
   private panelText?: Phaser.GameObjects.Text;
   private badgeText?: Phaser.GameObjects.Text;
+  private menuHintText?: Phaser.GameObjects.Text;
   private menuGraphics?: Phaser.GameObjects.Graphics;
   private menuCursorGraphics?: Phaser.GameObjects.Graphics;
   private menuTexts: Phaser.GameObjects.Text[] = [];
@@ -157,6 +158,13 @@ export class UiScene extends Phaser.Scene {
       }).setOrigin(1, 0).setDepth(11);
       this.createCopyButton();
     }
+    // Persistent control hint so the command menu (Talk/Goods/PSI/Equip/Check/Status) is
+    // discoverable from the overworld. Always shipped (not dev-only); shown only while walking
+    // — hidden whenever a menu or dialogue is already up (see update()).
+    this.menuHintText = createCleanText(this, this.scale.width - 12, this.scale.height - 12, "M: Menu", {
+      fontSize: 11,
+      color: CLEAN_UI_SECONDARY
+    }).setOrigin(1, 1).setDepth(11);
     this.menuGraphics = this.add.graphics().setDepth(14);
     this.menuCursorGraphics = this.add.graphics().setDepth(16);
   }
@@ -213,6 +221,8 @@ export class UiScene extends Phaser.Scene {
 
     this.promptText?.setText(promptVisible ? world.prompt : "");
     this.promptText?.setVisible(promptVisible);
+    // Menu hint shares the prompt's visibility: only while walking, never over a menu/dialogue.
+    this.menuHintText?.setVisible(promptVisible);
     this.drawDialogue(open, text, textRuns, footer, showAdvanceIndicator);
     this.drawPanel(panelVisible ? [...world.statusLines(), "", ...world.metadataLines(), "", ...runtimeLines] : []);
     this.drawMenu(menuScreens);
