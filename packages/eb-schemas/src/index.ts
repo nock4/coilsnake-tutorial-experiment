@@ -614,7 +614,9 @@ export const NpcInteractionSchema = z
     }).strict().optional(),
     shop: z.number().int().nonnegative().optional(),
     heal: z.union([z.literal("full"), z.literal(true)]).optional(),
-    save: z.literal(true).optional()
+    save: z.literal(true).optional(),
+    // Money charged before the interaction's heal (e.g. an inn's nightly fee).
+    cost: z.number().int().nonnegative().optional()
   })
   .strict()
   .superRefine((value, context) => {

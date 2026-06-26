@@ -2633,6 +2633,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       heal: (scope) => this.healParty(scope),
       save: () => this.saveGame(false),
       give: (char, item) => this.giveItem(char, item),
+      money: (op, amount) => this.partyState.applyMoney(op, amount),
       isDialogueActive: () => this.dialogue.open || Boolean(this.eventSequence?.running)
     });
   }
