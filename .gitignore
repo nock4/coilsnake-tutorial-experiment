@@ -46,3 +46,7 @@ apps/game/public/audio/jammers/
 scripts/.shop-clerks.json
 
 scripts/.onett-dialogue-targets.json
+
+# Large local music library (preserved on disk; see backup decision)
+apps/game/public/audio/jammers-raw/
+apps/game/public/audio/earthbound-jammers/
