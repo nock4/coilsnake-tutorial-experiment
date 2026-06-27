@@ -463,7 +463,12 @@ export const ItemUseEffectSchema = z.union([
   z.object({ kind: z.literal("recoverPpPercent"), percent: z.number().int().positive() }),
   z.object({ kind: z.literal("damage"), amount: z.number().int().positive() }),
   z.object({ kind: z.literal("drainPp"), amount: z.number().int().positive() }),
-  z.object({ kind: z.literal("buffStat"), stat: z.enum(["offense", "defense", "speed", "guts"]), amount: z.number().int() }),
+  z.object({
+    kind: z.literal("buffStat"),
+    stat: z.enum(["offense", "defense", "speed", "guts"]),
+    amount: z.number().int().optional(),
+    multiplier: z.number().positive().optional()
+  }),
   // Permanent stat growth (EB capsules): boosts a combatant stat that persists past the fight via
   // the post-battle stat writeback. Covers all seven stats (capsules raise iq/guts/speed/vitality/luck).
   z.object({ kind: z.literal("permStat"), stat: z.enum(["offense", "defense", "speed", "guts", "vitality", "iq", "luck"]), amount: z.number().int() }),

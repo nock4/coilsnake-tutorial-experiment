@@ -45,10 +45,12 @@ const DAMAGE = {
 // Revive: Horn of life / Cup of Lifenoodles restore a fainted ally to FULL HP (EB writes Max HP).
 // 9999 is a sentinel — applyHeal caps it at the combatant's maxHp, i.e. a full revive.
 const REVIVE = { 130: 9999, 252: 9999 };
-// Battle stat buff. EB Defense spray is +floor(Defense/16) (relative, ~+6%); modeled here as a
-// flat approximation. (Sudden guts pill #159 is Guts*2 — neither guts nor multipliers exist in
-// the buffStat kind yet, so it is intentionally left unmapped.)
-const BUFF = { 161: { stat: "defense", amount: 5 } };
+// Battle stat buffs. EB Defense spray is +floor(Defense/16) (relative, ~+6%); modeled here as a
+// flat approximation. EB Sudden guts pill is Guts*2 for the fight.
+const BUFF = {
+  159: { stat: "guts", multiplier: 2 },
+  161: { stat: "defense", amount: 5 }
+};
 // Permanent stat-growth capsules (ROM-RE: action 249 dispatch $C2B27D selectors 4-8 each JMP to a
 // per-stat path calling the shared increment $C26A2D; item Argument = [statSelector, 1, 1, 0], with
 // arg[1]=1 = +1 permanent point). The capsule name fixes the stat. The boost persists past the fight
@@ -68,12 +70,22 @@ const PERMSTAT = {
 // via per-item descriptor sub-scripts $6B18/$766E); decoding the exact ailment needs RE'ing the whole
 // battle-action VM, disproportionate for these obscure non-Act-1 items. Flavor-derived: Viper "is
 // biting" (venom) -> poisoned; Pharaoh's curse "something unknown burst from the box" (a curse) ->
-// paralyzed. (Stag beetle 153 + Toothbrush 154 left unmapped: effect KIND itself is ambiguous / gag.)
+// paralyzed.
 const INFLICT = {
   142: { ailment: "paralyzed", remaining: 3 },
   152: { ailment: "paralyzed", remaining: 3 },
   156: { ailment: "paralyzed", remaining: 3 },
   200: { ailment: "poisoned", remaining: 3 }
+};
+// flavor-derived (Swagbound), not ROM-faithful. These are intentionally authored from item flavor
+// because their EB routines are unresolved / ambiguous in the flat item-effect model.
+const FLAVOR_HEAL = {
+  // Kraken soup: reuse the strong bowl-food magnitude from 236 Bowl of rice gruel.
+  109: 216
+};
+const FLAVOR_CURE = { 154: "all" };
+const FLAVOR_INFLICT = {
+  153: { ailment: "confused", remaining: 3 }
 };
 // Swagbound names for the consumables that had no existing override (civic / signal-tech theme,
 // matching the established rename scheme). Red Tape = the bureaucratic immobilizer.
@@ -92,14 +104,26 @@ for (const [id, amount] of Object.entries(PP)) entry(id).effect = { kind: "recov
 for (const [id, ailment] of Object.entries(CURE)) entry(id).effect = { kind: "cureStatus", ailment };
 for (const [id, amount] of Object.entries(DAMAGE)) entry(id).effect = { kind: "damage", amount };
 for (const [id, amount] of Object.entries(REVIVE)) entry(id).effect = { kind: "revive", amount };
-for (const [id, b] of Object.entries(BUFF)) entry(id).effect = { kind: "buffStat", stat: b.stat, amount: b.amount };
+for (const [id, b] of Object.entries(BUFF)) {
+  entry(id).effect = {
+    kind: "buffStat",
+    stat: b.stat,
+    ...(b.amount !== undefined ? { amount: b.amount } : {}),
+    ...(b.multiplier !== undefined ? { multiplier: b.multiplier } : {})
+  };
+}
 for (const [id, b] of Object.entries(PERMSTAT)) entry(id).effect = { kind: "permStat", stat: b.stat, amount: b.amount };
 for (const [id, inf] of Object.entries(INFLICT)) {
+  entry(id).effect = { kind: "inflictStatus", ailment: inf.ailment, ...(inf.remaining ? { remaining: inf.remaining } : {}) };
+}
+for (const [id, amount] of Object.entries(FLAVOR_HEAL)) entry(id).effect = { kind: "healHp", amount };
+for (const [id, ailment] of Object.entries(FLAVOR_CURE)) entry(id).effect = { kind: "cureStatus", ailment };
+for (const [id, inf] of Object.entries(FLAVOR_INFLICT)) {
   entry(id).effect = { kind: "inflictStatus", ailment: inf.ailment, ...(inf.remaining ? { remaining: inf.remaining } : {}) };
 }
 for (const [id, name] of Object.entries(NAMES)) entry(id).name = name;
 
 writeFileSync(PATH, `${JSON.stringify(data, null, 2)}\n`);
-const counts = [HEAL, PP, CURE, DAMAGE, REVIVE, BUFF, PERMSTAT, INFLICT].map((m) => Object.keys(m).length);
-console.log(`Authored: ${counts[0]} heal, ${counts[1]} pp, ${counts[2]} cure, ${counts[3]} damage, ${counts[4]} revive, ${counts[5]} buff, ${counts[6]} permStat, ${counts[7]} inflict`);
+const counts = [HEAL, PP, CURE, DAMAGE, REVIVE, BUFF, PERMSTAT, INFLICT, FLAVOR_HEAL, FLAVOR_CURE, FLAVOR_INFLICT].map((m) => Object.keys(m).length);
+console.log(`Authored: ${counts[0] + counts[8]} heal, ${counts[1]} pp, ${counts[2] + counts[9]} cure, ${counts[3]} damage, ${counts[4]} revive, ${counts[5]} buff, ${counts[6]} permStat, ${counts[7] + counts[10]} inflict`);
 console.log(`Total items with effects: ${Object.values(data.byItemId).filter((e) => e.effect).length}`);

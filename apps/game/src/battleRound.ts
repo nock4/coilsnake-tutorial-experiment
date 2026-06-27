@@ -986,7 +986,8 @@ function itemEffectMessage(
     return `${name} came back to life!`;
   }
   if (effect.kind === "buffStat") {
-    return `${name}'s ${effect.stat} went ${effect.amount < 0 ? "down" : "up"}!`;
+    const direction = (effect.amount ?? 0) < 0 || (effect.multiplier ?? 1) < 1 ? "down" : "up";
+    return `${name}'s ${effect.stat} went ${direction}!`;
   }
   if (effect.kind === "permStat") {
     return `${name}'s ${effect.stat} rose for good!`;

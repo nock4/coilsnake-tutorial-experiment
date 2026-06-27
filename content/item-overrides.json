@@ -278,7 +278,11 @@
       }
     },
     "109": {
-      "name": "Harbor Soup"
+      "name": "Harbor Soup",
+      "effect": {
+        "kind": "healHp",
+        "amount": 216
+      }
     },
     "110": {
       "name": "Field Water",
@@ -502,10 +506,19 @@
       "name": "Foul Socks"
     },
     "153": {
-      "name": "Pocket Beetle"
+      "name": "Pocket Beetle",
+      "effect": {
+        "kind": "inflictStatus",
+        "ailment": "confused",
+        "remaining": 3
+      }
     },
     "154": {
-      "name": "Clean Brush"
+      "name": "Clean Brush",
+      "effect": {
+        "kind": "cureStatus",
+        "ailment": "all"
+      }
     },
     "155": {
       "effect": {
@@ -521,7 +534,12 @@
       }
     },
     "159": {
-      "name": "Focus Fizz"
+      "name": "Focus Fizz",
+      "effect": {
+        "kind": "buffStat",
+        "stat": "guts",
+        "multiplier": 2
+      }
     },
     "160": {
       "name": "Rally Dust",

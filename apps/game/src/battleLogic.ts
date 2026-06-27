@@ -1802,12 +1802,7 @@ function applyItemEffectToCombatant(combatant: Combatant, effect: ItemUseEffect)
   }
   if (effect.kind === "buffStat") {
     // Battle-scoped stat change (combatants live only for the fight). Negative = debuff; clamp at 0.
-    if (effect.stat === "guts") {
-      const guts = Math.max(0, combatant.stats.guts + effect.amount);
-      return { combatant: { ...combatant, stats: { ...combatant.stats, guts } }, amount: effect.amount };
-    }
-    const next = Math.max(0, combatant[effect.stat] + effect.amount);
-    return { combatant: { ...combatant, [effect.stat]: next }, amount: effect.amount };
+    return applyBattleStatBuff(combatant, effect);
   }
   if (effect.kind === "permStat") {
     // Permanent growth (capsules): raise the BASE stat so applyBattleResult's writeback persists it
@@ -1829,6 +1824,24 @@ function applyItemEffectToCombatant(combatant: Combatant, effect: ItemUseEffect)
       pp: applied.vitals.pp
     },
     amount: Math.max(0, applied.nextValue - applied.previousValue)
+  };
+}
+
+function applyBattleStatBuff(
+  combatant: Combatant,
+  effect: Extract<ItemUseEffect, { kind: "buffStat" }>
+): { combatant: Combatant; amount: number } {
+  const current = effect.stat === "guts" ? combatant.stats.guts : combatant[effect.stat];
+  const next = Math.max(0, Math.floor((current + (effect.amount ?? 0)) * (effect.multiplier ?? 1)));
+  if (effect.stat === "guts") {
+    return {
+      combatant: { ...combatant, stats: { ...combatant.stats, guts: next } },
+      amount: next - current
+    };
+  }
+  return {
+    combatant: { ...combatant, [effect.stat]: next },
+    amount: next - current
   };
 }
 
