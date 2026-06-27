@@ -58,17 +58,44 @@
     "34": {
       "name": "Witness Skillet"
     },
+    "36": {
+      "name": "Signal Popper"
+    },
+    "37": {
+      "name": "Stun Relay"
+    },
     "38": {
       "name": "Signal Popper"
     },
+    "39": {
+      "name": "Magnum Relay"
+    },
     "40": {
       "name": "Route Popper"
+    },
+    "41": {
+      "name": "Cut-Line Laser"
     },
     "42": {
       "name": "Relay Beam"
     },
     "43": {
       "name": "Breach Beam"
+    },
+    "44": {
+      "name": "Spectrum Beam"
+    },
+    "45": {
+      "name": "Last Notice Ray"
+    },
+    "46": {
+      "name": "Worst Beam"
+    },
+    "47": {
+      "name": "Night Shift Beam"
+    },
+    "48": {
+      "name": "Bedrock Beam"
     },
     "49": {
       "name": "Jammer Yo-Yo"
@@ -94,6 +121,9 @@
     "56": {
       "name": "Witness Pendant"
     },
+    "57": {
+      "name": "Lucky Stub"
+    },
     "58": {
       "name": "Wet Fit"
     },
@@ -102,6 +132,15 @@
     },
     "60": {
       "name": "Work Fit"
+    },
+    "61": {
+      "name": "Tide Pendant"
+    },
+    "62": {
+      "name": "Night-Sky Pendant"
+    },
+    "63": {
+      "name": "Old Regime Cloak"
     },
     "64": {
       "name": "Paper Cuff"
@@ -121,11 +160,23 @@
     "69": {
       "name": "Witness Band"
     },
+    "70": {
+      "name": "Static Bracelet"
+    },
+    "71": {
+      "name": "Choirboy Band"
+    },
+    "72": {
+      "name": "Patron Saint Band"
+    },
     "74": {
       "name": "Drifella Angel Hat"
     },
     "75": {
       "name": "Casework Hat"
+    },
+    "76": {
+      "name": "Bush League Cap"
     },
     "77": {
       "name": "Worksite Hat"
@@ -135,6 +186,9 @@
     },
     "79": {
       "name": "Registry Ribbon"
+    },
+    "80": {
+      "name": "Patron Saint Ribbon"
     },
     "81": {
       "name": "Night Docket"
@@ -306,6 +360,7 @@
       }
     },
     "113": {
+      "name": "Brains Capsule",
       "effect": {
         "kind": "permStat",
         "stat": "iq",
@@ -313,6 +368,7 @@
       }
     },
     "114": {
+      "name": "Nerve Capsule",
       "effect": {
         "kind": "permStat",
         "stat": "guts",
@@ -320,6 +376,7 @@
       }
     },
     "115": {
+      "name": "Pace Capsule",
       "effect": {
         "kind": "permStat",
         "stat": "speed",
@@ -327,6 +384,7 @@
       }
     },
     "116": {
+      "name": "Pulse Capsule",
       "effect": {
         "kind": "permStat",
         "stat": "vitality",
@@ -334,6 +392,7 @@
       }
     },
     "117": {
+      "name": "Long-Shot Capsule",
       "effect": {
         "kind": "permStat",
         "stat": "luck",
@@ -636,6 +695,9 @@
     },
     "214": {
       "name": "Final Ledger Bat"
+    },
+    "215": {
+      "name": "Double Relay"
     },
     "216": {
       "name": "Registry Band"
