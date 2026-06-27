@@ -90,7 +90,8 @@
       "ref": "interior:bosch-bedroom-v0"
     },
     "33": {
-      "ref": "target:bosch-main-room-v0:cousin"
+      "ref": "target:bosch-main-room-v0:cousin",
+      "shop": 4
     },
     "35": {
       "ref": "target:bosch-main-room-v0:proof-token-bowl",
@@ -142,14 +143,56 @@
       "heal": "full",
       "save": true
     },
+    "8": { "shop": 2 },
+    "9": { "shop": 1 },
+    "40": { "shop": 5 },
+    "291": { "shop": 6 },
+    "292": { "shop": 7 },
+    "295": { "shop": 9 },
+    "296": { "shop": 8 },
+    "311": { "shop": 11 },
+    "316": { "shop": 14 },
+    "318": { "shop": 15 },
+    "338": { "shop": 63 },
+    "403": { "shop": 16 },
     "404": {
       "ref": "interior:corner-shop-v0",
       "shop": 1
     },
+    "504": { "shop": 17 },
+    "505": { "shop": 18 },
+    "509": { "shop": 20 },
+    "536": { "shop": 19 },
+    "606": { "shop": 22 },
+    "708": { "shop": 56 },
+    "713": { "shop": 23 },
+    "715": { "shop": 57 },
+    "747": { "shop": 24 },
     "749": {
       "ref": "interior:burger-shop-v0",
       "shop": 4
-    }
+    },
+    "769": { "shop": 25 },
+    "853": { "shop": 26 },
+    "922": { "shop": 27 },
+    "923": { "shop": 28 },
+    "926": { "shop": 30 },
+    "932": { "shop": 29 },
+    "936": { "shop": 34 },
+    "959": { "shop": 35 },
+    "1008": { "shop": 39 },
+    "1011": { "shop": 38 },
+    "1025": { "shop": 40 },
+    "1098": { "shop": 61 },
+    "1123": { "shop": 41 },
+    "1125": { "shop": 45 },
+    "1139": { "shop": 43 },
+    "1140": { "shop": 44 },
+    "1146": { "shop": 21 },
+    "1156": { "shop": 63 },
+    "1157": { "shop": 62 },
+    "1312": { "shop": 36 },
+    "1374": { "shop": 60 }
   },
   "byTextPointer": {
     "data_15.l_0xc5eb0b": {
