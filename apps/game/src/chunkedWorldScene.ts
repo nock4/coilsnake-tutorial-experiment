@@ -1106,9 +1106,16 @@ export class ChunkedWorldScene extends Phaser.Scene {
   }
 
   /** Snapshot of where the player is, for the dev music-auditioner panel. */
-  private auditionLocation(): AuditionLocation {
-    const sectors = this.world_.sectors;
-    const sector = sectors ? sectorCoordForWorldPixel(this.playerState, sectors) : undefined;
+  private auditionLocation(): AuditionLocation | null {
+    // The dev panel polls this on a timer; during scene init/reset there is a
+    // window where playerState (and world data) are not set yet. Bail to null
+    // (the panel renders "no world scene") instead of dereferencing undefined.
+    const playerState = this.playerState;
+    const sectors = this.world_?.sectors;
+    if (!playerState) {
+      return null;
+    }
+    const sector = sectors ? sectorCoordForWorldPixel(playerState, sectors) : undefined;
     const sectorIndex = sector?.index ?? null;
     const areaId =
       sectorIndex !== null && sectors?.areaIds ? sectors.areaIds[sectorIndex] ?? null : null;
@@ -1116,8 +1123,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
       cue: this.currentOverworldMusicCue ?? "—",
       sectorIndex,
       areaId,
-      x: Math.round(this.playerState.x),
-      y: Math.round(this.playerState.y)
+      x: Math.round(playerState.x),
+      y: Math.round(playerState.y)
     };
   }
 
