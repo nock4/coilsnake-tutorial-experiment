@@ -506,10 +506,15 @@ export function resolvePhysicalAttackDamage(
   defender: Combatant,
   rng: Rng
 ): PhysicalAttackPipelineResult {
+  // EB-style accuracy: a real baseline whiff chance, raised when the defender is
+  // faster/luckier and lowered when the attacker is. The old formula (/500) maxed
+  // near ~4% in Act-1 speed ranges, so attacks effectively never missed.
   const missChance = clamp(
-    (2 * stat(defender.speed) - stat(attacker.speed)) / 500,
-    0,
-    0.99
+    0.1 +
+      (stat(defender.speed) - stat(attacker.speed)) / 120 +
+      (stat(defender.stats.luck) - stat(attacker.stats.luck)) / 220,
+    0.03,
+    0.45
   );
   if (normalizedRoll(rng()) < missChance) {
     return {
