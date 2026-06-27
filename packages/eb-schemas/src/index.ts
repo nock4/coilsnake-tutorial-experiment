@@ -463,7 +463,12 @@ export const ItemUseEffectSchema = z.union([
   z.object({ kind: z.literal("recoverPpPercent"), percent: z.number().int().positive() }),
   z.object({ kind: z.literal("damage"), amount: z.number().int().positive() }),
   z.object({ kind: z.literal("drainPp"), amount: z.number().int().positive() }),
-  z.object({ kind: z.literal("buffStat"), stat: z.enum(["offense", "defense", "speed", "guts"]), amount: z.number().int() }),
+  z.object({
+    kind: z.literal("buffStat"),
+    stat: z.enum(["offense", "defense", "speed", "guts"]),
+    amount: z.number().int().optional(),
+    multiplier: z.number().positive().optional()
+  }),
   // Permanent stat growth (EB capsules): boosts a combatant stat that persists past the fight via
   // the post-battle stat writeback. Covers all seven stats (capsules raise iq/guts/speed/vitality/luck).
   z.object({ kind: z.literal("permStat"), stat: z.enum(["offense", "defense", "speed", "guts", "vitality", "iq", "luck"]), amount: z.number().int() }),
@@ -543,6 +548,20 @@ const EnemyOverrideEntrySchema = z.object({
 export const EnemyOverridesSchema = z.object({
   schema: z.literal("swagbound.enemy-overrides.v1"),
   byEnemyId: z.record(z.string().regex(/^\d+$/), EnemyOverrideEntrySchema)
+}).strict();
+
+const EnemyStatOverrideEntrySchema = z.object({
+  hp: z.number().int().nonnegative().optional(),
+  offense: z.number().int().nonnegative().optional(),
+  defense: z.number().int().nonnegative().optional(),
+  speed: z.number().int().nonnegative().optional()
+}).strict().refine((entry) => Object.keys(entry).length > 0, {
+  message: "enemy stat override entry must set at least one stat"
+});
+
+export const EnemyStatOverridesSchema = z.object({
+  schema: z.literal("swagbound.enemy-stat-overrides.v1"),
+  byEnemyId: z.record(z.string().regex(/^\d+$/), EnemyStatOverrideEntrySchema)
 }).strict();
 
 /**
@@ -1603,6 +1622,7 @@ export type BackgroundOverrides = z.infer<typeof BackgroundOverridesSchema>;
 export type ItemOverrides = z.infer<typeof ItemOverridesSchema>;
 export type CharacterOverrides = z.infer<typeof CharacterOverridesSchema>;
 export type EnemyOverrides = z.infer<typeof EnemyOverridesSchema>;
+export type EnemyStatOverrides = z.infer<typeof EnemyStatOverridesSchema>;
 export type EncounterCandidate = z.infer<typeof EncounterCandidateSchema>;
 export type EncounterSubGroup = z.infer<typeof EncounterSubGroupSchema>;
 export type EncounterMapGroup = z.infer<typeof EncounterMapGroupSchema>;

@@ -277,6 +277,10 @@ export const PLAYER_DEFAULTS = {
 } as const;
 
 const ENEMY_HP_RATE_PER_SEC = 42;
+// Chance a single-target enemy attack swings at a non-lead party member instead of
+// the lead. Low so the lead still soaks most hits, but enough that a glass back-row
+// member is a real liability you have to protect.
+const ENEMY_OFF_LEAD_TARGET_CHANCE = 0.18;
 const STRENGTH_RANK: Record<string, number> = {
   none: 0,
   alpha: 1,
@@ -506,10 +510,15 @@ export function resolvePhysicalAttackDamage(
   defender: Combatant,
   rng: Rng
 ): PhysicalAttackPipelineResult {
+  // EB-style accuracy: a real baseline whiff chance, raised when the defender is
+  // faster/luckier and lowered when the attacker is. The old formula (/500) maxed
+  // near ~4% in Act-1 speed ranges, so attacks effectively never missed.
   const missChance = clamp(
-    (2 * stat(defender.speed) - stat(attacker.speed)) / 500,
-    0,
-    0.99
+    0.1 +
+      (stat(defender.speed) - stat(attacker.speed)) / 120 +
+      (stat(defender.stats.luck) - stat(attacker.stats.luck)) / 220,
+    0.03,
+    0.45
   );
   if (normalizedRoll(rng()) < missChance) {
     return {
@@ -1488,8 +1497,17 @@ function targetActorsForEnemyAction(state: BattleState, target: number | undefin
   }
 
   switch (target) {
-    case 1:
+    case 1: {
+      // Single-target enemy attacks nominally hit the lead, but occasionally swing
+      // at someone else so a fragile back-row member (e.g. Paula, hp30) isn't
+      // perfectly safe behind the tank. Lead stays the heavy favourite.
+      if (living.length > 1 && normalizedRoll(rng()) < ENEMY_OFF_LEAD_TARGET_CHANCE) {
+        const offLead = living.slice(1);
+        const index = Math.min(offLead.length - 1, Math.floor(normalizedRoll(rng()) * offLead.length));
+        return [offLead[index]];
+      }
       return [living[0]];
+    }
     case 2: {
       const index = Math.min(living.length - 1, Math.floor(normalizedRoll(rng()) * living.length));
       return [living[index]];
@@ -1802,12 +1820,7 @@ function applyItemEffectToCombatant(combatant: Combatant, effect: ItemUseEffect)
   }
   if (effect.kind === "buffStat") {
     // Battle-scoped stat change (combatants live only for the fight). Negative = debuff; clamp at 0.
-    if (effect.stat === "guts") {
-      const guts = Math.max(0, combatant.stats.guts + effect.amount);
-      return { combatant: { ...combatant, stats: { ...combatant.stats, guts } }, amount: effect.amount };
-    }
-    const next = Math.max(0, combatant[effect.stat] + effect.amount);
-    return { combatant: { ...combatant, [effect.stat]: next }, amount: effect.amount };
+    return applyBattleStatBuff(combatant, effect);
   }
   if (effect.kind === "permStat") {
     // Permanent growth (capsules): raise the BASE stat so applyBattleResult's writeback persists it
@@ -1829,6 +1842,24 @@ function applyItemEffectToCombatant(combatant: Combatant, effect: ItemUseEffect)
       pp: applied.vitals.pp
     },
     amount: Math.max(0, applied.nextValue - applied.previousValue)
+  };
+}
+
+function applyBattleStatBuff(
+  combatant: Combatant,
+  effect: Extract<ItemUseEffect, { kind: "buffStat" }>
+): { combatant: Combatant; amount: number } {
+  const current = effect.stat === "guts" ? combatant.stats.guts : combatant[effect.stat];
+  const next = Math.max(0, Math.floor((current + (effect.amount ?? 0)) * (effect.multiplier ?? 1)));
+  if (effect.stat === "guts") {
+    return {
+      combatant: { ...combatant, stats: { ...combatant.stats, guts: next } },
+      amount: next - current
+    };
+  }
+  return {
+    combatant: { ...combatant, [effect.stat]: next },
+    amount: next - current
   };
 }
 

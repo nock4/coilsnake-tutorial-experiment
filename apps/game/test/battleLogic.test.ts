@@ -73,7 +73,7 @@ describe("battle damage", () => {
     const attacker = buildPlayerCombatant({ offense: 40, speed: 1 });
     const defender = buildEnemyCombatant(enemy(90, "FAST_TARGET", { defense: 4, speed: 250 }));
 
-    const result = resolvePhysicalAttackDamage(attacker, defender, () => 0.5);
+    const result = resolvePhysicalAttackDamage(attacker, defender, () => 0.44);
 
     expect(result).toEqual({
       damage: 0,

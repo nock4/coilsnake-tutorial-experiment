@@ -86,7 +86,7 @@ export type ItemUseEffect =
   | { kind: "recoverPpPercent"; percent: number }
   | { kind: "damage"; amount: number }
   | { kind: "drainPp"; amount: number }
-  | { kind: "buffStat"; stat: "offense" | "defense" | "speed" | "guts"; amount: number }
+  | { kind: "buffStat"; stat: "offense" | "defense" | "speed" | "guts"; amount?: number; multiplier?: number }
   | { kind: "permStat"; stat: "offense" | "defense" | "speed" | "guts" | "vitality" | "iq" | "luck"; amount: number }
   | { kind: "revive"; amount: number }
   | { kind: "cureStatus"; ailment: StatusAilment | "all" }
@@ -107,7 +107,7 @@ export function itemEffectTargetSide(effect: ItemUseEffect | undefined): "party"
   }
   if (effect?.kind === "buffStat") {
     // A negative buff is a debuff aimed at the enemy (e.g. Defense down).
-    return effect.amount < 0 ? "enemy" : "party";
+    return (effect.amount ?? 0) < 0 ? "enemy" : "party";
   }
   return "party";
 }
@@ -726,7 +726,20 @@ function normalizeGeneratedItemEffect(effect: ItemData["effect"]): ItemUseEffect
     case "drainPp":
       return effect.amount > 0 ? { kind: "drainPp", amount: stat(effect.amount) } : undefined;
     case "buffStat":
-      return effect.amount !== 0 ? { kind: "buffStat", stat: effect.stat, amount: Math.trunc(effect.amount) } : undefined;
+      {
+        const amount = Math.trunc(effect.amount ?? 0);
+        const multiplier = effect.multiplier;
+        const hasMultiplier = multiplier !== undefined && Number.isFinite(multiplier) && multiplier > 0 && multiplier !== 1;
+        if (amount === 0 && !hasMultiplier) {
+          return undefined;
+        }
+        return {
+          kind: "buffStat",
+          stat: effect.stat,
+          ...(amount !== 0 ? { amount } : {}),
+          ...(hasMultiplier ? { multiplier } : {})
+        };
+      }
     case "permStat":
       return effect.amount !== 0 ? { kind: "permStat", stat: effect.stat, amount: Math.trunc(effect.amount) } : undefined;
     case "revive":

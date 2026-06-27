@@ -15,6 +15,17 @@ describe("ItemOverridesSchema", () => {
     expect(parsed.byItemId["88"].name).toBe("Pocket Snack");
   });
 
+  it("parses battle stat multipliers", () => {
+    const parsed = ItemOverridesSchema.parse({
+      schema: "swagbound.item-overrides.v1",
+      byItemId: {
+        "159": { effect: { kind: "buffStat", stat: "guts", multiplier: 2 } }
+      }
+    });
+
+    expect(parsed.byItemId["159"].effect).toEqual({ kind: "buffStat", stat: "guts", multiplier: 2 });
+  });
+
   it("rejects invalid keys and unsafe names", () => {
     expect(ItemOverridesSchema.safeParse({
       schema: "swagbound.item-overrides.v1",
