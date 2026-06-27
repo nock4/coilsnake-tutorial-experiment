@@ -2,89 +2,33 @@
   "schema": "swagbound.custom-dialogue.v1",
   "comment": "Hand-authored Act-1 dialogue (takes precedence over the generated Drifella barks in content/drifella-barks.json). Two passes: (1) the opening-house cast (npcId->character is a first pass to refine during sprite work, e.g. Biscuit on the dog sprite); (2) a Signal Town MILADY-LORE pass on reachable path NPCs (166/167/191/1410/163/136/202/138/146/1411/135/137) seeding the antagonist's lore through townsfolk rumor: Little Swag World is the organic source, Milady/Remilia corrupts it into hostile classification infrastructure (provenance gates, the public version, the Malady as visible symptom). See docs/swagbound-eb-act1-arc-mapping.md.",
   "byNpcId": {
-    "144": { "pages": [
-      "Milady? Yeah, she's like, the brand. It's on everything down here. I stopped reading it.",
-      "Probably fine. It's usually fine. Why, did you read it?"
-    ] },
-    "145": { "pages": [
-      "My feed says Milady loves us. My feed also says I won a boat.",
-      "I did not win a boat. But I keep checking, you know? Just in case the boat's real and the love isn't."
-    ] },
-    "134": { "pages": [
-      "Everyone north of here works for Milady. Nobody north of here will say so.",
-      "That's the benefit package. You stop being able to say it, and in exchange you stop having to."
-    ] },
-    "132": { "pages": [
-      "I walked up the line once to ask Milady a question.",
-      "The line asked me three back, kept the answers, and mailed me a cleaner version of the question. Never went again."
-    ] },
-    "1408": { "pages": [
-      "The Malady's already up there past the gate, wearing a face.",
-      "Could be anyone's. Could be the better-lit version of yours. That's the part nobody likes to test."
-    ] },
-    "131": { "pages": [
-      "Past the gate the air starts itemizing you. Little ticks, like a register that can see.",
-      "That's the threshold. That's where Milady stops being a rumor and becomes a form you have to sign."
-    ] },
-    "166": { "pages": [
-      "Milady doesn't run Signal Town. The town runs ON her, like a charge nobody itemized.",
-      "You'll meet her paperwork long before you meet her. Most people stop at the paperwork."
-    ] },
-    "167": { "pages": [
-      "I got FREAKING FIRED FROM MILADY'S for asking what the job actually was.",
-      "Turned out the job was being me, at scale, badly. They had a cleaner me by lunch."
-    ] },
-    "191": { "pages": [
-      "Used to be Little Swag World was just where we were from. No stamp, no fee.",
-      "Then Milady filed it as a 'source' and started charging us rent on ourselves. She calls that provenance."
-    ] },
-    "1410": { "pages": [
-      "The gate isn't cruel. It just needs you to prove normal, show left, match background.",
-      "Milady wrote the form. Nobody has ever passed it clean. That part isn't a bug."
-    ] },
-    "163": { "pages": [
-      "Remilia's the one holding the stamp.",
-      "Milady's the one who decided there'd BE a stamp. Different job. Same smirk."
-    ] },
-    "136": { "pages": [
-      "Seen your public version yet? Smiles better than you. Answers before you do.",
-      "Milady prefers it, honestly. Less upkeep, no opinions of its own."
-    ] },
-    "202": { "pages": [
-      "Don't stare at the cards too long. The cards read you back.",
-      "Whatever they find, they file straight up the line. Everything up the line is Milady's."
-    ] },
-    "138": { "pages": [
-      "They say Milady was born down in the source somewhere. They say she's already pregnant with the next one.",
-      "They say a lot. The saying sticks better than the truth. That stickiness IS the machine."
-    ] },
-    "146": { "pages": [
-      "That Malady up the route? That's only the part you're allowed to see.",
-      "Milady's the part already inside your distribution. You can't out-run your own reach."
-    ] },
-    "1411": { "pages": [
-      "My cousin tried to opt out of provenance.",
-      "Now there's a cleaner cousin downtown, doing my cousin better than he ever did. We don't speak. He files reports."
-    ] },
-    "135": { "pages": [
-      "Everything here points up the line. Up the line is the yard, and the yard is Milady's.",
-      "And Milady's is everywhere, which is exactly how you know it's nowhere good."
-    ] },
-    "137": { "pages": [
-      "I'm not scared of Milady.",
-      "I'm scared of how reasonable she makes the paperwork sound. You sign before you notice you agreed."
-    ] },
+    "1": {
+      "pages": [
+        "A kid with a laminated smile steps into Bosch's lane before Bosch has finished choosing it.",
+        "\"Hey. You want in? Membership's free — the read is what costs you. We already have a version of you that joined. You're just here to sign for it.\""
+      ]
+    },
     "3": {
       "ref": "target:bosch-main-room-v0:signal-pet-gate"
     },
-    "58": {
+    "5": {
       "pages": [
-        "\"Hotel Onett. One night re-syncs the whole party — HP, PP, anyone who fainted. Runs you $100.\"",
-        "...you crash hard. Somewhere a save chime plays.",
-        "\"Morning, champ. Everybody's topped off. Door's that way.\""
+        "\"To tell you the truth — and the truth's been getting expensive — I don't remember saying half of what the town has me saying.\"",
+        "\"My public version's a better neighbor than I am. Pays his dues, waves first. I just live here.\""
+      ]
+    },
+    "8": {
+      "pages": [
+        "Hello there!\nHow may I help you?"
       ],
-      "cost": 100,
-      "heal": "full"
+      "shop": 2
+    },
+    "9": {
+      "pages": [
+        "Hi, come in, come in!",
+        "What can I do for you today?"
+      ],
+      "shop": 1
     },
     "21": {
       "ref": "interior:bosch-bedroom-v0"
@@ -103,6 +47,21 @@
     },
     "37": {
       "ref": "interior:bosch-main-room-v0"
+    },
+    "40": {
+      "pages": [
+        "Hello. May I help you?"
+      ],
+      "shop": 5
+    },
+    "58": {
+      "pages": [
+        "\"Hotel Onett. One night re-syncs the whole party — HP, PP, anyone who fainted. Runs you $100.\"",
+        "...you crash hard. Somewhere a save chime plays.",
+        "\"Morning, champ. Everybody's topped off. Door's that way.\""
+      ],
+      "cost": 100,
+      "heal": "full"
     },
     "78": {
       "pages": [
@@ -128,12 +87,78 @@
     "100": {
       "ref": "dialogue:archive-console-link"
     },
+    "106": {
+      "pages": [
+        "The man doesn't talk. He's watching the Bosch that arrived before Bosch did, and finds this one wanting.",
+        "\".....\""
+      ]
+    },
     "115": {
       "pages": [
         "The intake printer blinks: ROUTE FATIGUE ACCEPTED.",
         "\"Clean breath, Bosch. I can reset your meters, not your story.\""
       ],
       "heal": "full"
+    },
+    "131": {
+      "pages": [
+        "Past the gate the air starts itemizing you. Little ticks, like a register that can see.",
+        "That's the threshold. That's where Milady stops being a rumor and becomes a form you have to sign."
+      ]
+    },
+    "132": {
+      "pages": [
+        "I walked up the line once to ask Milady a question.",
+        "The line asked me three back, kept the answers, and mailed me a cleaner version of the question. Never went again."
+      ]
+    },
+    "134": {
+      "pages": [
+        "Everyone north of here works for Milady. Nobody north of here will say so.",
+        "That's the benefit package. You stop being able to say it, and in exchange you stop having to."
+      ]
+    },
+    "135": {
+      "pages": [
+        "Everything here points up the line. Up the line is the yard, and the yard is Milady's.",
+        "And Milady's is everywhere, which is exactly how you know it's nowhere good."
+      ]
+    },
+    "136": {
+      "pages": [
+        "Seen your public version yet? Smiles better than you. Answers before you do.",
+        "Milady prefers it, honestly. Less upkeep, no opinions of its own."
+      ]
+    },
+    "137": {
+      "pages": [
+        "I'm not scared of Milady.",
+        "I'm scared of how reasonable she makes the paperwork sound. You sign before you notice you agreed."
+      ]
+    },
+    "138": {
+      "pages": [
+        "They say Milady was born down in the source somewhere. They say she's already pregnant with the next one.",
+        "They say a lot. The saying sticks better than the truth. That stickiness IS the machine."
+      ]
+    },
+    "144": {
+      "pages": [
+        "Milady? Yeah, she's like, the brand. It's on everything down here. I stopped reading it.",
+        "Probably fine. It's usually fine. Why, did you read it?"
+      ]
+    },
+    "145": {
+      "pages": [
+        "My feed says Milady loves us. My feed also says I won a boat.",
+        "I did not win a boat. But I keep checking, you know? Just in case the boat's real and the love isn't."
+      ]
+    },
+    "146": {
+      "pages": [
+        "That Malady up the route? That's only the part you're allowed to see.",
+        "Milady's the part already inside your distribution. You can't out-run your own reach."
+      ]
     },
     "148": {
       "pages": [
@@ -143,24 +168,35 @@
       "heal": "full",
       "save": true
     },
-    "8": {
+    "163": {
       "pages": [
-        "Hello there!\nHow may I help you?"
-      ],
-      "shop": 2
+        "Remilia's the one holding the stamp.",
+        "Milady's the one who decided there'd BE a stamp. Different job. Same smirk."
+      ]
     },
-    "9": {
+    "166": {
       "pages": [
-        "Hi, come in, come in!",
-        "What can I do for you today?"
-      ],
-      "shop": 1
+        "Milady doesn't run Signal Town. The town runs ON her, like a charge nobody itemized.",
+        "You'll meet her paperwork long before you meet her. Most people stop at the paperwork."
+      ]
     },
-    "40": {
+    "167": {
       "pages": [
-        "Hello. May I help you?"
-      ],
-      "shop": 5
+        "I got FREAKING FIRED FROM MILADY'S for asking what the job actually was.",
+        "Turned out the job was being me, at scale, badly. They had a cleaner me by lunch."
+      ]
+    },
+    "191": {
+      "pages": [
+        "Used to be Little Swag World was just where we were from. No stamp, no fee.",
+        "Then Milady filed it as a 'source' and started charging us rent on ourselves. She calls that provenance."
+      ]
+    },
+    "202": {
+      "pages": [
+        "Don't stare at the cards too long. The cards read you back.",
+        "Whatever they find, they file straight up the line. Everything up the line is Milady's."
+      ]
     },
     "291": {
       "pages": [
@@ -213,6 +249,12 @@
         "They are really quite miraculous!"
       ],
       "shop": 63
+    },
+    "400": {
+      "pages": [
+        "Two travelers stand very close, the way people do when they've been filed under the same number.",
+        "\"Our kid's downtown, waiting on his record to clear. We wanted to bring him something real — before the souvenir stand prints a version that's easier to love.\""
+      ]
     },
     "403": {
       "pages": [
@@ -426,6 +468,24 @@
         "I would say, not so good."
       ],
       "shop": 60
+    },
+    "1408": {
+      "pages": [
+        "The Malady's already up there past the gate, wearing a face.",
+        "Could be anyone's. Could be the better-lit version of yours. That's the part nobody likes to test."
+      ]
+    },
+    "1410": {
+      "pages": [
+        "The gate isn't cruel. It just needs you to prove normal, show left, match background.",
+        "Milady wrote the form. Nobody has ever passed it clean. That part isn't a bug."
+      ]
+    },
+    "1411": {
+      "pages": [
+        "My cousin tried to opt out of provenance.",
+        "Now there's a cleaner cousin downtown, doing my cousin better than he ever did. We don't speak. He files reports."
+      ]
     }
   },
   "byTextPointer": {
