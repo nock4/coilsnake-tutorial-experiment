@@ -12,6 +12,9 @@
   #stage { position: relative; image-rendering: pixelated; outline: 1px solid #333; }
   #stage img.bld { position: absolute; image-rendering: pixelated; cursor: grab; outline: 1px dashed rgba(255,255,255,0.25); }
   #stage img.bld.sel { outline: 2px solid #2ef; z-index: 10; cursor: grabbing; }
+  #stage .handle { position: absolute; width: 12px; height: 12px; background: #2ef; border: 1px solid #034; border-radius: 2px; z-index: 20; }
+  #stage .handle.nw { cursor: nwse-resize; } #stage .handle.se { cursor: nwse-resize; }
+  #stage .handle.ne { cursor: nesw-resize; } #stage .handle.sw { cursor: nesw-resize; }
   .grid { position:absolute; inset:0; pointer-events:none; background-size: var(--g) var(--g); background-image: linear-gradient(rgba(0,255,255,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,255,.12) 1px,transparent 1px); }
 </style>
 <div id="bar">
@@ -21,7 +24,7 @@
   <label><input type="checkbox" id="gridOn"> grid</label>
   <button class="save" id="save">Save</button>
   <span id="info">—</span>
-  <span id="hint">click a building · drag to move · arrows = nudge 1px (shift = ±5) · [ ] = width · - = height · S = save</span>
+  <span id="hint">click to select · drag body to move · drag corner handles to resize · arrows = nudge 1px (shift = ±5) · [ ] = width · - = height · S = save</span>
 </div>
 <div id="stageWrap"><div id="stage"></div></div>
 <script>
@@ -48,7 +51,30 @@ function render() {
     Object.assign(img.style, { left: b.x * scale + "px", top: b.y * scale + "px", width: b.w * scale + "px", height: b.h * scale + "px" });
     img.onmousedown = e => startDrag(e, b); stage.appendChild(img);
   }
+  if (sel && sel.chunk === chunk) {
+    for (const c of ["nw", "ne", "sw", "se"]) {
+      const h = document.createElement("div"); h.className = "handle " + c;
+      const hx = (c.includes("w") ? sel.x : sel.x + sel.w) * scale;
+      const hy = (c.includes("n") ? sel.y : sel.y + sel.h) * scale;
+      h.style.left = (hx - 6) + "px"; h.style.top = (hy - 6) + "px";
+      h.onmousedown = e => startResize(e, c); stage.appendChild(h);
+    }
+  }
   showInfo();
+}
+function startResize(e, corner) {
+  e.preventDefault(); e.stopPropagation();
+  const sx = e.clientX, sy = e.clientY, b = sel, bx = b.x, by = b.y, bw = b.w, bh = b.h;
+  const mv = ev => {
+    const dx = Math.round((ev.clientX - sx) / scale), dy = Math.round((ev.clientY - sy) / scale);
+    if (corner.includes("e")) b.w = Math.max(8, bw + dx);
+    if (corner.includes("s")) b.h = Math.max(8, bh + dy);
+    if (corner.includes("w")) { b.w = Math.max(8, bw - dx); b.x = bx + (bw - b.w); }
+    if (corner.includes("n")) { b.h = Math.max(8, bh - dy); b.y = by + (bh - b.h); }
+    render();
+  };
+  const up = () => { window.removeEventListener("mousemove", mv); window.removeEventListener("mouseup", up); };
+  window.addEventListener("mousemove", mv); window.addEventListener("mouseup", up);
 }
 function showInfo() { info.textContent = sel ? `${sel.id}:  x=${sel.x} y=${sel.y} w=${sel.w} h=${sel.h}  (bottom ${sel.y + sel.h})` : "—"; }
 function startDrag(e, b) {
