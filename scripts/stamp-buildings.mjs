@@ -30,14 +30,10 @@ for (const b of cfg.buildings ?? []) {
   const chunk = join(CHUNKS, `background-${cx}-${cy}.png`);
   const img = join(PUB, b.image);
   if (!existsSync(chunk) || !existsSync(img)) { console.warn(`  skip ${b.id}: missing ${!existsSync(chunk) ? "chunk" : "image"}`); skipped++; continue; }
-  // ERASE: clear an expanded box around the EB building to ground (so its
-  // silhouette can't peek past the new sprite), then drop the sprite on top.
-  // Expansion (top/side bigger, keep bottom near the base so the sidewalk stays).
-  const e = b.erase || { top: 14, side: 8, bottom: 2 };
-  const ex = b.x - e.side, ey = b.y - e.top, ew = b.w + e.side * 2, eh = b.h + e.top + e.bottom;
-  const ground = b.groundImage ? `\\( "${join(PUB, b.groundImage)}" -write mpr:g +delete -size ${ew}x${eh} tile:mpr:g \\)` : `\\( -size ${ew}x${eh} xc:"${GROUND}" \\)`;
-  execSync(`magick "${chunk}" ${ground} -geometry +${ex}+${ey} -compose over -composite \\( "${img}" -filter point -resize ${b.w}x${b.h}! \\) -geometry +${b.x}+${b.y} -compose over -composite "${chunk}"`, { stdio: "ignore" });
-  console.log(`  stamped ${b.id} -> chunk ${b.chunk} @ ${b.x},${b.y} (${b.w}x${b.h}, erased +${e.top}/${e.side})`);
+  // Drop the sprite straight over the EB building (no ground fill). Placement
+  // is anchored by the BOTTOM edge (b.y + b.h = the EB building's base).
+  execSync(`magick "${chunk}" \\( "${img}" -filter point -resize ${b.w}x${b.h}! \\) -geometry +${b.x}+${b.y} -compose over -composite "${chunk}"`, { stdio: "ignore" });
+  console.log(`  stamped ${b.id} -> chunk ${b.chunk} @ ${b.x},${b.y} (${b.w}x${b.h}, base ${b.y + b.h})`);
   stamped++;
 }
 console.log(`stamped ${stamped} building(s)${skipped ? `, skipped ${skipped}` : ""}`);

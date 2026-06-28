@@ -6,7 +6,7 @@
       "id": "the-plug",
       "chunk": "3,2",
       "x": 18,
-      "y": 3,
+      "y": 2,
       "w": 96,
       "h": 114,
       "image": "assets/buildings/the-plug.png"
@@ -15,7 +15,7 @@
       "id": "grease",
       "chunk": "3,2",
       "x": 120,
-      "y": 18,
+      "y": 8,
       "w": 154,
       "h": 108,
       "image": "assets/buildings/grease.png"
@@ -42,7 +42,7 @@
       "id": "cafe",
       "chunk": "3,3",
       "x": 255,
-      "y": 80,
+      "y": 78,
       "w": 132,
       "h": 142,
       "image": "assets/buildings/cafe.png"
@@ -51,7 +51,7 @@
       "id": "the-precinct",
       "chunk": "3,3",
       "x": 434,
-      "y": 52,
+      "y": 54,
       "w": 78,
       "h": 162,
       "image": "assets/buildings/the-precinct.png"
@@ -60,7 +60,7 @@
       "id": "dr-office",
       "chunk": "2,3",
       "x": 38,
-      "y": 4,
+      "y": 6,
       "w": 226,
       "h": 168,
       "image": "assets/buildings/dr-office.png"
