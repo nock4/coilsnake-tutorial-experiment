@@ -33,9 +33,9 @@
       "id": "mons-link",
       "chunk": "3,3",
       "x": 0,
-      "y": 100,
-      "w": 100,
-      "h": 118,
+      "y": 98,
+      "w": 114,
+      "h": 122,
       "image": "assets/buildings/mons-link.png"
     },
     {
