@@ -10068,6 +10068,102 @@
                 15
               ]
             }
+          },
+          "bike": {
+            "image": "assets/swagbound/hero/lsw-224-bike.png",
+            "frameWidth": 192,
+            "frameHeight": 192,
+            "displayHeight": 24,
+            "animations": {
+              "down": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "left": [
+                4,
+                5,
+                6,
+                7
+              ],
+              "right": [
+                8,
+                9,
+                10,
+                11
+              ],
+              "up": [
+                12,
+                13,
+                14,
+                15
+              ]
+            }
+          },
+          "ladder": {
+            "image": "assets/swagbound/hero/lsw-224-ladder.png",
+            "frameWidth": 192,
+            "frameHeight": 192,
+            "displayHeight": 24,
+            "animations": {
+              "down": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "left": [
+                4,
+                5,
+                6,
+                7
+              ],
+              "right": [
+                8,
+                9,
+                10,
+                11
+              ],
+              "up": [
+                12,
+                13,
+                14,
+                15
+              ]
+            }
+          },
+          "rope": {
+            "image": "assets/swagbound/hero/lsw-224-rope.png",
+            "frameWidth": 192,
+            "frameHeight": 192,
+            "displayHeight": 24,
+            "animations": {
+              "down": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "left": [
+                4,
+                5,
+                6,
+                7
+              ],
+              "right": [
+                8,
+                9,
+                10,
+                11
+              ],
+              "up": [
+                12,
+                13,
+                14,
+                15
+              ]
+            }
           }
         }
       }
