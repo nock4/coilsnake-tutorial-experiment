@@ -10003,7 +10003,7 @@
     },
     {
       "slot": "Paula",
-      "name": "Paula",
+      "name": "Cloak",
       "joinOrder": 2,
       "sprite": {
         "image": "assets/swagbound/hero/lsw-224-walk.png",
@@ -10170,7 +10170,7 @@
     },
     {
       "slot": "Jeff",
-      "name": "Jeff",
+      "name": "Munch",
       "joinOrder": 3,
       "sprite": {
         "image": "assets/swagbound/hero/lsw-855-walk.png",
@@ -10337,7 +10337,7 @@
     },
     {
       "slot": "Poo",
-      "name": "Poo",
+      "name": "Knight",
       "joinOrder": 4,
       "sprite": {
         "image": "assets/swagbound/hero/lsw-2821-walk.png",
