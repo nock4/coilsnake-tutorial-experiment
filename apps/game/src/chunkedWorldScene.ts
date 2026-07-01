@@ -675,6 +675,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
     if (this.partyState.party().length === 0) {
       this.ensureIntroParty();
     }
+    // Seed baseline vitals so field poison + the overworld HUD have a HP/PP target
+    // from the start (vitals are otherwise only recorded on damage/battle entry).
+    this.partyState.ensureVitalsFor(this.overworldHudPartyMembers());
     const spawn = this.clampSpawn(
       returnPlayer ?? restoredPlayer ?? this.parseSpawnOverride() ?? this.newGameOpening?.spawn ?? world.player.spawnWorldPixel
     );

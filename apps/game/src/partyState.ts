@@ -338,6 +338,27 @@ export class PartyState {
       .filter((result): result is PartyVitalsApplyResult => Boolean(result));
   }
 
+  /**
+   * Seed baseline vitals for active party members that have none yet. Vitals are
+   * otherwise only recorded once a character takes damage or enters battle, which
+   * left field poison (and the overworld HUD) with no HP/PP target to work from
+   * on a fresh game. Never overwrites an existing (e.g. save-restored) entry.
+   */
+  ensureVitalsFor(members: readonly PartyMember[]): void {
+    for (const member of members) {
+      const charId = normalizeId(member.id);
+      if (this.vitalsByChar.has(charId)) {
+        continue;
+      }
+      this.vitalsByChar.set(charId, {
+        hp: createRollingMeter(member.hp, HP_RATE_PER_SEC),
+        maxHp: member.maxHp,
+        pp: member.pp,
+        maxPp: member.maxPp
+      });
+    }
+  }
+
   applyFieldPoisonStep(): PartyFieldPoisonTickResult[] {
     const results: PartyFieldPoisonTickResult[] = [];
     for (const charId of this.partyVitalTargetIds()) {
