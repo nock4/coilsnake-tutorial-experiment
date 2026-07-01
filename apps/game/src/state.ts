@@ -1,6 +1,6 @@
 import type { DialoguePage, TutorialStatus } from "@eb/schemas";
 import type { BattleSfxCue } from "./audio/battleSfx";
-import type { BattleCommand, EncounterAdvantage } from "./battleLogic";
+import type { BattleCommand, BattleVictoryViewPageKind, EncounterAdvantage } from "./battleLogic";
 import type { MenuDebugState } from "./menuModel";
 import type { OverworldStatusHudView } from "./overworldStatusHud";
 import {
@@ -70,6 +70,36 @@ export type BattleVictoryDebug = {
     name: string;
     fromLevel: number;
     toLevel: number;
+    statChanges: Array<{
+      stat: string;
+      before: number;
+      after: number;
+      gain: number;
+    }>;
+    learnedSkills: Array<{
+      psiId: number;
+      name: string;
+    }>;
+  }>;
+};
+
+export type BattleVictoryTallyDebug = {
+  expDisplayed: number;
+  expTarget: number;
+  moneyDisplayed: number;
+  moneyTarget: number;
+  isRolling: boolean;
+};
+
+export type BattleMortalWoundsDebug = {
+  pendingCount: number;
+  rescuedOnBattleEnd: number;
+  pending: Array<{
+    index: number;
+    name: string;
+    hpDisplayed: number;
+    hpTarget: number;
+    isRolling: boolean;
   }>;
 };
 
@@ -118,6 +148,8 @@ export type BattleDebug = {
   executionStepIndex: number;
   executionStepCount: number;
   executionMessage: string;
+  actionDelayMs: number;
+  lastActionDwellMs: number;
   lastSfx: BattleSfxCue | null;
   sfxCount: number;
   firedSfx: BattleSfxCue[];
@@ -143,8 +175,12 @@ export type BattleDebug = {
   };
   outcome: "ongoing" | "win" | "lose";
   victorySummary: BattleVictoryDebug | null;
+  victoryTally: BattleVictoryTallyDebug | null;
   victorySummaryPageIndex: number;
   victorySummaryPageCount: number;
+  victorySummaryPageKind: BattleVictoryViewPageKind | null;
+  victorySummaryPageHighlighted: boolean;
+  mortalWounds: BattleMortalWoundsDebug;
 };
 
 export type DebugNpc = {

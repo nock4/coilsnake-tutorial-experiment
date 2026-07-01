@@ -30,11 +30,13 @@ import {
   createBattleState,
   firstLivingIndex,
   isCombatantAlive,
+  isPendingPartyMortalWound,
   learnedPsiForCombatant,
   outcome,
   psiBattleKind,
   psiPpCost,
   resolveInstantWinRewards,
+  settlePendingPartyMortalWounds,
   tickBattleMeters,
   type BattleActor,
   type BattleCommand,
@@ -60,6 +62,7 @@ import { composeBattleStepLines } from "./battleMessages";
 import {
   battleEventsHaveEnemyDefeated,
   battleEventsHaveMiss,
+  battleEventsHaveSmash,
   firstBattleAction,
   firstBattleDamage,
   type BattleEvent
@@ -225,7 +228,7 @@ const BATTLE_EXECUTION_MESSAGE_MIN_WIDTH = 260;
 const BATTLE_EXECUTION_MESSAGE_MAX_WIDTH = 480;
 const BATTLE_EXECUTION_MESSAGE_PADDING_X = 14;
 const BATTLE_EXECUTION_MESSAGE_PADDING_Y = 10;
-const BATTLE_EXECUTION_MESSAGE_MAX_LINES = 2;
+const BATTLE_EXECUTION_MESSAGE_MAX_LINES = 3;
 const BATTLE_EXECUTION_MESSAGE_FONT_SIZE = 14;
 const BATTLE_STATUS_CARD_SIDE_MARGIN = 10;
 const BATTLE_STATUS_CARD_BOTTOM_MARGIN = 8;
@@ -245,9 +248,17 @@ const BATTLE_STATUS_BAR_X = 28;
 const BATTLE_STATUS_BAR_VALUE_GAP = 4;
 const BATTLE_PP_RATE_PER_SEC = 36;
 const ACTION_ADVANCE_DELAY_MS = 1650;
+const ACTION_ADVANCE_MIN_DELAY_MS = 1150;
+const ACTION_ADVANCE_MAX_DELAY_MS = 2400;
+const ACTION_ADVANCE_MISS_DELTA_MS = -260;
+const ACTION_ADVANCE_SMASH_DELTA_MS = 520;
+const ACTION_ADVANCE_DEFEAT_DELTA_MS = 160;
+const ACTION_ADVANCE_EXTRA_LINE_MS = 130;
 const AUTO_COMMAND_INPUT_DELAY_MS = 220;
 const ENTER_TRANSITION_MS = 650;
 const EXIT_TRANSITION_MS = 450;
+const VICTORY_TALLY_DURATION_MS = 820;
+const VICTORY_TALLY_TICK_MS = 75;
 const ENEMY_SPRITE_MAX_HEIGHT = 160;
 const ENEMY_SPRITE_REDRAW_RETRY_MS = 50;
 const MAX_ENEMY_SPRITE_REDRAW_ATTEMPTS = 5;
@@ -269,7 +280,6 @@ const BATTLE_FX_VICTORY_FLASH_COLOR = 0xfff0a6;
 const BATTLE_FX_LEVELUP_FLASH_MS = 440;
 const BATTLE_FX_LEVELUP_FLASH_ALPHA = 0.3;
 const BATTLE_FX_LEVELUP_FLASH_COLOR = 0xfff4c4;
-const BATTLE_FX_LEVELUP_DELAY_MS = 520;
 const BATTLE_FX_SPARK_COLOR = 0xfff2a8;
 
 type BattleSubmenu = "command" | "psi" | "goods" | "target";
@@ -358,6 +368,11 @@ type BattleStatusCardTextSet = {
   hpValue: Phaser.GameObjects.Text;
   ppValue: Phaser.GameObjects.Text;
 };
+type VictoryTallyState = {
+  exp: RollingMeterState;
+  money: RollingMeterState;
+  nextTickSfxAtMs: number;
+};
 type BattleUiView = {
   actorName?: string;
   commandLines: string[];
@@ -389,6 +404,9 @@ export class BattleScene extends Phaser.Scene {
   private transitionMs_ = ENTER_TRANSITION_MS;
   private victorySummary_: BattleVictorySummary | null = null;
   private victorySummaryPageIndex_ = 0;
+  private victoryTally_: VictoryTallyState | null = null;
+  private victoryPageFlourishSignature_ = "";
+  private mortalWoundRescueCount_ = 0;
   private commandIndex_ = 0;
   private submenu_: BattleSubmenu = "command";
   private submenuIndex_ = 0;
@@ -411,6 +429,7 @@ export class BattleScene extends Phaser.Scene {
   private pendingFlee_ = false;
   private lastEnemyAction_: LastEnemyActionDebug | null = null;
   private actionDelayMs_ = 0;
+  private lastActionDwellMs_ = 0;
   private statusGraphics?: Phaser.GameObjects.Graphics;
   private statusFieldGraphics?: Phaser.GameObjects.Graphics;
   private statusAccentGraphics?: Phaser.GameObjects.Graphics;
@@ -515,6 +534,9 @@ export class BattleScene extends Phaser.Scene {
     this.transitionMs_ = ENTER_TRANSITION_MS;
     this.victorySummary_ = null;
     this.victorySummaryPageIndex_ = 0;
+    this.victoryTally_ = null;
+    this.victoryPageFlourishSignature_ = "";
+    this.mortalWoundRescueCount_ = 0;
     this.commandIndex_ = 0;
     this.submenu_ = "command";
     this.submenuIndex_ = 0;
@@ -537,6 +559,7 @@ export class BattleScene extends Phaser.Scene {
     this.pendingFlee_ = false;
     this.lastEnemyAction_ = null;
     this.actionDelayMs_ = 0;
+    this.lastActionDwellMs_ = 0;
     this.statusLayoutSignature = "";
     this.ppMeters.clear();
     this.backgroundAnimation = undefined;
@@ -615,6 +638,7 @@ export class BattleScene extends Phaser.Scene {
   update(_: number, delta: number): void {
     this.updateBackground();
     this.tickStatusPpMeters(delta);
+    this.tickVictoryPresentation(delta);
 
     if (this.phase_ === "enter-transition") {
       this.transitionMs_ = Math.max(0, this.transitionMs_ - delta);
@@ -816,6 +840,7 @@ export class BattleScene extends Phaser.Scene {
     this.currentActor_ = null;
     this.resetMenuForActor();
     this.actionDelayMs_ = 0;
+    this.lastActionDwellMs_ = 0;
     this.autoCommandDelayMs_ = 0;
     this.nextHpTickSfxAtMs_ = 0;
     if (this.executionOrder_.length === 0) {
@@ -850,6 +875,7 @@ export class BattleScene extends Phaser.Scene {
     this.pendingFlee_ = false;
     this.roundOrder_ = order;
     this.actionDelayMs_ = 0;
+    this.lastActionDwellMs_ = 0;
     this.autoCommandDelayMs_ = this.autoMode_ ? AUTO_COMMAND_INPUT_DELAY_MS : 0;
     this.nextHpTickSfxAtMs_ = 0;
     this.syncMenuFromInputState();
@@ -879,6 +905,7 @@ export class BattleScene extends Phaser.Scene {
     this.currentActor_ = null;
     this.resetMenuForActor();
     this.actionDelayMs_ = 0;
+    this.lastActionDwellMs_ = 0;
     this.nextHpTickSfxAtMs_ = 0;
     if (this.executionOrder_.length === 0) {
       if (this.priorityStep_) {
@@ -924,6 +951,7 @@ export class BattleScene extends Phaser.Scene {
       this.autoCommandDelayMs_ = 0;
       this.executionMessageLines_ = [];
       this.actionDelayMs_ = 0;
+      this.lastActionDwellMs_ = 0;
       this.phase_ = "flee";
       this.transitionPhase_ = "none";
       this.currentActor_ = null;
@@ -940,7 +968,8 @@ export class BattleScene extends Phaser.Scene {
       this.executionMessageLines_ = composeBattleStepLines(result.events);
       this.playBattleStepSfx(result);
       this.triggerBattleStepFx(result);
-      this.actionDelayMs_ = this.executionMessageLines_.length > 0 ? ACTION_ADVANCE_DELAY_MS : 0;
+      this.actionDelayMs_ = this.actionDwellMsForStep(result, this.executionMessageLines_);
+      this.lastActionDwellMs_ = this.actionDelayMs_;
       if (result.fled) {
         this.pendingFlee_ = true;
       }
@@ -977,9 +1006,11 @@ export class BattleScene extends Phaser.Scene {
       this.triggerBattleStepFx(result);
       if (this.executionMessageLines_.length === 0) {
         this.actionDelayMs_ = 0;
+        this.lastActionDwellMs_ = 0;
         continue;
       }
-      this.actionDelayMs_ = ACTION_ADVANCE_DELAY_MS;
+      this.actionDelayMs_ = this.actionDwellMsForStep(result, this.executionMessageLines_);
+      this.lastActionDwellMs_ = this.actionDelayMs_;
 
       if (result.fled) {
         this.pendingFlee_ = true;
@@ -1013,6 +1044,32 @@ export class BattleScene extends Phaser.Scene {
         ? battleStepSfx(result.details)
         : battleStepSfx(result.events);
     this.playBattleSfxSequence(cues);
+  }
+
+  private actionDwellMsForStep(result: BattleRoundStepResult, lines: readonly string[]): number {
+    if (lines.length <= 0) {
+      return 0;
+    }
+    const events = result.events;
+    const damage = Math.max(0, Math.floor(firstBattleDamage(events)?.amount ?? 0));
+    let dwellMs = ACTION_ADVANCE_DELAY_MS;
+    if (battleEventsHaveMiss(events)) {
+      dwellMs += ACTION_ADVANCE_MISS_DELTA_MS;
+    }
+    if (battleEventsHaveSmash(events)) {
+      dwellMs += ACTION_ADVANCE_SMASH_DELTA_MS;
+    } else if (damage >= 100) {
+      dwellMs += 360;
+    } else if (damage >= 50) {
+      dwellMs += 260;
+    } else if (damage >= 20) {
+      dwellMs += 140;
+    }
+    if (battleEventsHaveEnemyDefeated(events)) {
+      dwellMs += ACTION_ADVANCE_DEFEAT_DELTA_MS;
+    }
+    dwellMs += Math.max(0, lines.length - 2) * ACTION_ADVANCE_EXTRA_LINE_MS;
+    return clampNumber(dwellMs, ACTION_ADVANCE_MIN_DELAY_MS, ACTION_ADVANCE_MAX_DELAY_MS);
   }
 
   private triggerBattleStepFx(result: BattleRoundStepResult): void {
@@ -1118,18 +1175,84 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private playLevelUpFlourishIfAny(): void {
-    if ((this.victorySummary_?.levelUps.length ?? 0) <= 0) {
+  private settlePendingMortalWoundsForBattleEnd(): void {
+    const settled = settlePendingPartyMortalWounds(this.battle_);
+    if (settled.rescuedCount <= 0) {
       return;
     }
-    this.time.delayedCall(BATTLE_FX_LEVELUP_DELAY_MS, () => {
-      this.playBattleSfxCue("levelUp");
-      this.startFlashOverlay(
-        BATTLE_FX_LEVELUP_FLASH_COLOR,
-        BATTLE_FX_LEVELUP_FLASH_ALPHA,
-        BATTLE_FX_LEVELUP_FLASH_MS
-      );
-    });
+    this.battle_ = settled.state;
+    this.mortalWoundRescueCount_ += settled.rescuedCount;
+  }
+
+  private ensureVictoryPresentation(): void {
+    if (!this.victorySummary_ || this.victoryTally_) {
+      return;
+    }
+    this.victoryTally_ = createVictoryTally(this.victorySummary_, this.time.now);
+    this.victoryPageFlourishSignature_ = "";
+    this.playVictoryPageFlourishIfNeeded();
+  }
+
+  private tickVictoryPresentation(delta: number): void {
+    if (this.phase_ !== "victory-summary" || !this.victoryTally_ || delta <= 0) {
+      return;
+    }
+    const previousExp = this.victoryTally_.exp.displayed;
+    const previousMoney = this.victoryTally_.money.displayed;
+    const wasRolling = victoryTallyIsRolling(this.victoryTally_);
+    this.victoryTally_ = {
+      ...this.victoryTally_,
+      exp: tickRollingMeter(this.victoryTally_.exp, delta),
+      money: tickRollingMeter(this.victoryTally_.money, delta)
+    };
+    const changed =
+      previousExp !== this.victoryTally_.exp.displayed ||
+      previousMoney !== this.victoryTally_.money.displayed;
+    if (changed && this.time.now >= this.victoryTally_.nextTickSfxAtMs) {
+      this.playBattleSfxCue("menuMove");
+      this.victoryTally_ = {
+        ...this.victoryTally_,
+        nextTickSfxAtMs: this.time.now + VICTORY_TALLY_TICK_MS
+      };
+    }
+    if (wasRolling && !victoryTallyIsRolling(this.victoryTally_)) {
+      this.playVictoryPageFlourishIfNeeded();
+    }
+  }
+
+  private completeVictoryTallyIfRolling(): boolean {
+    if (!this.victoryTally_ || !victoryTallyIsRolling(this.victoryTally_)) {
+      return false;
+    }
+    this.victoryTally_ = {
+      exp: completedRollingMeter(this.victoryTally_.exp),
+      money: completedRollingMeter(this.victoryTally_.money),
+      nextTickSfxAtMs: this.time.now + VICTORY_TALLY_TICK_MS
+    };
+    this.playBattleSfxCue("menuMove");
+    this.playVictoryPageFlourishIfNeeded();
+    return true;
+  }
+
+  private playVictoryPageFlourishIfNeeded(): void {
+    if (this.phase_ !== "victory-summary" || !this.victorySummary_) {
+      return;
+    }
+    const page = this.currentVictorySummaryPageDetail();
+    if (!page?.highlighted) {
+      return;
+    }
+    const signature = `${this.victorySummaryPageIndex_}:${page.kind}:${page.levelUpIndex ?? -1}:${page.learnedSkillIndex ?? -1}`;
+    if (signature === this.victoryPageFlourishSignature_) {
+      return;
+    }
+    this.victoryPageFlourishSignature_ = signature;
+    this.playBattleSfxCue("levelUp");
+    this.startFlashOverlay(
+      BATTLE_FX_LEVELUP_FLASH_COLOR,
+      BATTLE_FX_LEVELUP_FLASH_ALPHA,
+      BATTLE_FX_LEVELUP_FLASH_MS
+    );
   }
 
   private startEnemyLunge(enemyIndex: number): void {
@@ -1484,6 +1607,7 @@ export class BattleScene extends Phaser.Scene {
     this.battle_ = result.state;
     this.victorySummary_ = result.summary;
     this.victorySummaryPageIndex_ = 0;
+    this.victoryTally_ = null;
     this.phase_ = "victory-summary";
     this.transitionPhase_ = "summary";
     this.transitionMs_ = 0;
@@ -1495,6 +1619,7 @@ export class BattleScene extends Phaser.Scene {
     this.pendingFlee_ = false;
     this.autoMode_ = false;
     this.autoCommandDelayMs_ = 0;
+    this.ensureVictoryPresentation();
   }
 
   private beginVictorySummary(): void {
@@ -1503,7 +1628,7 @@ export class BattleScene extends Phaser.Scene {
       this.victorySummaryPageIndex_ = 0;
       this.phase_ = "victory-summary";
       this.transitionPhase_ = "summary";
-      this.playLevelUpFlourishIfAny();
+      this.ensureVictoryPresentation();
       return;
     }
     this.playBattleSfxCue("victory");
@@ -1512,6 +1637,7 @@ export class BattleScene extends Phaser.Scene {
       BATTLE_FX_VICTORY_FLASH_ALPHA,
       BATTLE_FX_VICTORY_FLASH_MS
     );
+    this.settlePendingMortalWoundsForBattleEnd();
     const result = applyVictoryRewards(this.battle_, {
       rng: this.rng_,
       items: this.items_?.items,
@@ -1520,9 +1646,10 @@ export class BattleScene extends Phaser.Scene {
     this.battle_ = result.state;
     this.victorySummary_ = result.summary;
     this.victorySummaryPageIndex_ = 0;
+    this.victoryTally_ = null;
     this.phase_ = "victory-summary";
     this.transitionPhase_ = "summary";
-    this.playLevelUpFlourishIfAny();
+    this.ensureVictoryPresentation();
     this.submenu_ = "command";
     this.commandIndex_ = 0;
     this.currentActor_ = null;
@@ -1538,6 +1665,9 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
     this.exitOutcome_ = this.currentReturnOutcome();
+    if (this.exitOutcome_ !== "lose") {
+      this.settlePendingMortalWoundsForBattleEnd();
+    }
     this.phase_ = "exit-transition";
     this.transitionPhase_ = "exit";
     this.transitionMs_ = EXIT_TRANSITION_MS;
@@ -2762,6 +2892,7 @@ export class BattleScene extends Phaser.Scene {
       ...debugCombatant(enemy),
       ...this.enemyEffectFor(index, now)
     }));
+    const victoryPage = this.phase_ === "victory-summary" ? this.currentVictorySummaryPageDetail() : undefined;
     publishBattleDebug({
       mode: "battle",
       phase: this.phase_,
@@ -2784,6 +2915,8 @@ export class BattleScene extends Phaser.Scene {
       executionStepIndex: this.executionStepDebugIndex(),
       executionStepCount: this.executionOrder_.length,
       executionMessage: this.executionMessageLines_.join("\n"),
+      actionDelayMs: Math.round(this.actionDelayMs_),
+      lastActionDwellMs: Math.round(this.lastActionDwellMs_),
       lastSfx: this.lastSfx_,
       sfxCount: this.sfxCount_,
       firedSfx: [...this.firedSfx_],
@@ -2811,8 +2944,12 @@ export class BattleScene extends Phaser.Scene {
       },
       outcome: currentOutcome,
       victorySummary: this.victorySummary_ ? debugVictorySummary(this.victorySummary_) : null,
+      victoryTally: debugVictoryTally(this.victoryTally_),
       victorySummaryPageIndex: this.victorySummaryPageIndex_,
-      victorySummaryPageCount: this.victorySummaryPages().length
+      victorySummaryPageCount: this.victorySummaryPages().length,
+      victorySummaryPageKind: victoryPage?.kind ?? null,
+      victorySummaryPageHighlighted: Boolean(victoryPage?.highlighted),
+      mortalWounds: debugMortalWounds(this.battle_, this.mortalWoundRescueCount_)
     });
   }
 
@@ -3079,17 +3216,38 @@ export class BattleScene extends Phaser.Scene {
     if (!this.victorySummary_) {
       return [];
     }
-    return buildVictorySummaryViewModel(this.victorySummary_)
-      .pages
-      .map((page) => page.map((line) => fitLine(line, 28)));
+    const pages = this.victorySummaryPageDetails().map((page) => [...page.lines]);
+    if (this.victoryTally_ && pages[0]) {
+      pages[0][0] = `${this.victoryTally_.exp.displayed} EXP`;
+      pages[0][1] = `You got $${this.victoryTally_.money.displayed}`;
+    }
+    return pages.map((page) => page.map((line) => fitLine(line, 28)));
+  }
+
+  private victorySummaryPageDetails() {
+    return this.victorySummary_ ? buildVictorySummaryViewModel(this.victorySummary_).pageDetails : [];
+  }
+
+  private currentVictorySummaryPageDetail() {
+    const pages = this.victorySummaryPageDetails();
+    if (pages.length === 0) {
+      return undefined;
+    }
+    return pages[clampNumber(this.victorySummaryPageIndex_, 0, pages.length - 1)];
   }
 
   private advanceVictorySummaryPage(): boolean {
+    if (this.completeVictoryTallyIfRolling()) {
+      return true;
+    }
     const next = advanceVictorySummaryPageIndex(
       this.victorySummaryPageIndex_,
       this.victorySummaryPages().length
     );
     this.victorySummaryPageIndex_ = next.pageIndex;
+    if (!next.shouldExit) {
+      this.playVictoryPageFlourishIfNeeded();
+    }
     return !next.shouldExit;
   }
 
@@ -3235,6 +3393,35 @@ function initialBattleRoundInputState(): BattleRoundInputState {
     submenu: "command",
     selectionIndex: 0,
     queue: []
+  };
+}
+
+function createVictoryTally(summary: BattleVictorySummary, now: number): VictoryTallyState {
+  return {
+    exp: setTarget(createRollingMeter(0, victoryTallyRate(summary.expGained)), summary.expGained),
+    money: setTarget(createRollingMeter(0, victoryTallyRate(summary.moneyGained)), summary.moneyGained),
+    nextTickSfxAtMs: now
+  };
+}
+
+function victoryTallyRate(total: number): number {
+  const target = Math.max(0, Math.floor(total));
+  if (target <= 0) {
+    return 1;
+  }
+  return Math.max(1, Math.ceil(target / (VICTORY_TALLY_DURATION_MS / 1000)));
+}
+
+function victoryTallyIsRolling(tally: VictoryTallyState): boolean {
+  return tally.exp.isRolling || tally.money.isRolling;
+}
+
+function completedRollingMeter(meter: RollingMeterState): RollingMeterState {
+  return {
+    ...meter,
+    displayed: meter.target,
+    isRolling: false,
+    stepRemainder: 0
   };
 }
 
@@ -3436,7 +3623,14 @@ function debugVictorySummary(summary: BattleVictorySummary): {
   expGained: number;
   moneyGained: number;
   drops: Array<{ enemyId: number; itemId: number; itemName: string; recipientCharId: number }>;
-  levelUps: Array<{ charId: number; name: string; fromLevel: number; toLevel: number }>;
+  levelUps: Array<{
+    charId: number;
+    name: string;
+    fromLevel: number;
+    toLevel: number;
+    statChanges: Array<{ stat: string; before: number; after: number; gain: number }>;
+    learnedSkills: Array<{ psiId: number; name: string }>;
+  }>;
 } {
   return {
     expGained: summary.expGained,
@@ -3451,8 +3645,54 @@ function debugVictorySummary(summary: BattleVictorySummary): {
       charId: levelUp.charId,
       name: levelUp.name,
       fromLevel: levelUp.fromLevel,
-      toLevel: levelUp.toLevel
+      toLevel: levelUp.toLevel,
+      statChanges: levelUp.statChanges.map((change) => ({ ...change })),
+      learnedSkills: levelUp.learnedSkills.map((skill) => ({ ...skill }))
     }))
+  };
+}
+
+function debugVictoryTally(tally: VictoryTallyState | null): {
+  expDisplayed: number;
+  expTarget: number;
+  moneyDisplayed: number;
+  moneyTarget: number;
+  isRolling: boolean;
+} | null {
+  if (!tally) {
+    return null;
+  }
+  return {
+    expDisplayed: tally.exp.displayed,
+    expTarget: tally.exp.target,
+    moneyDisplayed: tally.money.displayed,
+    moneyTarget: tally.money.target,
+    isRolling: victoryTallyIsRolling(tally)
+  };
+}
+
+function debugMortalWounds(
+  battle: BattleState,
+  rescuedOnBattleEnd: number
+): {
+  pendingCount: number;
+  rescuedOnBattleEnd: number;
+  pending: Array<{ index: number; name: string; hpDisplayed: number; hpTarget: number; isRolling: boolean }>;
+} {
+  const pending = battle.party
+    .map((member, index) => ({ member, index }))
+    .filter(({ member }) => isPendingPartyMortalWound(member))
+    .map(({ member, index }) => ({
+      index,
+      name: member.name,
+      hpDisplayed: member.hp.displayed,
+      hpTarget: member.hp.target,
+      isRolling: member.hp.isRolling
+    }));
+  return {
+    pendingCount: pending.length,
+    rescuedOnBattleEnd,
+    pending
   };
 }
 
