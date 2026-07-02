@@ -969,11 +969,14 @@ The UX, map, and parity-sweep auditors ran once the spend limit was raised, agai
 
 ---
 
-# Fix status (as of commit 3997d9c on fix/audit-sweep)
+# Fix status — FINAL (fix/audit-sweep @ 203f081)
 
-- **FIXED — Track A (a171ae5):** F01, F02 (X-cancel skip-to-end), F13 (equip compounding), F24 (generated drift), F25 (silent loader), F31 (follower sprite).
-- **FIXED — Track B (52fa14a + b40d77f):** F42 (formation amounts + A/B lettering), F43 (action direction / ally heals), F44+F15 (enemy status/PSI effects — Coil Snake poison verified live), heal-narration recipient fix.
-- **FIXED — map burst (a849aa0):** F59-map rects (7 warp-landing rects removed, generator door cross-check added), F60-dead-door (cave hole destination patched to EB warp landing; converter root-fix deferred).
-- **IN FLIGHT — Track C (Codex):** F18, F16, F17, F46 (EXP split — will patch to ceiling division per verifier), F48, F49, F34, F14, F03, F19.
-- **QUEUED — Track D (animations):** F32, F33, F38, F08, F37 (stretch).
-- **QUEUED — Track E (economy/progression, from round 2):** shops event-merge (critical), service keys for mined NPCs (hotels 256/483/890/1020/1124, ATM 1375), game-over flow (critical), Dad→ATM winnings routing.
+- **Track A (a171ae5):** F01/F02 X-cancel skip-to-end, F13 equip compounding, F24 generated drift (139 roaming-enemy skins restored), F25 silent loader, F31 follower sprite. All browser-verified.
+- **Track B (52fa14a, b40d77f):** F42 formation amounts + A/B lettering, F43 action direction (ally heals), F44/F15 enemy status/PSI effects (Coil Snake poisons live), heal-narration recipient fix. All browser-verified.
+- **Map burst (a849aa0, 3997d9c):** 7 warp-landing rects removed + generator doors[] cross-check; dead cave door #477/478 repointed to the EB warp landing (2864,3080), both verified live. Converter root fix -> follow-up chip.
+- **Track C (395ac30, a280584, 876b929, 5476510):** F18 battle-scoped ailments clear, F16 killing-blow linger (live), F17 encounter RNG seed, F46 EXP split with EB CEILING division (live round-trips), F48 real PP costs, F49 PSI multi-target (live: PSI Fire hit all 3), F34 green/red swirls (live screenshots), F14 shared AudioContext, F03 field-item gating, F19 DEFEND gate.
+- **Track E (25e1fa1):** shops event-merge — custom pages + preserved CCS function (live: NPC 311 talks then opens shop); hotels 256/483/890/1020/1124 + ATM 1375 service keys; game-over flow (live: respawn, lead restored, others KO); winnings -> bank (live: bank 0->5). Dad-deposit wording provisional.
+- **Track D (203f081):** F32 cutscene-hidden persistence, F33 idle wobble removed (live: {0,0}), F38 cutscene sound cues, F08 mid-session follower respawn, F37 STRETCH follower chain for heroes 3-4 (live: 4-hero parade).
+- **END-TO-END:** scripts/act1.mjs autorun on the final build: ACT 1 COMPLETE, 3/3 bosses (Malady fight ran with both antoid minions), act1:complete flag reached.
+- **Deferred (chips filed):** style-33 warp-table converter routing; chunk-seam foreground occlusion (2421 tiles); EB 14-slot inventory cap; enemy action effects beyond the Act-1 set.
+- **Creative calls for Nick (untouched):** interior camera 3.5x zoom (EB never scales), diagonal movement uses cardinal sprites at normalized speed (EB has 8-dir sprites at full per-axis speed), X-cancel exists at all (EB has no dialogue cancel — current behavior is safe skip-to-end), P-key save-anywhere + helper prompt bar, single-frame NPC skin hop, "The connect wired \$X to your account." wording, Dad/Mom phone mechanics (homesickness, level commentary), ATM fixed denominations vs EB digit entry, battle command grid order, buy-list cursor at 0 money, new-game spawn facing a NOTICE sign.
