@@ -1352,8 +1352,10 @@ export function applyVictoryRewards(
 
   const levelUps: BattleLevelUpSummary[] = [];
   const livingPartyCount = nextState.party.filter(isCombatantAlive).length;
+  // EB divides battle EXP among conscious members with CEILING rounding
+  // (ceil(total/n)), not floor.
   const expPerLiving = expGained > 0 && livingPartyCount > 0
-    ? Math.max(1, Math.floor(expGained / livingPartyCount))
+    ? Math.max(1, Math.ceil(expGained / livingPartyCount))
     : 0;
   nextState = {
     ...nextState,

@@ -312,9 +312,10 @@ describe("encounter advantage", () => {
     const result = applyVictoryRewards(battle);
 
     expect(result.summary.expGained).toBe(101);
-    expect(result.state.party[0].experience).toBe(50);
+    // EB rounding: ceil(101/2) = 51 per conscious member; KO'd gets none.
+    expect(result.state.party[0].experience).toBe(51);
     expect(result.state.party[1].experience).toBe(0);
-    expect(result.state.party[2].experience).toBe(50);
+    expect(result.state.party[2].experience).toBe(51);
   });
 });
 
