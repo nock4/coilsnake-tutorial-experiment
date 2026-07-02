@@ -947,6 +947,60 @@ describe("world artifact build (synthetic project)", () => {
     }
   }, 30_000);
 
+  it("resolves style-33 scripted floor-hole doors through the teleport table", async () => {
+    const temp = await mkdtemp(path.join(os.tmpdir(), "eb-world-scripted-doors-"));
+    try {
+      const project = path.join(temp, "project");
+      const out = path.join(temp, "generated");
+      await writeSyntheticChunkProject(project);
+      await writeFile(path.join(project, "ccscript", "data_51.ccs"), [
+        "l_0xc99ccd:",
+        '    "{hide_char(255)}[1F 63 {e(l_0xc99cd8)}]" eob',
+        "l_0xc99cd8:",
+        '    "{music(15)}{pause(240)}{warp(59)}{show_party(1)}" eob',
+        ""
+      ].join("\n"), "utf8");
+      await writeFile(path.join(project, "teleport_destination_table.yml"), [
+        "59:",
+        "  Direction: 5",
+        "  Unknown: 127",
+        "  Warp Style: 1",
+        "  X: 358",
+        "  Y: 385",
+        ""
+      ].join("\n"), "utf8");
+      await writeFile(path.join(project, "map_doors.yml"), [
+        "1:",
+        "  2:",
+        "  - Destination X: 399",
+        "    Destination Y: 144",
+        "    Direction: down",
+        "    Event Flag: 0x0",
+        "    Style: 33",
+        "    Text Pointer: data_51.l_0xc99ccd",
+        "    Type: door",
+        "    X: 5",
+        "    Y: 25",
+        ""
+      ].join("\n"), "utf8");
+
+      const result = await convertProject({ project, out, worldMode: "full" });
+      if (!("mode" in result.world)) {
+        throw new Error("expected chunked world");
+      }
+
+      expect(result.world.doors).toHaveLength(1);
+      expect(result.world.doors[0]).toMatchObject({
+        type: "door",
+        style: 33,
+        textPointer: "data_51.l_0xc99ccd",
+        destinationWorldPixel: { x: 2864, y: 3080 }
+      });
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  }, 30_000);
+
   it("uses a ROM-derived full-world spawn when present and falls back when absent", async () => {
     const temp = await mkdtemp(path.join(os.tmpdir(), "eb-world-rom-start-"));
     try {
