@@ -606,6 +606,7 @@ export const ItemUseEffectSchema = z.union([
 
 const EnemyActionEffectEntrySchema = z.object({
   name: z.string().trim().min(1).optional(),
+  note: z.string().trim().min(1).optional(),
   effect: ItemUseEffectSchema
 }).strict();
 
