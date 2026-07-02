@@ -616,3 +616,364 @@ Base: branch `overnight/eb-parity` @ 67010ad. Produced by an 8-dimension audit w
 - **EB parity note:** These match EB behavior closely; the deterministic level-up roll (no stat variance) and the ±50% speed jitter in jitteredTurnOrder are mild approximations of EB's randomness. The command sets per character (Ness Bash/Goods/Auto/PSI, Paula +Pray, Jeff Spy, Poo Mirror) match EB's layout; Pray/Mirror/Spy are self-described bounded approximations relevant only in later acts.
 - **recommendation:** No action required; noting as confirmed foundation so other findings are read as gaps in an otherwise-working system.
 
+
+
+---
+
+# Round 2 — missing dimensions (run after Tracks A+B landed, branch fix/audit-sweep)
+
+The UX, map, and parity-sweep auditors ran once the spend limit was raised, against the tree WITH the Track A/B fixes. 10 agents, adversarial verification on critical/high findings.
+
+## Round-2 priority tables
+
+### P0
+
+| id | dim | status | class | finding | verdict |
+|---|---|---|---|---|---|
+| F58 | ux | MISSING | fix-candidate | 42 of 45 shop clerks never open the Buy/Sell menu — custom-dialogue overrides silently drop the CCS shop event | CONFIRMED |
+| F75 | parity-sweep | MISSING | fix-candidate | No game-over flow: party wipe returns a 0-HP party to the overworld with no respawn, revival, or money penalty | CONFIRMED |
+
+### P1
+
+| id | dim | status | class | finding | verdict |
+|---|---|---|---|---|---|
+| F59 | ux | MISSING | fix-candidate | Service NPC coverage is near-zero for the same reason: only 1 hotel, 1 phone, 2 hospital entries exist world-wide | CONFIRMED |
+| F68 | map | ROUGH | fix-candidate | Six authored collision-override rects solidify warp-reachable rooms/decks, corrupting 8 door landings (verified in-engine) | CONFIRMED |
+| F69 | map | ROUGH | fix-candidate | Dead door: cave floor-hole warp permanently aborts — destination is solid in base converted data (verified in-engine) | CONFIRMED |
+| F76 | parity-sweep | DIVERGES | fix-candidate | Battle winnings are paid straight into the wallet ('You got $X') instead of Dad depositing to the ATM bank account | CONFIRMED |
+| F77 | parity-sweep | DIVERGES | fix-candidate | Victory EXP is granted in full to every living member instead of being divided among conscious party members | CONFIRMED |
+
+### P2
+
+| id | dim | status | class | finding | verdict |
+|---|---|---|---|---|---|
+| F60 | ux | ROUGH | fix-candidate | Buy list shows no visible cursor when rows are disabled — with 0 money the selection indicator vanishes entirely | unverified |
+| F70 | map | ROUGH | fix-candidate | Chunk-seam foreground-occlusion loss: bottom tile row of every 16-tile chunk cannot see its south neighbor — 2421 tiles lose promotion, 1093 player-visible | unverified |
+| F78 | parity-sweep | DIVERGES | fix-candidate | Encounter swirl is a rainbow hue-cycling spiral with no green/red advantage color signaling | unverified |
+| F79 | parity-sweep | DIVERGES | fix-candidate | Diagonal movement renders cardinal facing only and moves at normalized (0.707/axis) speed; EB uses 8-direction sprites and full per-axis speed | unverified |
+| F80 | parity-sweep | MISSING | fix-candidate | No inventory capacity: give() and shop buying push unbounded items (EB caps at 14 slots/character incl. equipment) | unverified |
+| F81 | parity-sweep | ROUGH | fix-candidate | Enemy assist/status battle actions: only 4 of ~318 EB battle actions have authored effects; the rest of the assist-type actions silently no-op | unverified |
+| F82 | parity-sweep | DIVERGES | needs-creative-call | Interior camera zooms up to 3.5x (variable, non-integer) — EB never changes pixel scale | unverified |
+
+### P3
+
+| id | dim | status | class | finding | verdict |
+|---|---|---|---|---|---|
+| F61 | ux | MISSING | fix-candidate | Denied actions share the cancel SFX — no distinct 'denied' cue exists in the menu SFX vocabulary | unverified |
+| F62 | ux | EXISTS | intentional-divergence | Overworld pause menu structure and empty states are solid and EB-faithful | unverified |
+| F63 | ux | EXISTS | fix-candidate | Battle UX core loop verified: EB-correct presentation, clean exit, but victory tally frames unobserved | unverified |
+| F64 | ux | ROUGH | needs-creative-call | Dialogue system: typewriter, prompt arrow, and paging all work; window chrome has polish nits | unverified |
+| F65 | ux | EXISTS | intentional-divergence | Overworld HUD verified good: readable vitals, hides during menus/dialogue, status ailments wired; heartbeat/badge visuals unconfirmed | unverified |
+| F66 | ux | ROUGH | needs-creative-call | New-game spawn drops the player face-to-face with a sign, so the very first Z press after the intro reads a NOTICE instead of advancing play | unverified |
+| F67 | ux | ROUGH | fix-candidate | Minor cursor-render inconsistency: Status char-select shows the inverted pill without the ▶ arrow that Goods/PSI/Equip show | unverified |
+| F71 | map | EXISTS | intentional-divergence | Roof-walking override coverage is complete: zero residual roof pockets beyond the 2 intentionally-excluded terrain FPs; overrides confirmed live in-engine | unverified |
+| F72 | map | EXISTS | intentional-divergence | Interior sector clipping consistent: every indoor sector is bounded (0 indoor-but-unbounded of 2560) | unverified |
+| F73 | map | ROUGH | fix-candidate | Sign-stamp and building-override assets fully present; one sign region overruns its chunk edge by 3px | unverified |
+| F74 | map | EXISTS | intentional-divergence | Door trigger feel: distance-0 leading-edge trigger fires promptly at the door (spot-checked) | unverified |
+| F83 | parity-sweep | DIVERGES | needs-creative-call | X-cancel skip-to-end works on ALL dialogue including one-shot scripted beats — EB has no dialogue cancel at all | unverified |
+| F84 | parity-sweep | DIVERGES | needs-creative-call | Unflagged non-EB conveniences: P-key save-anywhere and the always-visible helper prompt bar | unverified |
+| F85 | parity-sweep | MISSING | needs-creative-call | Phone system lacks the EB Dad/Mom mechanics: no homesickness, no Dad level-progress commentary | unverified |
+| F86 | parity-sweep | ROUGH | fix-candidate | Minor field/battle presentation trivia (grouped): ATM fixed denominations vs EB digit entry; battle command grid order differs from EB; hotel/hospital lack EB presentation beats; victory money line phrasing | unverified |
+| F87 | parity-sweep | EXISTS | intentional-divergence | CONFIRMED parity wins on this branch (positive verification): formation amounts, duplicate lettering, text blips, turn-to-face, mortal-wound rolling HP, enemy dissolve, sold-out shops, field poison, static enemy sprites, single walk speed, native viewport | unverified |
+
+## Round-2 full detail
+
+### Dimension: ux
+
+**Coverage:** Examined in-engine via 10 headless probe runs at native 512x448 (@3x screenshots, Read and visually inspected ~14 frames): overworld pause menu root + Goods/PSI/Equip/Check/Status char-select layers with cancel unwinding and menuSfx counts; empty-inventory states; shop flow at two Onett drugstore clerks (NPC 9 broken, NPC 404 working: root Buy/Sell/Cancel, buy list, zero-money denial); sign reading + typewriter pacing + page-prompt arrow + multi-page advance; overworld HUD (vitals bars, poison status in HUD model, hide-during-menus behavior); full battle vs group 3 (command grid both actors, BASH target select, PSI submenu with PP cost, execution message, clean exit to overworld). Static code verification: menu SFX cue vocabulary, danger-heartbeat plumbing, equip stat-delta preview code, service/ATM/phone-storage menu models, eventRunner override semantics, custom-dialogue.json service/shop key counts. NOT examined (honest gaps): hospital/hotel/phone/ATM service UIs in-engine (only 4 authored service NPCs exist world-wide and none were near probe spawns; menu models verified in code only); sell-with-items, successful buy + equip-on-buy prompt, full-inventory on buy/present, dead-party-member menu states (no way to grant money/items via debug hooks within budget); victory tally / level-up page visuals (flow confirmed, frames missed); PSI greying at insufficient PP; Status DETAIL page visuals (probe misfired twice on multi-page sign dialogue); Goods Use/Give/Drop execution; danger heartbeat audio; Track Lab panel occlusion (never appeared in probe screenshots).
+
+#### F58 · 42 of 45 shop clerks never open the Buy/Sell menu — custom-dialogue overrides silently drop the CCS shop event
+
+- **status:** MISSING · **severity:** critical · **class:** fix-candidate · **confidence:** high
+- **verdict:** CONFIRMED — Static trace fully confirms the finding. (1) eventRunner.ts:176 skips the CCS reference event whenever a byNpcId custom-dialogue entry exists, and interactionEntryEvents (line 72) only emits a shop event when the entry has a `shop` key. (2) The live scene (chunkedWorldScene.ts:3477) uses this exact interactionEvents; startInteractionDialogue only launches the CCS RuntimeEventSequence for reference events, and eventHost.ts:406 (openShop) is how non-overridden clerks open shops — so dropping the reference drops the shop. (3) Independent recount of scripts/.shop-clerks.json (45 clerks) vs content
+- **verifier notes:** Recommended fix direction (merge behavior events extracted from the replaced CCS event, keep custom pages) preserves the intentional Swagbound dialogue-voice divergence while restoring EB commerce — the merge approach is strictly better than hand-adding 42 shop keys, since it also fixes any service/heal/save clerks overridden the same way. The 3 working clerks (404/33/749) prove the entry.shop path works, so a data-only fix (add shop keys from mine-shop-clerks.mjs output) is a valid quick patch.
+- **files:** `apps/game/src/eventRunner.ts`, `content/custom-dialogue.json`, `scripts/.shop-clerks.json`
+- **evidence:** In-engine: talked to Onett drugstore clerk NPC 9 (spawn 7872,1516, walk to counter); across ~9 Z presses the two custom pages ('What can I do for you, the real one?' / 'In, in. Wipe whatever followed you off the mat.') loop and menuRenderStack stays [] — no shop menu ever opens. Root cause: eventRunner.ts interactionEvents (lines ~152-178) — when a byNpcId custom-dialogue entry exists, the CCS reference event is skipped entirely (`...(customEntry ? [] : [{kind:'dialogue',reference}])`), so the shop only survives if the entry itself has a `shop` key (interactionEntryEvents line 72). Data: of the 45 clerk targets in scripts/.shop-clerks.json, only NPCs 404/33/749 have `shop` in their override; the other 42 (stores 1,2,5-30,34-45,56,57,60-63) have pages-only entries. Control test: clerk NPC 404 (same store 1) DOES open Shop→Buy/Sell — confirming the mechanism, not the shop system, is broken.
+- **EB parity note:** EB towns are built around drugstore/bakery/etc. commerce; with wallet earned from battles but almost no working shops, the EB economy loop (fight → cash → gear) is severed game-wide.
+- **recommendation:** Either add the `shop` key to the 42 clerk overrides (mine-shop-clerks.mjs already produces the npcId→storeId map), or better: change interactionEvents to merge behavior events (shop/service/heal/save) extracted from the replaced CCS event even when custom pages override the text.
+
+#### F59 · Service NPC coverage is near-zero for the same reason: only 1 hotel, 1 phone, 2 hospital entries exist world-wide
+
+- **status:** MISSING · **severity:** high · **class:** fix-candidate · **confidence:** high
+- **verdict:** CONFIRMED — Every evidence claim verified in the current checkout, and I reproduced the gap quantitatively with an in-repo mining script. (1) content/custom-dialogue.json byNpcId has exactly 332 entries with exactly 4 service keys (58:hotel, 60:phone, 111:hospital, 115:hospital) and zero save/heal keys. (2) eventRunner.ts interactionEvents (lines 152-179) confirms the replacement path: when a custom entry exists, events come solely from the entry (service/heal/save/shop keys); the CCS reference dialogue — whose resolved script effects are the only other way services execute — is dropped. (3) I ran resolve
+- **verifier notes:** Nuance the fixer should know: the "same merge fix as shops" (merging CCS effects into overridden NPC events) only repairs the 3 override-broken healers. The 6 dead hotels, the ATM, and missing phones are UNVOICED NPCs whose CCS scripts resolve to undecoded raw control codes ([1F ..] special routines) — no amount of override-merging recovers them; they need authored `service` keys (the NPC-58 pattern) or new CCS decodes. The recommended mining script is the right approach; my verification mining logic (resolveScriptEvents over every interactable NPC's textPointer, pattern-match "one night stay will cost" / heal_percent effects) reproduces the full list: hotels 58(wired)/256/483/890/1020/1124, ATM 1375, broken healers 622/752/1292. Also note eventHost.ts already has an openAtm hook wired to the built ATM menu — it just never fires because no script decodes to an `atm` effect.
+- **files:** `content/custom-dialogue.json`, `apps/game/src/eventRunner.ts`, `apps/game/src/menuModel.ts`
+- **evidence:** content/custom-dialogue.json byNpcId (332 entries) contains exactly 4 `service` keys: hotel x1, phone x1, hospital x2, plus 0 `save`/`heal` keys. The hotel/hospital/phone/ATM menu models are fully built (menuModel.ts: HOSPITAL/HOTEL/PHONE_SERVICE_MENU_IDs, phone storage deposit/withdraw screens, ATM_AMOUNT_OPTIONS) but voiced service NPCs whose overrides lack the key lose their CCS heal/save behavior via the same eventRunner replacement path as the shops finding. I could not reach any of the 4 working service NPCs within probe budget, so the service menu UIs themselves are code-verified only.
+- **EB parity note:** EB has a hotel, hospital, phone and ATM in every town; resting/saving/banking are core loop verbs. Four service points across the whole world map is a large completeness gap versus EB structure.
+- **recommendation:** Same merge fix as the shops finding, plus an audit script (like mine-shop-clerks.mjs) that mines CCS events for heal/save/hotel/ATM actions and cross-checks against overrides; then an in-engine pass on each service menu.
+
+#### F60 · Buy list shows no visible cursor when rows are disabled — with 0 money the selection indicator vanishes entirely
+
+- **status:** ROUGH · **severity:** medium · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/uiScene.ts`, `apps/game/src/menuModel.ts`
+- **evidence:** Screenshot shop4-03: Buy panel lists 'Practice Bat 18 NO CASH' etc. with no highlight/pill/arrow on any row, while the debug render stack shows item 0 as selected:true, enabled:false. The selected-row inverted-pill treatment is only rendered for enabled items, so an all-unaffordable list (the normal early-game state at wallet 0) gives zero feedback about where the cursor is; pressing Z plays menuCancel with no visual response. Confirmed across two frames of the same run.
+- **EB parity note:** EB always shows the cursor arrow in shop lists regardless of affordability, and the clerk verbally refuses ('you don't have enough money'). Here the denial is a bare cancel blip with an invisible cursor.
+- **recommendation:** Render selected+disabled rows with a visible cursor (outline pill or arrow with greyed text), and consider a one-line refusal message on denied buy.
+
+#### F61 · Denied actions share the cancel SFX — no distinct 'denied' cue exists in the menu SFX vocabulary
+
+- **status:** MISSING · **severity:** low · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/chunkedWorldScene.ts`, `apps/game/src/battleSfxPlan.ts`
+- **evidence:** chunkedWorldScene.ts:444 — `type MenuSfxCue = Extract<BattleSfxCue, "menuMove" | "menuConfirm" | "menuCancel">`. In-engine, attempting to buy with 0 money logged menuCancel (shop4 run: sfx calls [menuConfirm, menuCancel] on the buy attempt). Move/confirm/cancel coverage is otherwise complete (20+ cue calls logged across the full menu tour).
+- **EB parity note:** EB uses a distinct error buzzer for refused actions vs the back-out sound; conflating them loses a small but real feedback channel.
+- **recommendation:** Add a `menuDenied` cue to the SFX plan and route disabled-item confirms and refused purchases through it.
+
+#### F62 · Overworld pause menu structure and empty states are solid and EB-faithful
+
+- **status:** EXISTS · **severity:** low · **class:** intentional-divergence · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/menuModel.ts`, `apps/game/src/uiScene.ts`
+- **evidence:** Verified in-engine at native res: root menu is exactly EB's six commands (Talk/Goods/PSI/Equip/Check/Status — menuModel.ts:334-342 documents the parity intent); each submenu opens a char-select panel (Bosch/Cloak); Equip shows Weapon/Body/Arms/Other slots; empty-inventory states read 'Bosch has no goods.' and 'No goods to check.' instead of dead-ending; X unwinds exactly one level per press with menuCancel cue (verified via render-stack traces unwinding shop-1-buy → shop-1 → closed). Equip stat-delta preview code exists (menuModel.ts:1393-1399 equipDeltaLabel 'Off +x Def +y' on picker rows) but was not visually verified (empty inventory).
+- **EB parity note:** Menu STRUCTURE matches EB; the rounded dark Pixelify Sans look is the approved custom design language.
+- **recommendation:** None — recording as a verified-good baseline. Visual pass on the equip picker with items in inventory still worth doing once item-granting is possible.
+
+#### F63 · Battle UX core loop verified: EB-correct presentation, clean exit, but victory tally frames unobserved
+
+- **status:** EXISTS · **severity:** low · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/battleScene.ts`
+- **evidence:** ?battle=3&party=2&psi=all run: first-person battle (no party sprites), static Swagbound enemy sprite with white target arrow, 3x2 command grid (Bash/Goods/Auto over PSI/Defend/Run) with inverted-pill cursor, per-actor banner (Bosch then Cloak, whose grid adds Pray), two-phase rounds confirmed in debug (all commands collected, then phase=execution), PSI submenu shows 'Cold Memo 4' + 'To enemies / PP Cost: 4' info box, execution window uses exact EB phrasing ("Bosch's attack!\nSignal Stutter took 16 HP of damage!"), and battle exits to overworld with no softlock. Gap: the victory/level-up summary pages (battleScene.ts victorySummaryPageIndex_ machinery) flew by between presses — readability/pacing of the tally is unverified.
+- **EB parity note:** Everything observed matches EB battle presentation doctrine (first-person, static enemies, two-phase rounds, rolling HP boxes). 'Auto' is a Swagbound addition already in the design spec.
+- **recommendation:** One targeted probe on victory pages (fight with advantage, screenshot each z-press through the tally) to confirm exp/money/level-up text pacing and legibility.
+
+#### F64 · Dialogue system: typewriter, prompt arrow, and paging all work; window chrome has polish nits
+
+- **status:** ROUGH · **severity:** low · **class:** needs-creative-call · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/dialogueRenderer.ts`, `apps/game/src/uiScene.ts`
+- **evidence:** Verified: 45cps typewriter (DEFAULT_TEXT_SPEED_CPS, dialogueRenderer.ts:5) shows partial text mid-page ('NOTICE: The route' frame), completed pages show a ▼ advance arrow at the window's right edge, multi-page signs advance on Z, dialogue is top-anchored like EB. Nits seen at native res: (1) the window is a fixed ~4-line-tall box even for 1 line, with the 'Z: finish | X: close' helper floating mid-window at the right — reads as unfinished layout; (2) in the Pixelify pixel font the helper text is genuinely hard to parse at 512x448 ('finish' reads like 'Anish', digit 5 reads as S so HP '75/75' scans as '7S/7S' in HUD panels); (3) X instantly closes multi-page dialogue mid-stream (labelled behavior, but EB's B-button never discards unread story text).
+- **EB parity note:** Pacing and flow match EB; the fixed-size window itself is EB-like. The helper-hint placement and glyph ambiguity are artifacts of the custom UI language, hence creative call.
+- **recommendation:** Consider corner-anchoring or fading the Z/X helper, and test digit glyphs (5 vs S) at native res; decide whether X-close should require the page to be fully revealed first.
+
+#### F65 · Overworld HUD verified good: readable vitals, hides during menus/dialogue, status ailments wired; heartbeat/badge visuals unconfirmed
+
+- **status:** EXISTS · **severity:** low · **class:** intentional-divergence · **confidence:** medium
+- **verdict:** unverified
+- **files:** `apps/game/src/overworldStatusHud.ts`, `apps/game/src/chunkedWorldScene.ts`, `apps/game/src/audio/transitionSfx.ts`
+- **evidence:** Screenshots show two bottom-anchored panels (name, HP x/x with green bar, PP x/x with blue bar) occupying roughly the bottom sixth; they hide while any menu or dialogue is open, so they never fight the text windows, and 'M: Menu' hint sits bottom-right. __setPartyStatus(0,'poisoned') immediately surfaced {ailment:'poisoned'} in the HUD debug model, and the danger plumbing exists end-to-end (isDangerHp per member, dangerActive aggregate, dangerHeartbeat SFX on LOW_HP_DANGER_BEEP_INTERVAL_MS — chunkedWorldScene.ts:544,3114-3119; transitionSfx.ts:12-13 documents the EB double-thump). Not visually confirmed: the on-panel poison badge rendering (HUD was hidden behind an open dialogue in the poison run) and the audible heartbeat.
+- **EB parity note:** EB has no overworld HUD at all — this is the approved Swagbound addition; the audit checked it for occlusion/readability, both fine. One real occlusion note: in tight interiors (drugstore) the panels cover the lower walkway and can hide the follower sprite standing there.
+- **recommendation:** Quick visual check of the ailment badge and one low-HP walk to hear the heartbeat; optionally fade panels when the player walks behind them.
+
+#### F66 · New-game spawn drops the player face-to-face with a sign, so the very first Z press after the intro reads a NOTICE instead of advancing play
+
+- **status:** ROUGH · **severity:** low · **class:** needs-creative-call · **confidence:** medium
+- **verdict:** unverified
+- **files:** `content/overworld-interactables.json`, `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** Debug across three runs: at spawn (2112,1768, facing down) nearestInteractable is sign 'signal-spawn-notice' at (2112,1788), distance 20 — inside talk range. Players (and my probe, repeatedly) mashing Z through the opening narration immediately trigger the sign, and its 2-page text re-opens on every stray Z, which also blocks the M menu (menu can't open while dialogue is up). This cost three probe runs before I routed around it; a player buffering confirms through the intro will hit the same thing.
+- **EB parity note:** EB's opening (Ness's bedroom) has nothing interactable directly in the walk path of the first confirm press.
+- **recommendation:** Nudge the spawn point or the sign a tile apart, or suppress interactables for a beat after scripted dialogue closes.
+
+#### F67 · Minor cursor-render inconsistency: Status char-select shows the inverted pill without the ▶ arrow that Goods/PSI/Equip show
+
+- **status:** ROUGH · **severity:** low · **class:** fix-candidate · **confidence:** medium
+- **verdict:** unverified
+- **files:** `apps/game/src/uiScene.ts`
+- **evidence:** Screenshot menu4-09 (Status submenu): 'Bosch' row has the white pill but no ▶ cursor triangle; menu4-05 (PSI submenu) and menu4-03 (Goods submenu) both show ▶ + pill on the same kind of row. Same selected:true state in the render stack, different chrome.
+- **EB parity note:** Cosmetic consistency within the custom UI language; no EB equivalent at stake.
+- **recommendation:** Unify the selected-row treatment across all char-select screens.
+
+### Dimension: map
+
+**Coverage:** EXAMINED: (1) full-map residual roof-pocket scan — re-implemented the gen-collision-overrides.mjs sandwich heuristic (MAXW=90/MAXH=70/MINFILL=0.3) over world.json with the 214 authored rects applied; (2) all 1164 doors checked for solid/OOB destination cells on both base and override-applied grids, plus ring-search emulation of resolveDoorWarpLanding (maxRingCells=8, 13x6 foot box); (3) override-rect vs door-endpoint conflicts (exact-cell and 32px slop); (4) sector indoor/bounded consistency (all 2560 sectors); (5) chunk-seam foreground-occlusion loss quantified from surfaceRows (isOccluderTile semantics, FOREGROUND_SOLID_BELOW_THRESHOLD=8) against composeRegion's chunk-local bounds; (6) sign-overrides (44 signs), building-overrides (41 images), tile-overrides (empty) file/bounds integrity; (7) seven in-engine probes at 512x448: dead-door walk-up (console-confirmed warp abort), door#440 warp-through (landing displacement + screenshot), void-landing movement test, override-pocket pin test (proving collision-overrides are live), chunk-seam visual at an Onett stop sign, plus flood-fill of a flag-gated door landing region. NOT EXAMINED: doors with non-zero but sub-8-ring landing displacement on BASE data (only exact-solid destinations flagged); ladder/rope/escalator/stairway trigger behavior specifically; visual correctness of all 44 stamped signs (file existence + bounds only); in-engine interior render-clipping (data-level only — 0 indoor-unbounded sectors); the legacy worldScene.ts (out of scope per orientation); walking every town for seam artifacts (one spot probed); exact EB place-name identification of the dead door chain (evidence is coordinate/data-based, naming is medium confidence); no tsc or test runs (not needed for this dimension).
+
+#### F68 · Six authored collision-override rects solidify warp-reachable rooms/decks, corrupting 8 door landings (verified in-engine)
+
+- **status:** ROUGH · **severity:** high · **class:** fix-candidate · **confidence:** high
+- **verdict:** CONFIRMED — Independently reproduced every factual claim. (1) Re-ran the door-destination scan: exactly 8 of 1164 doors in apps/game/public/generated/world.json have destinationWorldPixel inside an authored rect in content/collision-overrides.json (214 solids, identical to the generated copy), with door indices, coordinates, and rect notes matching the finding cell-for-cell (#109/#110, #227, #440, #800, #918, #937/#938), plus the one source-cell hit (door #1053 at 3656,9640 in sector2382 roof 7/14). (2) Verified the base collision grid is passable at all 8 destinations — the authored override is the sole 
+- **verifier notes:** Recommendation moves TOWARD EB parity: it preserves the (EB-faithful) roof-solidification sweep and only removes the 7 warp-destination false-positive rects. Adding a doors[] cross-check to gen-collision-overrides.mjs is the right structural fix. Minor caution for the fixer: prefer trimming rects to just exclude the destination cells (plus a landing footprint margin) where a rect legitimately covers real roof; wholesale removal of e.g. sector2382 rects could re-enable some roof-walking. Also handle the door #1053 SOURCE cell (3656,9640) covered by sector2382 roof 7/14. Severity high is calibrated: verified wrong-ledge landing in-engine (door #440, Fourside), unstandable intended decks, one landing at ring-search limit; not critical since Act 1 appears unaffected and no confirmed soft-lock.
+- **files:** `content/collision-overrides.json`, `scripts/gen-collision-overrides.mjs`, `apps/game/src/chunkedWorldScene.ts`, `apps/game/src/doorTriggers.ts`
+- **evidence:** Script scan: 8 of 1164 doors have destinationWorldPixel inside an authored rect (base grid passable): doors #109/#110 dest (1576,1672) in 'sector389 roof 12/16'; #227 dest (3480,9632) in 'sector2413 roof 1/1'; #440 dest (3456,3784) in 'sector941 roof 1/2'; #800 dest (3680,9632) in 'sector2382 roof 5/14'; #918 dest (3656,9648) in 'sector2382 roof 10/14'; #937/#938 dest (4176,6432) in 'sector1584 roof 12/14'. One door SOURCE cell (3656,9640) is covered by 'sector2382 roof 7/14'. Ring emulation shows landings displaced 2-8 cells (16-64px; #109 worst at ring 8). IN-ENGINE: walked door #440 from spawn (5384,4182) — player warped to (3456,3760), 24-32px off the intended (3456,3784→3792) landing, onto an adjacent ledge of a Fourside tower (screenshot shows player on a skyscraper ledge above a 'HELI' door); the intended arrival deck is now solid/unstandable. Root cause: the sandwich heuristic in gen-collision-overrides.mjs detects geometric enclosure only — rooms/decks reachable ONLY via door warp look identical to unreachable roof pockets, and the sweep never cross-checked world.json doors[].
+- **EB parity note:** In EB these are legitimately walkable spots the player is warped onto (e.g. the Fourside tower ledge/heliport deck); solidifying them moves AWAY from EB. The roof-solidification goal itself is EB-faithful — only these warp-destination pockets are false positives.
+- **recommendation:** Regenerate/prune the override list excluding any pocket that contains a door destinationWorldPixel or worldPixel (add a doors[] cross-check to gen-collision-overrides.mjs, ~10 lines); concretely remove/trim the 7 rects named above and rebuild. Keep the rest — the sweep is otherwise clean.
+
+#### F69 · Dead door: cave floor-hole warp permanently aborts — destination is solid in base converted data (verified in-engine)
+
+- **status:** ROUGH · **severity:** high · **class:** fix-candidate · **confidence:** high
+- **verdict:** CONFIRMED — Every load-bearing claim checks out statically in the current checkout. world.json doors[477]/[478] are at (6440,4808)/(6448,4808) targeting (3192,1152) with style 33; the collision grid (cellSize 8) at cell (399,144) is solid=1 with surface byte 0x80, and the nearest passable cell is (398,126) at ring 18 — outside chunkedWorldScene.ts:5402's maxRingCells:8 — so applyDoorWarp (line 2282-2286) deterministically hits the abort at line 2504 with the exact logged message; no probe needed. The EB source data matches (map_doors.yml lines 6275-6292, two doors Destination X:399 Y:144), confirming pre-
+- **verifier notes:** Recommendation is parity-positive overall, but one listed option (raise maxRingCells) would snap to (3184,1008), a room EB never warps you to from this hole — the EB landing is warp table entry 59 → pixel (2864,3080), walkable in converted data. The script pattern (hide party, music change, long pause, flag sets, warp) is consistent with a mandatory scripted drop (e.g., Lumine Hall→Lost Underworld style), supporting high severity; exact EB identity still not pinned, but the mechanism and dead-door impact are certain. Verified with zero probe runs — abort is deterministic from data + code.
+- **files:** `apps/game/public/generated/world.json`, `packages/eb-converter/src/world.ts`, `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** Doors #477/#478 at (6440,4808)/(6448,4808) (EB map_doors.yml: Destination X:399 Y:144, style 33, a 2-cell floor hole) target (3192,1152), which is surface byte 0x80 (solid, not void) with the nearest passable cell 18 cells (144px) north — outside resolveDoorWarpLanding's 8-cell ring. IN-ENGINE: spawned at (6448,4830) in the cave interior (sector 1209, music context 'interior:30', screenshot shows the party standing in a floor hole), walked up into the hole: player pinned at y=4822.8 and console logged 'Door warp aborted: destination did not resolve to a walkable footprint.' This is PRE-EXISTING converter/base data, not caused by collision-overrides. The room is part of a door chain ((7360,3824)→pocket→dead hole onward), so the onward room at ~(3184,1008) plus anything behind it is unreachable.
+- **EB parity note:** In EB this hole works — it is a real scripted drop. A door that silently does nothing diverges from EB and blocks whatever the chain leads to (later-act content; exact EB identity not pinned down, evidence is coordinate-based).
+- **recommendation:** Investigate why the converted collision at (3192,1152) is solid (wrong sector collision, or the EB landing relies on script-side placement); either fix the converter's destination handling for this door style or raise maxRingCells for landings whose destination is deep-solid, or author a destination correction. Also scan for other base-data ABORT doors (this audit found exactly this one pair among 1164).
+
+#### F70 · Chunk-seam foreground-occlusion loss: bottom tile row of every 16-tile chunk cannot see its south neighbor — 2421 tiles lose promotion, 1093 player-visible
+
+- **status:** ROUGH · **severity:** medium · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `packages/eb-converter/src/world.ts`
+- **evidence:** composeRegion's solidCountAt returns 0 for ty+1 >= bounds.heightTiles (world.ts ~line 291-295), and buildFullWorld composes each 16x16-tile chunk with exact bounds and no south apron (~line 1157-1165). Quantified from world.json surfaceRows: of 40,355 solid tiles that satisfy isOccluderTile globally (selfSolid>0 && belowSolid>=8), 2,421 (6.0%) sit on a chunk bottom row and lose promotion; 1,093 of those have a passable cell within 24px above (player can visibly overlap). IN-ENGINE: at Onett seam spot (1304,1494) the player sprite draws over the top of a stop-sign prop it should be occluded by (screenshot mapaudit-7-seam.png) — visible but subtle at this spot.
+- **EB parity note:** EB renders these walls/props over the actor everywhere; losing it in 32px bands along every 512px chunk seam is a converter artifact with no EB counterpart.
+- **recommendation:** Compose each chunk with a 1-tile south apron (extend bounds.heightTiles by 1 for solid-count sampling only, still emitting 16 rows of pixels), or precompute tileSolidCount map-wide before the chunk loop and pass a global solidCountAt into composeRegion. Rebuild required.
+
+#### F71 · Roof-walking override coverage is complete: zero residual roof pockets beyond the 2 intentionally-excluded terrain FPs; overrides confirmed live in-engine
+
+- **status:** EXISTS · **severity:** low · **class:** intentional-divergence · **confidence:** high
+- **verdict:** unverified
+- **files:** `content/collision-overrides.json`, `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** Re-ran the sandwich heuristic map-wide with the 214 rects applied: exactly 3 residual candidates, all in the two documented terrain-FP sectors (225: two components at (320,896) and (456,896); 339: one at (5088,1360)) — the intentional exclusions. IN-ENGINE: spawned inside covered pocket (2700,352) (base grid passable '0', covered by rect 'sector73 roof 6/15'); after flushing the spawn dialogue, ArrowDown/Right/Up taps produced zero movement — applyCollisionOverrides (chunkedWorldScene.ts ~1536) is active in the live build. Caveat: the heuristic by design cannot see roofs that are open on one side, so 'zero residual' means zero within the heuristic's detection class.
+- **EB parity note:** Roof cells are solid in EB; the authored-override mechanism restores parity (minus the 6 false-positive rects reported separately).
+- **recommendation:** No action beyond the warp-destination pruning in finding 1. Keep the sector 225/339 exclusions.
+
+#### F72 · Interior sector clipping consistent: every indoor sector is bounded (0 indoor-but-unbounded of 2560)
+
+- **status:** EXISTS · **severity:** low · **class:** intentional-divergence · **confidence:** medium
+- **verdict:** unverified
+- **files:** `apps/game/public/generated/world.json`, `apps/game/src/roomBounds.ts`, `packages/eb-converter/src/world.ts`
+- **evidence:** world.json sectors: 374 indoor, 1177 bounded (bounded = EB Setting != 'none', converter world.ts:547), 0 sectors with indoor=1 && bounded=0; all 1164 door destinations land in sectors satisfying that invariant. roomBounds.ts consumes areaIds+bounded for render clipping. Not re-verified visually in-engine this audit (prior verification per project memory).
+- **EB parity note:** Matches the established render-bleed fix; no regression signal in data.
+- **recommendation:** None.
+
+#### F73 · Sign-stamp and building-override assets fully present; one sign region overruns its chunk edge by 3px
+
+- **status:** ROUGH · **severity:** low · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `content/sign-overrides.json`, `content/building-overrides.json`, `content/tile-overrides.json`
+- **evidence:** All 44 sign entries reference existing chunk PNGs (apps/game/public/generated/assets/world/chunks/background-*.png) and all 41 building-override images exist (apps/game/public/assets/buildings/*.png); 3 oversized signs correctly parked in needsReview; tile-overrides.json byTile is empty (nothing to break). One defect: sign 'THE PRECINCT' on chunk 3,3 has region x:461 w:54 → extends to x=515 past the 512px chunk edge, so its right 3px are clipped or need a second stamp on chunk 4,3.
+- **EB parity note:** Sign reskins are an approved Swagbound divergence; this is an internal integrity nit, not a parity issue.
+- **recommendation:** Trim or split THE PRECINCT's region across the chunk boundary in sign-overrides.json (or have stamp-signs.mjs warn on out-of-chunk regions).
+
+#### F74 · Door trigger feel: distance-0 leading-edge trigger fires promptly at the door (spot-checked)
+
+- **status:** EXISTS · **severity:** low · **class:** intentional-divergence · **confidence:** medium
+- **verdict:** unverified
+- **files:** `apps/game/src/doorTriggers.ts`
+- **evidence:** adjacentProbeCells probes exactly 1 cell past the foot box leading edge (doorTriggers.ts, comment 'Intentionally tight so the warp fires at the door, not ~3 cells early'); in probe B a real walk-up from (5384,4182) into the door cell at (5384,4168) triggered the warp within one 600ms hold with no early-fire and no dead-zone. Only one door walked this audit; the broader 106/106-interior e2e coverage is per project memory, not re-run.
+- **EB parity note:** Matches EB push-into-door behavior.
+- **recommendation:** None.
+
+### Dimension: parity-sweep
+
+**Coverage:** Examined via code + local EB data + 6 headless in-engine probes (localhost:5173): overworld movement (playerController.ts, live speed measurement 112px/s), doors/warps (doorTriggers.ts, mapTransition.ts), dialogue (dialogueRenderer.ts, eventRunner.ts, text-blip SFX, X-cancel semantics verified in-engine with flag firing), NPC behavior (npcBehaviors.ts, turn-to-face), field systems (menuModel.ts ATM/hotel/hospital/phone/storage, partyState.ts inventory/bank/sell-price, field poison), progression (game-over path traced code+probe: forced loss vs group 409, party persisted at 0 HP), battle presentation (transitions.ts swirl, rolling meters, mortal wounds, enemy dissolve, victory tally/level-up pages), recent parity work spot-checks (formation amounts cross-checked against external/coilsnake-full/enemy_groups.yml groups 0/27/30/32 — match; A/B duplicate lettering; enemy-action-effects layer vs 318-entry battle_action_table.yml; sold-out shops; X-skip semantics). NOT examined: PSI battle animation parity, battle background distortion fidelity, ladder/rope/bike movement in-engine, stairs/escalator arrival positioning in-engine, run-away odds and Guts/SMAAASH rate formulas vs ROM, shop clerk dialogue flows end-to-end, save/load slot integrity, cutscene choreography fidelity, hotel/hospital presentation in-engine, exact EB walk-speed px/frame (not extractable from CoilSnake data — measured value 110px/s judged plausible), and the full overworld lose flow via a real roaming-enemy encounter (loss verified via ?battle= URL path only; the return-restore code path is unambiguous).
+
+#### F75 · No game-over flow: party wipe returns a 0-HP party to the overworld with no respawn, revival, or money penalty
+
+- **status:** MISSING · **severity:** critical · **class:** fix-candidate · **confidence:** high
+- **verdict:** CONFIRMED — Every cited code claim verified in the current checkout: battleScene.ts handleBattleOutcome (1578) sets phase "lose" with only "The party fell." (2451); beginExitTransition (1672) skips mortal-wound settling exactly on lose; exitBattle (1717) ships buildPostBattlePartySnapshot carrying battle-end 0-HP members and unchanged wallet; chunkedWorldScene.applyReturnRestore (3365) restores that party verbatim at the pre-battle position, consulting restore.outcome only in applyStoryGateReturn (3353) for gate suppression. Repo-wide search confirms no revive/respawn/game-over flow exists (only battle re
+- **verifier notes:** Fix implementation notes: saveState player snapshot exists for respawn targeting; halve wallet only (bank field is preserved in buildPostBattlePartySnapshot line 3481, so the wallet/bank split already exists); settlePendingMortalWoundsForBattleEnd is intentionally skipped on lose, so the game-over sequence should restore the lead explicitly rather than reusing that path.
+- **files:** `apps/game/src/battleScene.ts`, `apps/game/src/chunkedWorldScene.ts`, `apps/game/src/battleReturn.ts`
+- **evidence:** battleScene.ts handleBattleOutcome (line ~1578) sets phase 'lose' showing only 'The party fell.' (line 2451), then beginExitTransition explicitly skips mortal-wound settling on lose (line 1672) and exitBattle passes buildPostBattlePartySnapshot carrying battle-end HP (line 1717). chunkedWorldScene.applyReturnRestore (line 3365+) restores that party verbatim at the pre-battle position; restore.outcome is consulted ONLY by applyStoryGateReturn (line 3353). No revive/respawn/'keep trying' code exists anywhere (rg for revive|respawn|keep trying: only __debugHeal). Probe-verified: forced battle vs group 409, party hp:0 alive:false persisted through exit-transition. A wiped party walks the overworld dead; the next encounter opens at outcome 'lose' immediately — a soft game-breaking loop.
+- **EB parity note:** EB on defeat: 'You lost the battle' beat, then a continue prompt; on continue you respawn at the last save (phone) location with Ness conscious/restored, other members unconscious, and half your ON-HAND cash lost (bank untouched). Confidence: high, strong memory of a well-documented core mechanic; not verifiable from local CoilSnake data (engine behavior, not map data).
+- **recommendation:** Add a game-over sequence on outcome 'lose': fade + message, halve wallet (not bank), restore lead to full HP, respawn at the last save position (saveState already stores player snapshot), leave other members at 0 HP.
+
+#### F76 · Battle winnings are paid straight into the wallet ('You got $X') instead of Dad depositing to the ATM bank account
+
+- **status:** DIVERGES · **severity:** high · **class:** fix-candidate · **confidence:** high
+- **verdict:** CONFIRMED — Code evidence verified at every cited line: applyVictoryRewards (battleLogic.ts:1216) credits moneyGained directly to state.wallet; the victory tally renders 'You got $X' (battleLogic.ts:1297, battleScene.ts:3226); chunkedWorldScene.ts:4971 syncs that wallet into partyState via applyBattleResult (partyState.ts:635-636), and bankValue is only mutated by manual ATM deposit/withdraw (partyState.ts:570-579) — no automatic bank inflow, no Dad-deposit code exists. The EB claim is verified against local extracted ROM text, not just memory: data_17.ccs:279-282 is Dad's phone call ('I deposited $X into
+- **verifier notes:** One minor overstatement in the finding: the bank is not literally without inflow — the ATM deposit op works, so players can manually move wallet cash to bank. But with winnings paid as cash and no defeat cash-loss penalty found in battleLogic/chunkedWorldScene, the bank serves no gameplay purpose, so the substantive point stands. Implementation note for the fix: EB credits the bank at battle end silently and Dad reports the cumulative amount on the next save call — the fix should also thread the deposit-report line into the existing Dad phone save flow, and consider the related EB rule that losing a battle costs half your ON-HAND cash (bank is safe), which is the mechanic that makes the bank meaningful.
+- **files:** `apps/game/src/battleLogic.ts`, `apps/game/src/battleScene.ts`
+- **evidence:** battleLogic.ts applyVictoryRewards line 1216: wallet: stat(state.wallet) + moneyGained; victory tally page line 1297 / battleScene.ts line 3226 renders 'You got $X'. Meanwhile the full EB money loop is otherwise built: partyState has a separate bank (partyState.ts:256-270), the ATM deposit/withdraw menu exists (menuModel.ts buildAtmScreen line 969), and Dad phone save exists — so the bank currently has no inflow at all and the ATM is vestigial.
+- **EB parity note:** EB: battle winnings are deposited by Dad into your bank account; you withdraw cash at ATMs. The victory screen does not hand you cash. Confidence: high (core, well-documented EB mechanic; strong memory).
+- **recommendation:** Route moneyGained to bank instead of wallet in applyVictoryRewards, and change the tally line to the Dad-deposit phrasing (Swagbound-voiced). This also makes the existing ATM meaningful.
+
+#### F77 · Victory EXP is granted in full to every living member instead of being divided among conscious party members
+
+- **status:** DIVERGES · **severity:** high · **class:** fix-candidate · **confidence:** medium
+- **verdict:** CONFIRMED — Code evidence verified: applyVictoryRewards in apps/game/src/battleLogic.ts sums defeated enemies' exp into expGained (line 1210) and applies the FULL total to every living party member (line 1258) with no division. EB claim verified against the actual EarthBound disassembly (github.com/Herringway/ebsrc): in both src/battle/main_battle_routine.asm (victory path) and src/battle/instant_win_handler.asm, total enemy exp is summed into BATTLE_EXP_SCRATCH, then divided by COUNT_CHARS(0) — the count of conscious, non-diamondized party members — using round-UP division ((total + n-1) / n via DIVISION
+- **verifier notes:** EB rounding is ceiling ((total + n - 1) / n), not floor as the recommendation states. COUNT_CHARS excludes unconscious AND diamondized members and NPC battlers (npc_id != 0), and the same eligibility filter gates who receives the share — mirror that filter when fixing. EB also passes the divided share into the win message (MSG_BTL_PLAYER_WIN), so the parity-correct victory text shows per-member exp, not the battle total.
+- **files:** `apps/game/src/battleLogic.ts`
+- **evidence:** battleLogic.ts applyVictoryRewards lines 1252-1264: nextState.party.map(member => applyExperienceToCombatant(member, expGained, ...)) — the full expGained total is applied to EACH living member with no division. With the Act-1 duo this doubles effective exp income vs the tuned EB pacing; with a 4-hero party it quadruples it.
+- **EB parity note:** EB divides total battle EXP evenly among conscious party members (why solo-Ness Magicant levels so fast). Confidence: medium-high — consistent strong memory plus the Magicant design corollary; not verifiable from local CoilSnake data. Note the repo's act1 balance work was tuned against current behavior, so fixing this needs a rebalance pass.
+- **recommendation:** Divide expGained by the count of conscious members before applyExperienceToCombatant (floor per EB), then re-run scripts/act1.mjs balance verification.
+
+#### F78 · Encounter swirl is a rainbow hue-cycling spiral with no green/red advantage color signaling
+
+- **status:** DIVERGES · **severity:** medium · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/transitions.ts`, `apps/game/src/chunkedWorldScene.ts`, `apps/game/src/battleScene.ts`
+- **evidence:** transitions.ts drawSwirl (lines 62-145) computes band color from hue = segment/bands + arm/arms + clockMs/700 (line 105) — pure rainbow cycling. Neither SwirlDrawOptions nor any call site (chunkedWorldScene.beginEncounterSwirl line 4904, battleScene.renderEnterSwirl line 1704) passes the encounter advantage, even though touchAdvantage (overworldEnemies.ts:73-88) correctly computes partyFirstStrike/enemyFirstStrike/normal and feeds battleRound. The player gets no pre-battle signal they were ambushed.
+- **EB parity note:** EB swirls are solid-colored spirals keyed to advantage: green for normal and player first-strike, red when the enemy catches you (enemy first strike); the ROM even ships them as distinct Swirls assets (external/coilsnake-full/Swirls exists locally). Confidence: high (strong memory + local Swirls directory).
+- **recommendation:** Thread the resolved EncounterAdvantage into drawSwirl and tint the band palette green vs red (keep the animation), matching EB's signal.
+
+#### F79 · Diagonal movement renders cardinal facing only and moves at normalized (0.707/axis) speed; EB uses 8-direction sprites and full per-axis speed
+
+- **status:** DIVERGES · **severity:** medium · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/playerController.ts`
+- **evidence:** playerController.ts header (lines 17-18): 'The runtime renders cardinal facings only; diagonal movement resolves to a cardinal facing' — even though the decoded CoilSnake sheets contain the diagonal walk frames (lines 13-16: frames 8-15 = NE/SE/SW/NW). stepPlayer line 168: scale = SQRT1_2 on diagonals, so diagonal speed equals cardinal speed (in-engine measured 112px/s cardinal). resolveFacing (121-140) snaps diagonals to a cardinal.
+- **EB parity note:** EB is an 8-direction game: walking diagonally shows the dedicated diagonal walk sprites (the very frames these sheets carry), and movement is full speed on each axis so diagonal travel is ~1.41x — a staple EB speedrun tech. Sprite-facing confidence: high (the frames are decoded from EB's own sprite groups). Diagonal-speed confidence: medium (speedrun-community memory, not locally verifiable).
+- **recommendation:** Add diagonal facings to the facing/anim state machine using frames 8-15 (fallback to cardinal for override skins lacking diagonals), and drop the SQRT1_2 normalization for the player.
+
+#### F80 · No inventory capacity: give() and shop buying push unbounded items (EB caps at 14 slots/character incl. equipment)
+
+- **status:** MISSING · **severity:** medium · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/partyState.ts`, `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** partyState.ts give (lines 303-308) is an unconditional push; buyItem checks only money; handleShopBuyAction (chunkedWorldScene.ts:2799+) has no capacity refusal; rg for capacity/full-inventory checks finds none. Escargo Express storage exists (menuModel PHONE_STORAGE_*), so the overflow-relief system is built while the constraint that motivates it is absent.
+- **EB parity note:** EB: each character carries 14 item slots, equipped gear occupies slots, shops refuse with a 'you can't carry any more' message, drops are forfeited when full. Confidence: high (well-documented EB inventory model).
+- **recommendation:** Enforce a 14-slot cap in give()/buyItem/battle drops with an EB-style refusal message; count equipped items against it.
+
+#### F81 · Enemy assist/status battle actions: only 4 of ~318 EB battle actions have authored effects; the rest of the assist-type actions silently no-op
+
+- **status:** ROUGH · **severity:** medium · **class:** fix-candidate · **confidence:** high
+- **verdict:** unverified
+- **files:** `content/enemy-action-effects.json`, `apps/game/src/battleLogic.ts`
+- **evidence:** content/enemy-action-effects.json byActionId has exactly 4 entries (Lifeup alpha 32, Defense down alpha 50, PSI Magnet alpha 54, poison bite 242). battleLogic.ts resolveEnemyActionTurn line ~916: effectKind 'assist' with no authored effect (and kind 'unknown'/'statusStub') resolves with targets: [] and amount 0 — the enemy announces a move that does nothing. Local ground truth external/coilsnake-full/battle_action_table.yml has 318 actions, many of them enemy heals/shields/status attacks used throughout Act 1+ (heal narration was just fixed in commit b40d77f, confirming this layer is active).
+- **EB parity note:** EB drives every enemy turn from the battle action table: Lifeup beta/gamma, PSI Shield, Hypnosis, paralysis, fire/freeze, stat debuffs etc. all have real effects. Confidence: high (local battle_action_table.yml + std EB behavior).
+- **recommendation:** Grind the action table: map the remaining assist/status action ids used by Act-1 enemy rosters first (cross-reference enemy Actions in enemy_configuration_table), reusing the existing effect kinds (healHp/buffStat/inflictStatus/drainPp already work).
+
+#### F82 · Interior camera zooms up to 3.5x (variable, non-integer) — EB never changes pixel scale
+
+- **status:** DIVERGES · **severity:** medium · **class:** needs-creative-call · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** updateCameraRoomBounds (lines 1230-1243): fillZoom = max(OVERWORLD_CAMERA_ZOOM, camera.width/room.width, camera.height/room.height), capped at INTERIOR_CAMera_MAX_ZOOM 3.5 — small rooms render at arbitrary non-integer zooms (e.g. 2.56x), changing sprite pixel density room-to-room and causing pixel shimmer at the native 512x448 viewport. Overworld is exactly 2x (256x224 world px = SNES native, correct).
+- **EB parity note:** EB renders everything at a fixed 1x SNES scale; rooms smaller than the screen show surrounding black with the camera clamped — no zoom hardware exists. Confidence: high. The zoom here solves a real problem EB didn't have (masked interior edges revealing void), so this is a design tradeoff, not an oversight.
+- **recommendation:** Creative call: either accept the zoom as Swagbound presentation, or restore fixed 2x + centered room with letterboxed black fill (EB-faithful). If kept, consider snapping to integer zoom steps to kill shimmer.
+
+#### F83 · X-cancel skip-to-end works on ALL dialogue including one-shot scripted beats — EB has no dialogue cancel at all
+
+- **status:** DIVERGES · **severity:** low · **class:** needs-creative-call · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** closeDialogue (lines 5332-5351) implements cancel as skip-to-end: aborts the event sequence but fires pendingScriptedDialogueComplete. Probe-verified: pressing X on the opening cold-signal beat closed it AND set completion flags signal:cold-signal-seen + cutscene:signal-town-cold-signal-open — no stranded state. The UI advertises it ('Z: advance | X: close', line 2574).
+- **EB parity note:** EB has no dialogue-cancel input; B only toggles faster text printing — every scripted beat must be read through. Confidence: high (strong memory). The current implementation is SAFE parity-wise (effects fire), so the open question is purely whether authored story beats should be skippable.
+- **recommendation:** Keep skip-to-end for replays/dev, but consider marking key one-shot story beats unskippable (a per-trigger 'unskippable' flag) so first-run players can't accidentally X through Act-1 narrative.
+
+#### F84 · Unflagged non-EB conveniences: P-key save-anywhere and the always-visible helper prompt bar
+
+- **status:** DIVERGES · **severity:** low · **class:** needs-creative-call · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/chunkedWorldScene.ts`, `apps/game/src/uiScene.ts`
+- **evidence:** (a) chunkedWorldScene.ts:777 binds keydown-P → handleSaveKey → saveGame(false): silent save anywhere, anytime — undermines the Dad-phone save loop that IS correctly implemented (handlePhoneServiceAction 'dad' → save, line 2937). (b) updatePrompt (lines 2569-2582) + uiScene promptText keep a persistent instruction line on screen ('Z: talk to NAME', 'Move: Arrows/WASD...'); neither is on the approved intentional-divergence list (the vitals HUD is, this prompt bar is not).
+- **EB parity note:** EB saves ONLY by phoning Dad and has zero persistent screen furniture beyond the game world. Confidence: high. Both are QoL/dev additions nobody flagged.
+- **recommendation:** Decide: gate the P-save behind dev builds (import.meta.env.DEV like F1/F2 already are, line 785), and decide whether the prompt bar is tutorial-only (e.g. fade out after first N interactions) or part of the clean-UI language.
+
+#### F85 · Phone system lacks the EB Dad/Mom mechanics: no homesickness, no Dad level-progress commentary
+
+- **status:** MISSING · **severity:** low · **class:** needs-creative-call · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** handlePhoneServiceAction (lines 2936-2950): 'mom' → static 'Mom says you're doing great.'; 'dad' → save with 'Dad saved your game.' — no exp/level recap, no homesickness cure hook. No homesickness status exists anywhere (statusEffects.ts model: poisoned/paralyzed/asleep/confused/shielded only).
+- **EB parity note:** EB: Ness periodically becomes Homesick (battle turns lost to daydreaming) and calling Mom cures it; Dad recaps exp gained and needed-to-next-level when you call to save. Confidence: high on both mechanics (well-documented). Whether solo Bosch should inherit homesickness is a Swagbound voice/design call.
+- **recommendation:** At minimum give Dad the exp-recap lines (data is available in partyState). Homesickness is a creative call — it is very Ness-specific flavor that could translate well to the Bosch 'public version' arc.
+
+#### F86 · Minor field/battle presentation trivia (grouped): ATM fixed denominations vs EB digit entry; battle command grid order differs from EB; hotel/hospital lack EB presentation beats; victory money line phrasing
+
+- **status:** ROUGH · **severity:** low · **class:** fix-candidate · **confidence:** medium
+- **verdict:** unverified
+- **files:** `apps/game/src/menuModel.ts`, `apps/game/src/battleScene.ts`, `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** (a) menuModel.ts:331 ATM_AMOUNT_OPTIONS=[10,50,100,500,1000] fixed rows — EB prompts free digit entry for deposit/withdraw amounts (confidence high). (b) Battle grid is BASH/GOODS/AUTO over PSI/DEFEND/RUN — EB's is Bash/PSI/Goods over Auto Fight/Defend/Run Away (confidence medium; the LOOK is intentionally custom but slot order was aiming at EB structure). (c) Hotel/hospital resolve instantly via Yes/No menu with 'Done.'-style text (handleAtm/hotel actions ~line 2795+) — EB hotels fade to black with a jingle and 'Good morning' beat (confidence high). (d) Victory tally rolls EXP and money as odometers — EB prints them as text pages; rolling meters are HP/PP-only in EB (confidence medium). Sell-at-half-price (partyState.ts:1064) and pause-menu 6-item structure (menuModel.ts:341) were checked and MATCH EB.
+- **EB parity note:** Each item states EB behavior + confidence inline above; none is locally verifiable from CoilSnake data (engine/UI behaviors), all from strong-to-medium memory.
+- **recommendation:** Cheap wins in one pass: add an amount-entry row to the ATM, swap AUTO/PSI grid slots, add a hotel fade+jingle beat. Odometer tally is arguably a nice Swagbound flourish — flag to Nick rather than auto-fix.
+
+#### F87 · CONFIRMED parity wins on this branch (positive verification): formation amounts, duplicate lettering, text blips, turn-to-face, mortal-wound rolling HP, enemy dissolve, sold-out shops, field poison, static enemy sprites, single walk speed, native viewport
+
+- **status:** EXISTS · **severity:** low · **class:** intentional-divergence · **confidence:** high
+- **verdict:** unverified
+- **files:** `apps/game/src/battleLogic.ts`, `apps/game/src/transitions.ts`, `apps/game/src/rollingMeter.ts`, `apps/game/src/chunkedWorldScene.ts`
+- **evidence:** Verified as EB-correct: formation entries match external/coilsnake-full/enemy_groups.yml exactly (spot-checked groups 0={3x159}, 27={2x123,1x29}, 30={4x5}, 32={2x7}; 154/405 groups have amount>1); duplicate enemies lettered 'Name A/B' (battleLogic.ts:1759-1781, matches EB's letter-suffix format, confidence high); per-character text blips exist and throttle on whitespace (transitionSfx.textBlip + tickDialogueBlip line 1296); NPCs turn to face the player on talk and restore facing after (pauseNpcForDialogue); mortal-wound rolling-HP rescue window implemented (rollingMeter.survivesFatalBlowWindow + settlePendingPartyMortalWounds, probe showed hpDisplayed/hpTarget/isRolling live); enemies flash+dissolve on defeat (enemyDefeatVisualState, battleScene 2976-3023); SOLD OUT rows (menuModel:551-560); field poison step drain (applyFieldPoisonForStep:3139); enemy battle sprites static (no bob/breath code); one walk speed, no run button (PLAYER_SPEED=110, measured 112px/s live); overworld camera = exact 256x224 SNES window at 2x; sell price = floor(cost/2) matches EB; Dad-phone save matches EB; touch advantage front/behind semantics match EB.
+- **EB parity note:** This is the referee's confirmation list so later audits don't re-flag these; classification field is inapplicable (these conform to EB or to already-approved divergences).
+- **recommendation:** No action. Keep this list as regression-check anchors for future parity sweeps.
+
+---
+
+# Fix status (as of commit 3997d9c on fix/audit-sweep)
+
+- **FIXED — Track A (a171ae5):** F01, F02 (X-cancel skip-to-end), F13 (equip compounding), F24 (generated drift), F25 (silent loader), F31 (follower sprite).
+- **FIXED — Track B (52fa14a + b40d77f):** F42 (formation amounts + A/B lettering), F43 (action direction / ally heals), F44+F15 (enemy status/PSI effects — Coil Snake poison verified live), heal-narration recipient fix.
+- **FIXED — map burst (a849aa0):** F59-map rects (7 warp-landing rects removed, generator door cross-check added), F60-dead-door (cave hole destination patched to EB warp landing; converter root-fix deferred).
+- **IN FLIGHT — Track C (Codex):** F18, F16, F17, F46 (EXP split — will patch to ceiling division per verifier), F48, F49, F34, F14, F03, F19.
+- **QUEUED — Track D (animations):** F32, F33, F38, F08, F37 (stretch).
+- **QUEUED — Track E (economy/progression, from round 2):** shops event-merge (critical), service keys for mined NPCs (hotels 256/483/890/1020/1124, ATM 1375), game-over flow (critical), Dad→ATM winnings routing.
