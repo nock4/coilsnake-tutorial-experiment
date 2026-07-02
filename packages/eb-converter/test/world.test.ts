@@ -25,7 +25,7 @@ import {
   parseYamlInteger,
   placementToWorldPixel
 } from "../src/coilsnakeYaml";
-import { chooseRegion, encodeCollisionRows, findSpawn, spriteGroupAnimations, TILE_SIZE } from "../src/world";
+import { chooseRegion, composeRegion, encodeCollisionRows, findSpawn, spriteGroupAnimations, FULL_CHUNK_SIZE_TILES, TILE_SIZE } from "../src/world";
 import { decodePngRgba, encodePngRgba, readPngHeader, type PngRgba } from "../src/png";
 import {
   EB_ROM_SIZE_BYTES,
@@ -306,6 +306,45 @@ describe("region selection and collision encoding", () => {
     const withVoid = encodeCollisionRows(surface, 4, 1, voidSolid);
     expect(withVoid.solidRows).toEqual(["1100"]);
     expect(withVoid.solidCells).toBe(2);
+  });
+
+  it("promotes bottom-row foreground occluders using the south chunk's top row solidity", () => {
+    const tileset = parseFts(syntheticFts());
+    const graphics = { tileset, palettes: new Map([[0, tileset.palettes[0]]]) };
+    const sector = {
+      tileset: 0,
+      palette: 0,
+      music: "0",
+      setting: "none",
+      townMap: "none",
+      item: "0",
+      areaId: 0,
+      indoor: false,
+      bounded: false
+    };
+    const bottomForegroundPixel = (southArrangementIndex: number): number[] => {
+      const mapRows = Array.from({ length: FULL_CHUNK_SIZE_TILES * 2 }, () =>
+        Array.from({ length: FULL_CHUNK_SIZE_TILES }, () => 1)
+      );
+      mapRows[FULL_CHUNK_SIZE_TILES - 1][0] = 2; // solid occluder candidate on chunk bottom row
+      mapRows[FULL_CHUNK_SIZE_TILES][0] = southArrangementIndex;
+      const composed = composeRegion({
+        bounds: {
+          originTileX: 0,
+          originTileY: 0,
+          widthTiles: FULL_CHUNK_SIZE_TILES,
+          heightTiles: FULL_CHUNK_SIZE_TILES
+        },
+        mapRows,
+        sectorLookup: () => sector,
+        tilesetForMapTileset: () => graphics
+      });
+      const offset = (((FULL_CHUNK_SIZE_TILES - 1) * TILE_SIZE) * composed.widthPixels) * 4;
+      return [...composed.foreground.slice(offset, offset + 4)];
+    };
+
+    expect(bottomForegroundPixel(2)).toEqual([255, 0, 0, 255]);
+    expect(bottomForegroundPixel(1)).toEqual([0, 0, 0, 0]);
   });
 
   it("maps CoilSnake sprite-group frames to per-direction walk pairs", () => {

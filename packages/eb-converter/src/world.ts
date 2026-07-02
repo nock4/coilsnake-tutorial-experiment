@@ -17,7 +17,17 @@ import {
   type WorldRegion,
   type TileOverrides
 } from "@eb/schemas";
-import { parseFts, drawArrangement, decodeArrangementCell, isBlankArrangement, isSolidSurface, isOccluderTile, type FtsTileset, type FtsPalette } from "./fts";
+import {
+  FTS_CELLS_PER_ARRANGEMENT,
+  parseFts,
+  drawArrangement,
+  decodeArrangementCell,
+  isBlankArrangement,
+  isSolidSurface,
+  isOccluderTile,
+  type FtsTileset,
+  type FtsPalette
+} from "./fts";
 import {
   DOOR_WARP_UNIT_PX,
   doorTriggerToWorldPixel,
@@ -167,6 +177,17 @@ function drawTileOverrideImage(options: {
   }
 }
 
+function countSolidArrangementCells(tileset: FtsTileset, arrangementIndex: number): number {
+  const cellBase = arrangementIndex * FTS_CELLS_PER_ARRANGEMENT;
+  let count = 0;
+  for (let cell = 0; cell < FTS_CELLS_PER_ARRANGEMENT; cell += 1) {
+    if (isSolidSurface(tileset.collisions[cellBase + cell])) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 /**
  * Composes the region background/foreground RGBA buffers and the surface grid
  * from parsed map rows, per-sector tileset/palette info, and parsed tilesets.
@@ -197,6 +218,7 @@ export function composeRegion(options: {
   // Solid-cell count (0..16) per map tile, used after the pass below to decide
   // which solid tiles occlude actors (see isOccluderTile).
   const tileSolidCount = new Int16Array(bounds.widthTiles * bounds.heightTiles);
+  const southTileSolidCount = new Int16Array(bounds.widthTiles);
   type ForegroundTile = {
     tx: number;
     ty: number;
@@ -291,14 +313,40 @@ export function composeRegion(options: {
     }
   }
 
+  const solidCountForMapTile = (mapX: number, mapY: number): number => {
+    const arrangementIndex = mapRows[mapY]?.[mapX];
+    if (arrangementIndex === undefined || Number.isNaN(arrangementIndex)) {
+      return 0;
+    }
+    const sectorCol = Math.floor(mapX / SECTOR_WIDTH_TILES);
+    const sectorRow = Math.floor(mapY / SECTOR_HEIGHT_TILES);
+    const sector = sectorLookup(sectorCol, sectorRow);
+    if (!sector) {
+      return 0;
+    }
+    const graphics = tilesetForMapTileset(sector.tileset);
+    if (!graphics) {
+      return 0;
+    }
+    return countSolidArrangementCells(graphics.tileset, arrangementIndex);
+  };
+  const southMapY = bounds.originTileY + bounds.heightTiles;
+  if (mapRows[southMapY]) {
+    for (let tx = 0; tx < bounds.widthTiles; tx += 1) {
+      southTileSolidCount[tx] = solidCountForMapTile(bounds.originTileX + tx, southMapY);
+    }
+  }
+
   // Second pass: draw the above-actor foreground. A solid tile is promoted only
   // when the tile directly below is also solid (isOccluderTile) — the front face
   // the player overlaps stays in the background so the player draws over it.
   // Priority-bit cells always go to the foreground.
   const solidCountAt = (tx: number, ty: number): number =>
-    tx < 0 || ty < 0 || tx >= bounds.widthTiles || ty >= bounds.heightTiles
+    tx < 0 || ty < 0 || tx >= bounds.widthTiles || ty > bounds.heightTiles
       ? 0
-      : tileSolidCount[ty * bounds.widthTiles + tx];
+      : ty === bounds.heightTiles
+        ? southTileSolidCount[tx]
+        : tileSolidCount[ty * bounds.widthTiles + tx];
   for (const tile of foregroundTiles) {
     const occluder = isOccluderTile(solidCountAt(tile.tx, tile.ty), solidCountAt(tile.tx, tile.ty + 1));
     const cellInForeground = (cellX: number, cellY: number): boolean => {

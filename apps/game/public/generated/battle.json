@@ -6,7 +6,6 @@
     "townMap": "onett",
     "mapEnemyGroupIds": [],
     "battleGroupIds": [
-      0,
       1,
       2,
       3,
@@ -8048,20 +8047,6 @@
     }
   ],
   "groups": [
-    {
-      "id": 0,
-      "background1": 0,
-      "background2": 0,
-      "enemyIds": [
-        159
-      ],
-      "entries": [
-        {
-          "id": 159,
-          "amount": 3
-        }
-      ]
-    },
     {
       "id": 1,
       "background1": 262,
@@ -17116,7 +17101,7 @@
   ],
   "counts": {
     "enemies": 143,
-    "groups": 405,
+    "groups": 404,
     "spriteFiles": 143,
     "backgroundFiles": 200
   },
