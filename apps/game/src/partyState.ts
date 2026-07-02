@@ -221,7 +221,7 @@ export type ItemMoveResult =
       fromChar?: number;
       toChar?: number;
       fromSlot: number;
-      reason: "missingItem" | "sameTarget";
+      reason: "missingItem" | "sameTarget" | "targetFull";
     };
 
 export type ShopBuyResult =
@@ -238,7 +238,7 @@ export type ShopBuyResult =
       char: number;
       itemId: number;
       cost: number;
-      reason: "insufficientFunds";
+      reason: "insufficientFunds" | "inventoryFull";
     };
 
 export type ShopSellResult =
@@ -261,6 +261,8 @@ export type ShopSellResult =
 const HP_RATE_PER_SEC = 36;
 const ITEM_DISAPPEARS_FLAG = "item disappears when used";
 const EQUIPMENT_SLOTS: EquipmentSlot[] = ["weapon", "body", "arms", "other"];
+/** EB caps each character at 14 carried items; equipped gear stays in the list, so a length cap matches. */
+export const INVENTORY_CAPACITY = 14;
 
 const FIELD_STAT_ACTIONS = {
   healHpPercent: new Set([0x00, 0x1e00]),
@@ -322,11 +324,19 @@ export class PartyState {
     return [...this.partyIds].sort((a, b) => a - b);
   }
 
-  give(char: number, item: number): void {
+  give(char: number, item: number): boolean {
     const normalizedChar = normalizeId(char);
     const items = this.inventoryByChar.get(normalizedChar) ?? [];
+    if (items.length >= INVENTORY_CAPACITY) {
+      return false;
+    }
     items.push(normalizeId(item));
     this.inventoryByChar.set(normalizedChar, items);
+    return true;
+  }
+
+  inventoryRoom(char: number): number {
+    return Math.max(0, INVENTORY_CAPACITY - (this.inventoryByChar.get(normalizeId(char)) ?? []).length);
   }
 
   take(char: number, item: number): boolean {
@@ -376,6 +386,9 @@ export class PartyState {
     if (fromChar === toChar) {
       return { ok: false, itemId, fromChar, toChar, fromSlot, reason: "sameTarget" };
     }
+    if (this.inventoryRoom(toChar) <= 0) {
+      return { ok: false, itemId, fromChar, toChar, fromSlot, reason: "targetFull" };
+    }
     if (!this.takeFromSlot(fromChar, fromSlot, itemId)) {
       return { ok: false, itemId, fromChar, toChar, fromSlot, reason: "missingItem" };
     }
@@ -410,6 +423,9 @@ export class PartyState {
     const toChar = normalizeId(char);
     const itemId = normalizeId(item);
     const fromSlot = stat(storageSlot);
+    if (this.inventoryRoom(toChar) <= 0) {
+      return { ok: false, itemId, toChar, fromSlot, reason: "targetFull" };
+    }
     if (this.storageItems[fromSlot] !== itemId) {
       return { ok: false, itemId, toChar, fromSlot, reason: "missingItem" };
     }
@@ -619,6 +635,9 @@ export class PartyState {
     const previousWallet = this.walletValue;
     if (previousWallet < cost) {
       return { ok: false, char: normalizedChar, itemId, cost, reason: "insufficientFunds" };
+    }
+    if (this.inventoryRoom(normalizedChar) <= 0) {
+      return { ok: false, char: normalizedChar, itemId, cost, reason: "inventoryFull" };
     }
     this.walletValue = previousWallet - cost;
     this.give(normalizedChar, itemId);

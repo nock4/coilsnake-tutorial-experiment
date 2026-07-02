@@ -53,6 +53,51 @@ describe("PartyState battle round-trips", () => {
   });
 });
 
+describe("PartyState inventory capacity (EB 14-slot cap)", () => {
+  function fullInventoryState(): PartyState {
+    const partyState = new PartyState();
+    partyState.restore({
+      wallet: 500,
+      partyIds: [1, 2],
+      inventory: [
+        { charId: 1, itemIds: Array.from({ length: 14 }, (_, i) => 100 + i) },
+        { charId: 2, itemIds: [50] }
+      ],
+      equipped: []
+    });
+    return partyState;
+  }
+
+  it("refuses give at 14 items and reports remaining room", () => {
+    const partyState = fullInventoryState();
+    expect(partyState.inventoryRoom(1)).toBe(0);
+    expect(partyState.give(1, 200)).toBe(false);
+    expect(partyState.inventory(1)).toHaveLength(14);
+    expect(partyState.inventoryRoom(2)).toBe(13);
+    expect(partyState.give(2, 200)).toBe(true);
+  });
+
+  it("refuses buying into a full bag without charging", () => {
+    const partyState = fullInventoryState();
+    const result = partyState.buyItem(1, { id: 17, cost: 100 });
+    expect(result).toMatchObject({ ok: false, reason: "inventoryFull" });
+    expect(partyState.wallet).toBe(500);
+    expect(partyState.inventory(1)).toHaveLength(14);
+  });
+
+  it("refuses transferring or withdrawing to a full member without moving the item", () => {
+    const partyState = fullInventoryState();
+    const transfer = partyState.transferItem(2, 1, 0, 50);
+    expect(transfer).toMatchObject({ ok: false, reason: "targetFull" });
+    expect(partyState.inventory(2)).toEqual([50]);
+
+    partyState.depositStoredItem(2, 0, 50);
+    const withdraw = partyState.withdrawStoredItem(1, 0, 50);
+    expect(withdraw).toMatchObject({ ok: false, reason: "targetFull" });
+    expect(partyState.storage()).toEqual([50]);
+  });
+});
+
 describe("PartyState field statuses", () => {
   it("drains poisoned active party members on field steps without killing them", () => {
     const partyState = poisonedPartyState(3);

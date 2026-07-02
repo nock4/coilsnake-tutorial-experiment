@@ -23,6 +23,7 @@ import {
   applyUseEffectToVitals,
   decodeItemUseEffect,
   itemEffectTargetSide,
+  INVENTORY_CAPACITY,
   type ItemUseEffect,
   type PartyVitals
 } from "./partyState";
@@ -1336,8 +1337,12 @@ export function applyVictoryRewards(
     if (roll >= dropChance(rarity)) {
       continue;
     }
-    const recipientIndex = firstLivingIndex(nextState.party);
-    const recipient = recipientIndex >= 0 ? nextState.party[recipientIndex] : nextState.party[0];
+    // First living member with bag room takes the drop (EB 14-slot cap);
+    // if every bag is full, the drop is left behind.
+    const recipientIndex = nextState.party.findIndex(
+      (member) => isCombatantAlive(member) && member.inventory.length < INVENTORY_CAPACITY
+    );
+    const recipient = recipientIndex >= 0 ? nextState.party[recipientIndex] : undefined;
     if (!recipient) {
       continue;
     }
@@ -1345,7 +1350,7 @@ export function applyVictoryRewards(
       ...recipient,
       inventory: [...recipient.inventory, itemId]
     };
-    nextState = withCombatant(nextState, { side: "party", index: recipientIndex >= 0 ? recipientIndex : 0 }, updatedRecipient);
+    nextState = withCombatant(nextState, { side: "party", index: recipientIndex }, updatedRecipient);
     drops.push({
       enemyId: enemy.charId,
       itemId,

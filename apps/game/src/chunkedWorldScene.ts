@@ -2817,7 +2817,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
     const result = this.partyState.buyItem(action.char, item);
     if (!result.ok) {
-      this.showMenuResult("Not enough money.");
+      this.showMenuResult(result.reason === "inventoryFull" ? "No room to carry it." : "Not enough money.");
       return;
     }
     const inventorySlot = Math.max(0, this.partyState.inventory(action.char).length - 1);
@@ -2889,7 +2889,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
       action.inventorySlot,
       action.itemId
     );
-    this.showMenuResult(result.ok ? "Gave." : "You can't give that.");
+    this.showMenuResult(result.ok
+      ? "Gave."
+      : result.reason === "targetFull" ? "They can't carry any more." : "You can't give that.");
   }
 
   private handleItemDropAction(action: Extract<MenuAction, { kind: "itemDrop" }>): void {
@@ -2973,8 +2975,9 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private handleStorageWithdrawAction(action: Extract<MenuAction, { kind: "storageWithdraw" }>): void {
     const result = this.partyState.withdrawStoredItem(action.char, action.storageSlot, action.itemId);
     if (!result.ok) {
-      this.recordServiceResult("phone", "Escargo couldn't find that.");
-      this.showMenuResult("Escargo couldn't find that.");
+      const message = result.reason === "targetFull" ? "You can't carry any more." : "Escargo couldn't find that.";
+      this.recordServiceResult("phone", message);
+      this.showMenuResult(message);
       return;
     }
     this.recordServiceResult("phone", "Delivered.");
@@ -3481,7 +3484,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return;
     }
     const action = overworldInteractableEvents(entry, this.gameFlags, {
-      itemName: (itemId) => this.itemName(itemId, this.itemById(itemId))
+      itemName: (itemId) => this.itemName(itemId, this.itemById(itemId)),
+      hasRoom: (char) => this.partyState.inventoryRoom(char) > 0
     });
     if (action.events.length === 0) {
       return;

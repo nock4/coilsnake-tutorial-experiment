@@ -316,7 +316,10 @@ export class RuntimeEventHost implements EventExecutorHost {
     if (this.skipUnsupported({ kind: "give", char, item })) {
       return;
     }
-    this.options.partyState.give(char, item);
+    if (!this.options.partyState.give(char, item)) {
+      // Inventory full (EB 14-slot cap) — the give is refused, not queued.
+      console.warn(`[eventHost] give(${char}, ${item}) refused: inventory full`);
+    }
   }
 
   take(char: number, item: number): void {
