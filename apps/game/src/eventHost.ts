@@ -104,6 +104,7 @@ export type RuntimeEventHostOptions = {
   openShop?: (storeId: number) => boolean | void;
   openAtm?: () => boolean | void;
   actorMove?: (effect: Extract<EventEffect, { kind: "actorMove" }>) => boolean | void;
+  onPartyChange?: (op: "add" | "remove", char: number, partyIds: number[]) => void;
   music?: EventMusicSink;
   resolveMusicCueForTrack?: (track: number) => string | undefined;
   isEffectSupported?: (effect: EventEffect) => boolean;
@@ -348,7 +349,12 @@ export class RuntimeEventHost implements EventExecutorHost {
     if (this.skipUnsupported({ kind: "party", op, char })) {
       return;
     }
+    const before = this.options.partyState.party().join(",");
     this.options.partyState.partyOp(op, char);
+    const partyIds = this.options.partyState.party();
+    if (partyIds.join(",") !== before) {
+      this.options.onPartyChange?.(op, char, partyIds);
+    }
   }
 
   warp(dest: number): void {

@@ -924,7 +924,7 @@ export const CutsceneStepSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("clearFlag"), flag: z.string().min(1) }).strict(),
   /** Set/unset a numeric EarthBound event flag (e.g. to persistently hide NPCs whose showSprite keys on it). */
   z.object({ op: z.literal("eventFlag"), flag: z.number().int().nonnegative(), set: z.boolean() }).strict(),
-  z.object({ op: z.literal("sound"), id: z.number().int().nonnegative() }).strict(),
+  z.object({ op: z.literal("sound"), id: z.union([z.number().int().nonnegative(), z.string().min(1)]) }).strict(),
   z.object({ op: z.literal("warp"), to: CutscenePointSchema }).strict()
 ]);
 export type CutsceneStep = z.infer<typeof CutsceneStepSchema>;

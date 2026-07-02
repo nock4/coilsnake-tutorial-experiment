@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { isNpcVisibleForEventFlags, type ItemData, type SpriteSheet, type WorldNpc, type WorldRegion } from "@eb/schemas";
+import { type ItemData, type SpriteSheet, type WorldNpc, type WorldRegion } from "@eb/schemas";
 import {
   buildDialogueForReference,
   buildInlineDialoguePages,
@@ -14,6 +14,7 @@ import { interactionEvents, type GameEvent } from "./eventRunner";
 import { RuntimeEventHost, RuntimeEventSequence, type EventWarpDestination } from "./eventHost";
 import { GameFlags } from "./gameFlags";
 import { behaviorForNpc } from "./npcBehaviors";
+import { isNpcVisibleForRuntimeFlags } from "./npcVisibility";
 import {
   createNpcState,
   facingToward,
@@ -251,8 +252,8 @@ export class WorldScene extends Phaser.Scene {
     return CANONICAL_DIRECTION_FRAMES;
   }
 
-  private isNpcVisible(npc: Pick<WorldNpc, "showSprite" | "eventFlag">): boolean {
-    return isNpcVisibleForEventFlags(npc.showSprite, npc.eventFlag, this.gameFlags);
+  private isNpcVisible(npc: Pick<WorldNpc, "npcId" | "showSprite" | "eventFlag">): boolean {
+    return isNpcVisibleForRuntimeFlags(npc, this.gameFlags);
   }
 
   private createNpcRuntime(npc: WorldNpc): NpcRuntime {

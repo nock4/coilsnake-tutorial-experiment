@@ -74,16 +74,13 @@ import {
 import { applyDefeatReturn, type BattleReturnContext, type BattleReturnOutcome } from "./battleReturn";
 import {
   DEFAULT_DAMAGE_FLASH_MS,
-  DEFAULT_ENEMY_WOBBLE_AMP_PX,
-  DEFAULT_ENEMY_WOBBLE_PERIOD_MS,
   attackerLungeOffset,
   flashOverlayState,
   flashState,
   hitSparkState,
   psiElementFlashProfile,
   screenShakeOffset,
-  type EffectDirection,
-  wobbleOffset
+  type EffectDirection
 } from "./battleEffects";
 import { publishBattleDebug, type BattlePhase, type BattleTransitionPhase } from "./state";
 import {
@@ -3198,9 +3195,7 @@ export class BattleScene extends Phaser.Scene {
     return {
       flashActive: flash.active,
       flashIntensity: roundTo(flash.intensity, 2),
-      wobble: alive
-        ? integerOffset(wobbleOffset(now, index, DEFAULT_ENEMY_WOBBLE_AMP_PX, DEFAULT_ENEMY_WOBBLE_PERIOD_MS))
-        : { dx: 0, dy: 0 }
+      wobble: { dx: 0, dy: 0 }
     };
   }
 

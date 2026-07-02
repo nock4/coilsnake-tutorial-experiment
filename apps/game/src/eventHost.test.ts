@@ -192,6 +192,28 @@ describe("RuntimeEventHost actorMove effects", () => {
   });
 });
 
+describe("RuntimeEventHost party effects", () => {
+  it("notifies when party composition changes", () => {
+    const partyState = new PartyState();
+    const changes: Array<{ op: "add" | "remove"; char: number; partyIds: number[] }> = [];
+    const host = new RuntimeEventHost({
+      dialogue: new DialogueController(),
+      flags: new GameFlags(),
+      partyState,
+      onPartyChange: (op, char, partyIds) => changes.push({ op, char, partyIds })
+    });
+
+    host.party("add", 2);
+    host.party("add", 2);
+    host.party("remove", 2);
+
+    expect(changes).toEqual([
+      { op: "add", char: 2, partyIds: [2] },
+      { op: "remove", char: 2, partyIds: [] }
+    ]);
+  });
+});
+
 function damagedPartyState(): PartyState {
   const partyState = new PartyState();
   partyState.restore({

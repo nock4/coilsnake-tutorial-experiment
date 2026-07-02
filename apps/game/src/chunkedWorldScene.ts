@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { isNpcVisibleForEventFlags, type BattleEnemy, type Cutscene, type DialoguePage, type EventActorMoveSelector, type EventEffect, type ItemData, type OverworldInteractable, type ScriptCollection, type ScriptCommand, type SpriteOverride, type SpriteSheet, type StoryBarrier, type StoryTrigger, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
+import { type BattleEnemy, type Cutscene, type DialoguePage, type EventActorMoveSelector, type EventEffect, type ItemData, type OverworldInteractable, type ScriptCollection, type ScriptCommand, type SpriteOverride, type SpriteSheet, type StoryBarrier, type StoryTrigger, type WorldChunked, type WorldChunkedNpc } from "@eb/schemas";
 import { barrierBlocksPoint, isBarrierActive, isOnce, pointInArea, resolveStoryGateReturn, resolveSuppression, selectActiveBossGates, selectStoryTrigger, triggerFiredFlag } from "./storyTriggers";
 import { CutsceneRunner, type CutsceneFacing, type CutsceneHost } from "./cutsceneRunner";
 import { sectorIndexForTile } from "./encounterLogic";
@@ -90,6 +90,7 @@ import {
 } from "./eventHost";
 import { GameFlags } from "./gameFlags";
 import { behaviorForNpc, interactionEventsHaveServiceEffect } from "./npcBehaviors";
+import { cutsceneNpcHiddenFlag, isNpcVisibleForRuntimeFlags } from "./npcVisibility";
 import {
   createNpcState,
   facingToward,
@@ -248,6 +249,7 @@ import { createTransitionSfx, type InteractionSfxCue, type TransitionSfx } from 
 import { createMusic, musicDisabledBySearch, type Music } from "./audio/music";
 import { getSharedMusic } from "./sharedMusic";
 import { advanceCutsceneActorTowardTarget } from "./cutsceneActorMovement";
+import { cutsceneSoundLabel, resolveCutsceneSfxCue, type CutsceneSoundId, type CutsceneSfxCue } from "./cutsceneSfx";
 import {
   isInteriorMusicSector,
   overworldMusicCueForSector,
@@ -323,6 +325,14 @@ type NpcSpriteOverrideResolution = {
 };
 
 type SortableActor = Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle;
+
+type FollowerRuntime = {
+  joinOrder: number;
+  sprite: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle;
+  frames: DirectionFrameSequence;
+  pos: { x: number; y: number };
+  walkPhase: number;
+};
 
 type ActiveNpcDialogue = {
   key: string;
@@ -450,11 +460,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
   private playerState!: PlayerState;
   private playerFrames: DirectionFrameSequence = CANONICAL_DIRECTION_FRAMES;
   // 2nd party member (Cloak) trailing the player. Driven by a delayed trail of the player's path.
-  private follower?: Phaser.GameObjects.Sprite | Phaser.GameObjects.Rectangle;
-  private followerFrames: DirectionFrameSequence = CANONICAL_DIRECTION_FRAMES;
+  private followers: FollowerRuntime[] = [];
   private followerTrail: Array<{ x: number; y: number; facing: PlayerState["facing"] }> = [];
-  private followerPos?: { x: number; y: number };
-  private followerWalkPhase = 0;
   private spriteWalkBobClockMs = 0;
   private npcPlacementsByChunk = new Map<string, NpcPlacement[]>();
   private npcRuntimes = new Map<string, NpcRuntime>();
@@ -640,11 +647,10 @@ export class ChunkedWorldScene extends Phaser.Scene {
         frameHeight: playerOverride.frameHeight
       });
     }
-    const followerOverride = spriteOverrideSheet(this.followerSpriteOverride());
-    if (followerOverride) {
-      this.load.spritesheet(FOLLOWER_SPRITE_OVERRIDE_SHEET_KEY, spriteOverrideAssetUrl(followerOverride.image), {
-        frameWidth: followerOverride.frameWidth,
-        frameHeight: followerOverride.frameHeight
+    for (const follower of this.followerSpriteOverrides()) {
+      this.load.spritesheet(this.followerSpriteSheetKey(follower.joinOrder), spriteOverrideAssetUrl(follower.sheet.image), {
+        frameWidth: follower.sheet.frameWidth,
+        frameHeight: follower.sheet.frameHeight
       });
     }
     for (const [npcId, override] of spriteOverrideNpcEntries(this.data_.spriteOverrides)) {
@@ -687,10 +693,12 @@ export class ChunkedWorldScene extends Phaser.Scene {
         this.load.spritesheet(this.playerStateSheetKey(name), spriteOverrideAssetUrl(sheet.image), { frameWidth: sheet.frameWidth, frameHeight: sheet.frameHeight });
       }
     }
-    const followerStates = this.followerSpriteOverride()?.states as StateSheets;
-    for (const [name, sheet] of Object.entries(followerStates ?? {})) {
-      if (sheet) {
-        this.load.spritesheet(this.followerStateSheetKey(name), spriteOverrideAssetUrl(sheet.image), { frameWidth: sheet.frameWidth, frameHeight: sheet.frameHeight });
+    for (const follower of this.followerSpriteOverrides()) {
+      const followerStates = follower.sheet.states as StateSheets;
+      for (const [name, sheet] of Object.entries(followerStates ?? {})) {
+        if (sheet) {
+          this.load.spritesheet(this.followerStateSheetKey(follower.joinOrder, name), spriteOverrideAssetUrl(sheet.image), { frameWidth: sheet.frameWidth, frameHeight: sheet.frameHeight });
+        }
       }
     }
     const overlays = this.data_.spriteOverrides?.overlays as Record<string, { image: string; frameWidth: number; frameHeight: number }> | undefined;
@@ -970,11 +978,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
     this.encounterSwirlGfx = undefined;
     this.player = undefined;
     this.playerFrames = CANONICAL_DIRECTION_FRAMES;
-    this.follower = undefined;
-    this.followerFrames = CANONICAL_DIRECTION_FRAMES;
+    this.destroyFollowers();
     this.followerTrail = [];
-    this.followerPos = undefined;
-    this.followerWalkPhase = 0;
     this.activeNpcDialogue = undefined;
     this.chunkByKey.clear();
     this.npcPlacementsByChunk.clear();
@@ -1604,17 +1609,20 @@ export class ChunkedWorldScene extends Phaser.Scene {
     // e.g. __setPlayerVisualState({ event: "dead" }) or ({ status: { tiny: true } }); call with {} to clear.
     globals.__partyOp = (op: "add" | "remove", charId: number) => {
       this.partyState.partyOp(op, charId);
-      this.partyState.ensureVitalsFor(this.overworldHudPartyMembers());
-      // Respawn the follower so debug party changes are visible immediately.
-      this.spawnFollower({ x: this.playerState.x, y: this.playerState.y }, this.playerState.facing);
+      this.handlePartyCompositionChanged();
       return this.partyState.party();
     };
     globals.__followerInfo = () => ({
-      spawned: Boolean(this.follower),
-      pos: this.followerPos ? { ...this.followerPos } : null,
+      spawned: this.followers.length > 0,
+      pos: this.followers[0]?.pos ? { ...this.followers[0].pos } : null,
+      followers: this.followers.map((follower) => ({
+        joinOrder: follower.joinOrder,
+        pos: { ...follower.pos },
+        textureKey: follower.sprite instanceof Phaser.GameObjects.Sprite ? follower.sprite.texture.key : null
+      })),
       player: { x: this.playerState.x, y: this.playerState.y },
       textureLoaded: this.textures.exists(FOLLOWER_SPRITE_OVERRIDE_SHEET_KEY),
-      overrideConfigured: Boolean(this.followerSpriteOverride())
+      overrideConfigured: this.followerSpriteOverrides().length > 0
     });
     globals.__setPlayerVisualState = (forced?: Partial<VisualStateInputs>) => {
       this.forcedVisualState = forced ?? {};
@@ -1784,7 +1792,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
 
   private applyNpcRoomVisibility(): void {
     for (const npc of this.npcRuntimes.values()) {
-      npc.sprite?.setVisible(this.npcInsideActiveRoom(npc));
+      npc.sprite?.setVisible(this.npcInsideActiveRoom(npc) && this.cutsceneActorVisible(npc.data.npcId));
     }
   }
 
@@ -1918,8 +1926,8 @@ export class ChunkedWorldScene extends Phaser.Scene {
     return resolution ? spriteOverrideDirectionFrames(resolution.override) : this.framesForGroup(spriteGroup);
   }
 
-  private isNpcVisible(npc: Pick<WorldChunkedNpc, "showSprite" | "eventFlag">): boolean {
-    return isNpcVisibleForEventFlags(npc.showSprite, npc.eventFlag, this.gameFlags);
+  private isNpcVisible(npc: Pick<WorldChunkedNpc, "npcId" | "showSprite" | "eventFlag">): boolean {
+    return isNpcVisibleForRuntimeFlags(npc, this.gameFlags);
   }
 
   private spawnActor(
@@ -3631,6 +3639,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       openShop: (storeId) => this.openShopForCurrentMode(storeId),
       openAtm: () => this.openAtmMenu(),
       actorMove: (effect) => this.requestCutsceneActorMove(effect),
+      onPartyChange: () => this.handlePartyCompositionChanged(),
       music: this.music,
       isEffectSupported: (effect) => this.isEventEffectSupportedForCurrentMode(effect),
       onUnsupportedEffect: (effect) => this.warnUnsupportedEventEffect(effect),
@@ -3927,7 +3936,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       setGameFlag: (flag) => this.gameFlags.set(flag),
       clearGameFlag: (flag) => this.gameFlags.unset(flag),
       setEventFlag: (flag, set) => { if (set) { this.gameFlags.setNum(flag); } else { this.gameFlags.unsetNum(flag); } },
-      playSound: () => { /* content SFX cue: no sound sink wired for cutscenes yet */ },
+      playSound: (id) => this.playCutsceneSound(id),
       warp: (to) => this.warpPlayerToWorldPixel(to)
     };
   }
@@ -3943,9 +3952,69 @@ export class ChunkedWorldScene extends Phaser.Scene {
       return; // the player actor is always visible
     }
     this.cutsceneVisibilityOverride.set(normalized.npcId, visible);
+    const hiddenFlag = cutsceneNpcHiddenFlag(normalized.npcId);
+    if (visible) {
+      this.gameFlags.unset(hiddenFlag);
+    } else {
+      this.gameFlags.set(hiddenFlag);
+    }
     const npc = this.npcRuntimeForActor(normalized);
     if (npc) {
       this.syncNpc(npc);
+    }
+  }
+
+  private playCutsceneSound(id: CutsceneSoundId): void {
+    const cue = resolveCutsceneSfxCue(id);
+    if (!cue) {
+      console.warn(`Unknown cutscene sound cue: ${cutsceneSoundLabel(id)}`);
+      return;
+    }
+    this.transitionSfx.resume();
+    this.playCutsceneSfxCue(cue);
+  }
+
+  private playCutsceneSfxCue(cue: CutsceneSfxCue): void {
+    switch (cue) {
+      case "doorOpen":
+        this.transitionSfx.doorOpen();
+        break;
+      case "doorClose":
+        this.transitionSfx.doorClose();
+        break;
+      case "footsteps":
+        this.transitionSfx.footsteps();
+        break;
+      case "escalatorHum":
+        this.transitionSfx.escalatorHum();
+        break;
+      case "whoosh":
+        this.transitionSfx.whoosh();
+        break;
+      case "encounter":
+        this.transitionSfx.encounter();
+        break;
+      case "textBlip":
+        this.transitionSfx.textBlip();
+        break;
+      case "dangerHeartbeat":
+        this.transitionSfx.dangerHeartbeat();
+        break;
+      case "poisonTick":
+        this.transitionSfx.poisonTick();
+        break;
+      case "talkConfirm":
+        this.playInteractionSfx("talkConfirm");
+        break;
+      case "presentOpen":
+        this.playInteractionSfx("presentOpen");
+        break;
+      case "itemGet":
+        this.playInteractionSfx("itemGet");
+        break;
+      case "readCue":
+        this.playInteractionSfx("readCue");
+        break;
     }
   }
 
@@ -4390,6 +4459,13 @@ export class ChunkedWorldScene extends Phaser.Scene {
       ...snapshot,
       partyIds
     });
+  }
+
+  private handlePartyCompositionChanged(): void {
+    this.partyState.ensureVitalsFor(this.overworldHudPartyMembers());
+    this.refreshMenuScreens();
+    this.spawnFollower({ x: this.playerState.x, y: this.playerState.y }, this.playerState.facing);
+    this.publish();
   }
 
   private finishIntroMeteorBeatWithoutBattle(): void {
@@ -5693,30 +5769,62 @@ export class ChunkedWorldScene extends Phaser.Scene {
     }
   }
 
-  private followerSpriteOverride(): SpriteOverride | undefined {
-    return this.data_.spriteOverrides?.follower;
+  private followerSpriteOverride(joinOrder: number): SpriteOverride | undefined {
+    if (joinOrder === 2 && this.data_.spriteOverrides?.follower) {
+      return this.data_.spriteOverrides.follower;
+    }
+    return this.data_.spriteOverrides?.party?.find((hero) => hero.joinOrder === joinOrder)?.sprite;
+  }
+
+  private followerSpriteOverrides(): Array<{ joinOrder: number; sheet: SpriteOverrideSheet }> {
+    const result: Array<{ joinOrder: number; sheet: SpriteOverrideSheet }> = [];
+    for (const joinOrder of [2, 3, 4]) {
+      const sheet = spriteOverrideSheet(this.followerSpriteOverride(joinOrder));
+      if (sheet) {
+        result.push({ joinOrder, sheet });
+      }
+    }
+    return result;
+  }
+
+  private followerSpriteSheetKey(joinOrder: number): string {
+    return joinOrder === 2 ? FOLLOWER_SPRITE_OVERRIDE_SHEET_KEY : `sprite-override-follower-${joinOrder}`;
+  }
+
+  private destroyFollowers(): void {
+    for (const follower of this.followers) {
+      follower.sprite.destroy();
+    }
+    this.followers = [];
   }
 
   private spawnFollower(spawn: { x: number; y: number }, facing: string): void {
-    this.follower = undefined;
-    this.followerFrames = CANONICAL_DIRECTION_FRAMES;
+    this.destroyFollowers();
     this.followerTrail = [];
-    this.followerPos = undefined;
-    this.followerWalkPhase = 0;
-    if (this.partyState.party().length < 2) {
+    const followerCount = Math.min(3, Math.max(0, this.partyState.party().length - 1));
+    if (followerCount <= 0) {
       return; // solo party — no follower to draw
     }
-    const sheet = spriteOverrideSheet(this.followerSpriteOverride());
-    if (sheet && this.textures.exists(FOLLOWER_SPRITE_OVERRIDE_SHEET_KEY)) {
-      this.followerFrames = spriteOverrideDirectionFrames(sheet);
-      this.follower = this.spawnOverrideActor(spawn.x, spawn.y, facing, FOLLOWER_SPRITE_OVERRIDE_SHEET_KEY, sheet);
-      this.followerPos = { x: spawn.x, y: spawn.y };
+    for (let index = 0; index < followerCount; index += 1) {
+      const joinOrder = index + 2;
+      const sheet = spriteOverrideSheet(this.followerSpriteOverride(joinOrder));
+      const key = this.followerSpriteSheetKey(joinOrder);
+      if (!sheet || !this.textures.exists(key)) {
+        continue;
+      }
+      this.followers.push({
+        joinOrder,
+        sprite: this.spawnOverrideActor(spawn.x, spawn.y, facing, key, sheet),
+        frames: spriteOverrideDirectionFrames(sheet),
+        pos: { x: spawn.x, y: spawn.y },
+        walkPhase: 0
+      });
     }
   }
 
-  // Trail the player at a fixed path-distance behind (EarthBound-style party follower).
+  // Trail the player at fixed path-distances behind the lead (EarthBound-style party chain).
   private updateFollower(): void {
-    if (!this.follower) {
+    if (this.followers.length === 0) {
       return;
     }
     const px = this.playerState.x;
@@ -5724,86 +5832,112 @@ export class ChunkedWorldScene extends Phaser.Scene {
     const trail = this.followerTrail;
     const last = trail[trail.length - 1];
     if (last && Math.hypot(px - last.x, py - last.y) > 48) {
-      // Door/warp jump — snap over rather than streaking the follower across the map.
+      // Door/warp jump — snap over rather than streaking the followers across the map.
       trail.length = 0;
-      this.followerPos = { x: px, y: py };
-      this.follower.setPosition(px, py);
+      for (const follower of this.followers) {
+        follower.pos = { x: px, y: py };
+        follower.sprite.setPosition(px, py);
+      }
     }
     const tail = trail[trail.length - 1];
     if (!tail || Math.hypot(px - tail.x, py - tail.y) > 0.5) {
       trail.push({ x: px, y: py, facing: this.playerState.facing });
-      if (trail.length > 96) {
+      if (trail.length > 144) {
         trail.shift();
       }
     }
     const FOLLOW_DISTANCE = 26;
+    this.followers.forEach((follower, index) => {
+      const target = this.followerTrailTarget(FOLLOW_DISTANCE * (index + 1), px, py);
+      this.updateFollowerRuntime(follower, target);
+    });
+  }
+
+  private followerTrailTarget(
+    followDistance: number,
+    px: number,
+    py: number
+  ): { x: number; y: number; facing: PlayerState["facing"] } {
+    const trail = this.followerTrail;
     let accumulated = 0;
     let target = trail[0] ?? { x: px, y: py, facing: this.playerState.facing };
     for (let i = trail.length - 1; i > 0; i -= 1) {
       const a = trail[i];
       const b = trail[i - 1];
       const segment = Math.hypot(a.x - b.x, a.y - b.y);
-      if (accumulated + segment >= FOLLOW_DISTANCE) {
-        const t = (FOLLOW_DISTANCE - accumulated) / segment;
-        target = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, facing: a.facing };
-        break;
+      if (accumulated + segment >= followDistance) {
+        const t = (followDistance - accumulated) / segment;
+        return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, facing: a.facing };
       }
       accumulated += segment;
       target = b;
     }
-    const prev = this.followerPos ?? { x: target.x, y: target.y };
-    const moved = Math.hypot(target.x - prev.x, target.y - prev.y);
-    this.followerPos = { x: target.x, y: target.y };
+    return target;
+  }
+
+  private updateFollowerRuntime(
+    follower: FollowerRuntime,
+    target: { x: number; y: number; facing: PlayerState["facing"] }
+  ): void {
+    const moved = Math.hypot(target.x - follower.pos.x, target.y - follower.pos.y);
+    follower.pos = { x: target.x, y: target.y };
     const walking = moved > 0.2;
-    this.follower.x = target.x;
-    if (this.follower instanceof Phaser.GameObjects.Sprite) {
-      const frames = this.followerFrames[target.facing];
+    follower.sprite.x = target.x;
+    if (follower.sprite instanceof Phaser.GameObjects.Sprite) {
+      const frames = follower.frames[target.facing];
       if (walking) {
-        this.followerWalkPhase += moved;
-        this.follower.setFrame(frames[Math.floor(this.followerWalkPhase / 8) % frames.length] ?? frames[0]);
+        follower.walkPhase += moved;
+        follower.sprite.setFrame(frames[Math.floor(follower.walkPhase / 8) % frames.length] ?? frames[0]);
       } else {
-        this.follower.setFrame(frames[0]);
+        follower.sprite.setFrame(frames[0]);
       }
     }
-    this.follower.y = target.y - this.spriteWalkBob(walking, this.followerFrames, target.facing, 0);
-    this.setActorSortDepth(this.follower);
-    this.applyFollowerVisualState(target.facing);
+    follower.sprite.y = target.y - this.spriteWalkBob(walking, follower.frames, target.facing, follower.joinOrder);
+    this.setActorSortDepth(follower.sprite);
+    this.applyFollowerVisualState(follower, target.facing);
   }
 
-  private followerStateSheetKey(state: string): string {
-    return `sprite-override-follower-state-${state}`;
+  private followerStateSheetKey(joinOrder: number, state: string): string {
+    return joinOrder === 2
+      ? `sprite-override-follower-state-${state}`
+      : `sprite-override-follower-${joinOrder}-state-${state}`;
   }
 
-  private loadedFollowerStateSheetKey(baseState: ResolvedVisualState["baseState"]): string | undefined {
+  private loadedFollowerStateSheetKey(
+    follower: FollowerRuntime,
+    baseState: ResolvedVisualState["baseState"]
+  ): string | undefined {
     if (baseState === "default") {
       return undefined;
     }
-    const states = this.followerSpriteOverride()?.states as Record<string, unknown> | undefined;
+    const states = this.followerSpriteOverride(follower.joinOrder)?.states as Record<string, unknown> | undefined;
     if (!states?.[baseState]) {
       return undefined;
     }
-    const key = this.followerStateSheetKey(baseState);
+    const key = this.followerStateSheetKey(follower.joinOrder, baseState);
     return this.textures.exists(key) ? key : undefined;
   }
 
   /**
    * Apply the party's shared visual state (computed for the lead each frame in applyPlayerVisualState)
-   * to the FOLLOWER sprite, using the follower's OWN state sheets + anchors. So every hero gets the
-   * same states (water/dead/bike/ladder/...) rendered in their own art. Overlays + teleport spin stay
-   * lead-only for now (the lead casts/wears them). The follower mirrors the lead's base state -- in EB
-   * the party climbs/rides/wades together.
+   * to every follower sprite, using each follower's own state sheets + anchors. Overlays + teleport
+   * spin stay lead-only for now. The chain mirrors the lead's base state -- in EB the party
+   * climbs/rides/wades together.
    */
-  private applyFollowerVisualState(facing: "up" | "down" | "left" | "right"): void {
-    if (!(this.follower instanceof Phaser.GameObjects.Sprite)) {
+  private applyFollowerVisualState(
+    follower: FollowerRuntime,
+    facing: "up" | "down" | "left" | "right"
+  ): void {
+    if (!(follower.sprite instanceof Phaser.GameObjects.Sprite)) {
       return;
     }
     const resolved = this.lastResolvedVisualState;
     if (!resolved) {
       return;
     }
-    const sprite = this.follower;
-    const ov = spriteOverrideSheet(this.followerSpriteOverride());
-    const stateKey = this.loadedFollowerStateSheetKey(resolved.baseState);
+    const sprite = follower.sprite;
+    const ov = spriteOverrideSheet(this.followerSpriteOverride(follower.joinOrder));
+    const stateKey = this.loadedFollowerStateSheetKey(follower, resolved.baseState);
     const swapped = stateKey !== undefined;
     if (stateKey && sprite.texture.key !== stateKey) {
       sprite.setTexture(stateKey);
@@ -5819,7 +5953,7 @@ export class ChunkedWorldScene extends Phaser.Scene {
       sprite.clearTint();
     }
     if (resolved.lockAnimation && !swapped) {
-      sprite.setFrame(this.followerFrames[facing][0]);
+      sprite.setFrame(follower.frames[facing][0]);
     }
     if (resolved.transforms.waterClip && ov?.frameHeight && ov?.frameWidth) {
       const waterline = ov.anchors?.waterline ?? Math.round(ov.frameHeight * 0.6);
